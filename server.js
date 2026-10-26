@@ -420,10 +420,10 @@ async function main() {
   await ensureDataFiles();
 
   const server = http.createServer(handleRequest);
-  server.listen(PORT, '127.0.0.1', () => {
-    console.log(`LUUD Node.js rodando em http://127.0.0.1:${PORT}`);
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`LUUD Node.js rodando em http://0.0.0.0:${PORT}`);
     console.log(GOOGLE_CLIENT_ID ? 'Login Google configurado.' : 'Login Google aguardando GOOGLE_CLIENT_ID no arquivo .env.');
-  });
+});
 }
 
 main().catch(error => {
