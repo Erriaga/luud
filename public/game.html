@@ -1,0 +1,2033 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jogo de Ludo Clássico</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --red-player-color: #ef233c;
+      --red-player-border: #ef233c;
+      --red-player-cell-border: #cbd5e1;
+      --red-player-pastel: #fca5a5;
+      --green-player-color: #00a86b;
+      --green-player-border: #00a86b;
+      --green-player-cell-border: #cbd5e1;
+      --green-player-pastel: #86efac;
+      --yellow-player-color: #ffcc00;
+      --yellow-player-border: #ffcc00;
+      --yellow-player-cell-border: #cbd5e1;
+      --yellow-player-pastel: #fde047;
+      --blue-player-color: #0096ff;
+      --blue-player-border: #0096ff;
+      --blue-player-cell-border: #cbd5e1;
+      --blue-player-pastel: #93c5fd;
+      --custom-player-color: #8b5cf6;
+      --custom-player-text: #c4b5fd;
+    }
+
+    body {
+      font-family: 'Fredoka', sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    input,
+    textarea {
+      user-select: text;
+      -webkit-user-select: text;
+    }
+
+    /* Tabuleiro Ludo Responsivo em Grid 15x15 */
+    .ludo-board {
+      display: grid;
+      grid-template-columns: repeat(15, 1fr);
+      grid-template-rows: repeat(15, 1fr);
+      width: 100%;
+      max-width: min(92vw, 720px);
+      aspect-ratio: 1 / 1;
+      border: 6px solid #0f172a;
+      box-shadow: 0 20px 30px -5px rgba(0,0,0,0.6), 0 10px 15px -5px rgba(0,0,0,0.4);
+      border-radius: 0;
+      overflow: hidden;
+      position: relative;
+      background-color: #ffffff;
+      margin: auto;
+    }
+
+    .cell {
+      border: 1px solid #cbd5e1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      font-weight: bold;
+      background-color: #ffffff;
+      overflow: visible;
+    }
+
+    /* Cores fiéis à imagem de referência */
+    .bg-red-ludo { background-color: var(--red-player-color) !important; border-color: var(--red-player-cell-border); }
+    .bg-green-ludo { background-color: var(--green-player-color) !important; border-color: var(--green-player-cell-border); }
+    .bg-yellow-ludo { background-color: var(--yellow-player-color) !important; border-color: var(--yellow-player-cell-border); }
+    .bg-blue-ludo { background-color: var(--blue-player-color) !important; border-color: var(--blue-player-cell-border); }
+
+    .border-red-ludo { border-color: var(--red-player-border); }
+    .border-green-ludo { border-color: var(--green-player-border); }
+    .border-yellow-ludo { border-color: var(--yellow-player-border); }
+    .border-blue-ludo { border-color: var(--blue-player-border); }
+
+    /* Cor personalizada do jogador humano */
+    .bg-player-custom { background-color: var(--custom-player-color) !important; }
+    .text-player-custom { color: var(--custom-player-text) !important; }
+    .border-player-custom { border-color: var(--custom-player-color) !important; }
+
+    /* Cores claras precisam de contornos pretos para destacar casas, bases e peças */
+    body.custom-light-color .ludo-board {
+      border-color: #000000;
+    }
+
+    body.custom-light-color #custom-color-swatch {
+      border-color: #000000;
+    }
+
+    input[type="color"] {
+      border-radius: 0;
+    }
+
+    input[type="color"]::-webkit-color-swatch-wrapper {
+      padding: 0;
+      border-radius: 0;
+    }
+
+    input[type="color"]::-webkit-color-swatch {
+      border: 0;
+      border-radius: 0;
+    }
+
+    input[type="range"] {
+      appearance: none;
+      -webkit-appearance: none;
+      border-radius: 0;
+      background: #475569;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 18px;
+      height: 18px;
+      background: #fbbf24;
+      border: 2px solid #0f172a;
+      border-radius: 0;
+      cursor: pointer;
+    }
+
+    input[type="range"]::-moz-range-thumb {
+      width: 16px;
+      height: 16px;
+      background: #fbbf24;
+      border: 2px solid #0f172a;
+      border-radius: 0;
+      cursor: pointer;
+    }
+
+    /* Peças Perfeitamente Circulares */
+    .token {
+      width: 75%;
+      height: 75%;
+      aspect-ratio: 1 / 1;
+      border-radius: 50%;
+      border: 3px solid #0f172a;
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.85), 0 4px 8px rgba(0, 0, 0, 0.48);
+      transition: transform 0.2s ease-in-out;
+      cursor: pointer;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .token.human-piece {
+      border-color: #ffffff;
+      outline: 2px solid rgba(255, 255, 255, 0.92);
+      outline-offset: 1px;
+      box-shadow: 0 0 0 2px #0f172a, 0 4px 9px rgba(0, 0, 0, 0.52);
+    }
+
+    .token.cpu-piece {
+      border-color: #0f172a;
+      outline: 2px solid rgba(15, 23, 42, 0.92);
+      outline-offset: 1px;
+      box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9), 0 4px 8px rgba(0, 0, 0, 0.46);
+    }
+
+    .token.selectable {
+      animation: pulse-ring 1.2s infinite;
+      transform: scale(1.22);
+      z-index: 20;
+    }
+
+    .token-center {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #f8fafc;
+      border: 1px solid rgba(15, 23, 42, 0.55);
+    }
+
+    .token.human-piece .token-center {
+      background: #0f172a;
+    }
+
+    @keyframes pulse-ring {
+      0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.9), 0 0 0 0 rgba(0,0,0,0.6); }
+      70% { box-shadow: 0 0 0 10px rgba(255, 255, 255, 0), 0 0 12px 2px rgba(0,0,0,0.7); }
+      100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0), 0 0 0 0 rgba(0,0,0,0.6); }
+    }
+
+    /* Dado 3D Interativo com Mapeamento Exato */
+    .dice-container {
+      perspective: 600px;
+      width: 76px;
+      height: 76px;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .dice {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      transform-style: preserve-3d;
+      transition: transform 1.5s cubic-bezier(0.18, 0.72, 0.16, 1);
+      will-change: transform;
+      cursor: pointer;
+    }
+
+    .dice-face {
+      position: absolute;
+      width: 76px;
+      height: 76px;
+      background: #ffffff;
+      border: 2px solid #94a3b8;
+      border-radius: 0;
+      display: grid;
+      grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+      padding: 6px;
+      box-shadow: inset 0 0 8px rgba(0,0,0,0.15);
+    }
+
+    .dot {
+      background-color: #0f172a;
+      border-radius: 50%;
+      align-self: center;
+      justify-self: center;
+      width: 13px;
+      height: 13px;
+    }
+
+    /* Posições exatas das faces 3D do dado */
+    .face-1 { transform: rotateY(0deg) translateZ(38px); }
+    .face-2 { transform: rotateY(-90deg) translateZ(38px); }
+    .face-3 { transform: rotateX(-90deg) translateZ(38px); }
+    .face-4 { transform: rotateX(90deg) translateZ(38px); }
+    .face-5 { transform: rotateY(90deg) translateZ(38px); }
+    .face-6 { transform: rotateY(180deg) translateZ(38px); }
+
+    /* Triângulos do Centro perfeitamente ajustados */
+    .center-triangle-red { clip-path: polygon(0 0, 100% 50%, 0 100%); }
+    .center-triangle-green { clip-path: polygon(0 0, 100% 0, 50% 100%); }
+    .center-triangle-yellow { clip-path: polygon(100% 0, 100% 100%, 0 50%); }
+    .center-triangle-blue { clip-path: polygon(0 100%, 50% 0, 100% 100%); }
+
+    /* Container de Múltiplas Peças garantidamente Circulares */
+    .tokens-container {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      padding: 1px;
+      gap: 1px;
+      position: absolute;
+      inset: 0;
+      z-index: 10;
+    }
+
+    .cell-bg-icon {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1;
+      pointer-events: none;
+    }
+    .tokens-container .token {
+      width: 54% !important;
+      height: 54% !important;
+      max-width: 54% !important;
+      max-height: 54% !important;
+      aspect-ratio: 1 / 1 !important;
+    }
+
+    @media (max-width: 640px) {
+      body {
+        padding: 4px !important;
+      }
+
+      .ludo-board {
+        max-width: 96vw;
+        border-width: 4px;
+      }
+
+      .tokens-container .token {
+        width: 64% !important;
+        height: 64% !important;
+        max-width: 64% !important;
+        max-height: 64% !important;
+      }
+
+      .token {
+        border-width: 3px;
+      }
+
+      button {
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+      }
+    }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col items-center justify-between p-2 sm:p-4">
+
+  <!-- TELA INICIAL DE CONFIGURAÇÃO -->
+  <div id="setup-screen" class="fixed inset-0 bg-slate-950/95 z-50 flex items-center justify-center overflow-y-auto p-4">
+    <div class="bg-slate-800 border border-slate-700 p-4 sm:p-6 max-w-md w-full shadow-2xl text-center space-y-5 sm:space-y-6 my-auto">
+      <div>
+        <h1 class="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-yellow-400 to-green-400">
+          LUUD
+        </h1>
+        <p id="setup-subtitle" class="text-slate-400 mt-2 text-sm">Escolha seu nome e sua cor e enfrente os bots!</p>
+      </div>
+
+      <!-- Nome do Jogador Humano -->
+      <div class="space-y-2 text-left">
+        <label for="player-name-input" id="player-name-label" class="text-xs font-bold uppercase tracking-wider text-slate-300">Nome do Jogador</label>
+        <input id="player-name-input" type="text" maxlength="24" placeholder="Digite seu nome (opcional)" oninput="updatePlayerName(this.value)" class="w-full border border-slate-600 bg-slate-900 px-3 py-2.5 text-slate-100 outline-none focus:border-slate-300 placeholder:text-slate-500" autocomplete="off">
+      </div>
+
+      <!-- Escolha da Cor do Jogador Humano -->
+      <div class="space-y-2 text-left">
+        <label class="text-xs font-bold uppercase tracking-wider text-slate-300">Sua Cor (Ficará no Canto Inferior Esquerdo)</label>
+        <div class="grid grid-cols-4 gap-2">
+          <button type="button" onclick="selectHumanColor('RED')" id="color-btn-RED" class="color-select-btn p-3 border-2 border-transparent flex flex-col items-center justify-center bg-red-500/20 hover:bg-red-500/30 transition">
+            <div class="w-6 h-6 bg-red-500 mb-1 border border-white"></div>
+            <span class="text-xs font-bold text-red-400">Vermelho</span>
+          </button>
+          <button type="button" onclick="selectHumanColor('GREEN')" id="color-btn-GREEN" class="color-select-btn p-3 border-2 border-transparent flex flex-col items-center justify-center bg-green-500/20 hover:bg-green-500/30 transition">
+            <div class="w-6 h-6 bg-green-500 mb-1 border border-white"></div>
+            <span class="text-xs font-bold text-green-400">Verde</span>
+          </button>
+          <button type="button" onclick="selectHumanColor('YELLOW')" id="color-btn-YELLOW" class="color-select-btn p-3 border-2 border-transparent flex flex-col items-center justify-center bg-yellow-500/20 hover:bg-yellow-500/30 transition">
+            <div class="w-6 h-6 bg-yellow-500 mb-1 border border-white"></div>
+            <span class="text-xs font-bold text-yellow-400">Amarelo</span>
+          </button>
+          <button type="button" onclick="selectHumanColor('BLUE')" id="color-btn-BLUE" class="color-select-btn p-3 border-2 border-white flex flex-col items-center justify-center bg-blue-500/20 hover:bg-blue-500/30 transition">
+            <div class="w-6 h-6 bg-blue-500 mb-1 border border-white"></div>
+            <span class="text-xs font-bold text-blue-400">Azul</span>
+          </button>
+        </div>
+
+        <!-- Seleção de cor personalizada -->
+        <div class="mt-3">
+          <button type="button" onclick="toggleCustomColorMenu()" id="color-btn-CUSTOM" class="color-select-btn w-full p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex items-center justify-center gap-2">
+            <span id="custom-color-swatch" class="w-6 h-6 border border-white" style="background-color: #8b5cf6"></span>
+            <span id="custom-color-label" class="text-xs font-bold text-slate-200">Violeta</span>
+            <span id="custom-color-hex-label" class="text-[11px] font-mono text-slate-400">#8B5CF6</span>
+          </button>
+
+          <div id="custom-color-menu" class="hidden mt-3 border border-slate-600 bg-slate-900 p-3 space-y-3">
+            <div>
+              <label for="custom-color-picker" class="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">Escolha Qualquer Cor</label>
+              <input id="custom-color-picker" type="color" value="#8b5cf6" oninput="previewCustomColor(this.value)" onchange="applyCustomColor()" class="h-10 w-16 border border-slate-500 bg-slate-950 p-1 cursor-pointer" aria-label="Seletor de cor personalizada">
+            </div>
+            <div>
+              <label for="custom-color-hex" class="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">Código Hexadecimal</label>
+              <input id="custom-color-hex" type="text" value="#8B5CF6" maxlength="7" oninput="previewCustomColor(this.value)" onchange="applyCustomColor()" class="w-full border border-slate-500 bg-slate-950 px-3 py-2 font-mono text-sm uppercase text-slate-100 outline-none focus:border-slate-300" spellcheck="false">
+            </div>
+            <p id="custom-color-message" class="text-xs text-slate-400">Use o seletor visual ou digite um código como #8B5CF6.</p>
+            <div class="grid grid-cols-2 gap-2">
+              <button type="button" onclick="applyCustomColor()" class="py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm transition">Usar Esta Cor</button>
+              <button type="button" onclick="toggleCustomColorMenu()" class="py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold text-sm transition">Fechar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Escolha do Número de Oponentes (CPU) -->
+      <div class="space-y-2 text-left">
+        <label class="text-xs font-bold uppercase tracking-wider text-slate-300">Modo de Jogo (Oponentes CPU)</label>
+        <div class="grid grid-cols-2 gap-3">
+          <button type="button" onclick="selectOpponentsMode(1)" id="mode-btn-1" class="p-3 border-2 border-white bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
+            <span class="font-bold text-sm text-slate-100">1 vs 1 (1 CPU)</span>
+            <span class="text-xs text-slate-400">Duelo rápido</span>
+          </button>
+          <button type="button" onclick="selectOpponentsMode(3)" id="mode-btn-3" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
+            <span class="font-bold text-sm text-slate-100">2 vs 2 (3 CPUs)</span>
+            <span class="text-xs text-slate-400">Duplas por cor</span>
+          </button>
+        </div>
+      </div>
+
+      <button onclick="startGame()" class="w-full py-3.5 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold  shadow-lg transform hover:-translate-y-0.5 transition active:translate-y-0">
+        INICIAR PARTIDA 🚀
+      </button>
+    </div>
+  </div>
+
+  <!-- MENU DE PAUSA -->
+  <div id="pause-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-slate-800 border border-slate-700  p-6 max-w-xs w-full text-center space-y-4 shadow-2xl">
+      <h2 class="text-2xl font-black text-slate-100 flex items-center justify-center gap-2">
+        ⏸️ Jogo Pausado
+      </h2>
+      <p class="text-slate-400 text-xs">O que deseja fazer agora?</p>
+
+      <div class="space-y-2 pt-2">
+        <button onclick="closePauseMenu()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold  shadow transition text-sm">
+          ▶️ Voltar ao Jogo
+        </button>
+        <button onclick="restartCurrentGame()" class="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold  shadow transition text-sm">
+          🔄 Reiniciar Partida
+        </button>
+        <button onclick="openSetupModal()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold  shadow transition text-sm">
+          ⚙️ Configurações
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONFIGURAÇÕES DE SOM -->
+  <div id="sound-modal" class="hidden fixed inset-0 z-[60] bg-slate-950/75 backdrop-blur-sm flex items-start sm:items-center justify-center p-4">
+    <div class="bg-slate-800 border-2 border-slate-600 p-5 max-w-sm w-full shadow-2xl space-y-5">
+      <div class="flex items-center justify-between gap-3">
+        <h2 class="text-xl font-black text-slate-100">🎵 Configurações de Som</h2>
+        <button type="button" onclick="closeSoundSettings()" class="w-9 h-9 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold border border-slate-500" aria-label="Fechar configurações de som">✕</button>
+      </div>
+
+      <div class="space-y-2">
+        <div class="flex items-center justify-between text-sm text-slate-200">
+          <label for="music-volume">Volume da Música</label>
+          <output id="music-volume-value" for="music-volume" class="font-mono text-amber-300">35%</output>
+        </div>
+        <input id="music-volume" type="range" min="0" max="100" value="35" oninput="setMusicVolume(this.value)" class="w-full h-2 bg-slate-600 border border-slate-500 cursor-pointer">
+      </div>
+
+      <div class="space-y-2">
+        <div class="flex items-center justify-between text-sm text-slate-200">
+          <label for="effects-volume">Volume dos Efeitos</label>
+          <output id="effects-volume-value" for="effects-volume" class="font-mono text-amber-300">70%</output>
+        </div>
+        <input id="effects-volume" type="range" min="0" max="100" value="70" oninput="setEffectsVolume(this.value)" class="w-full h-2 bg-slate-600 border border-slate-500 cursor-pointer">
+      </div>
+
+      <div class="grid grid-cols-2 gap-2">
+        <button type="button" onclick="toggleSoundMute()" id="sound-mute-button" class="py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold text-sm border border-slate-500">Silenciar Som</button>
+        <button type="button" onclick="playSoundTest()" class="py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-bold text-sm">Testar Efeito</button>
+      </div>
+      <p class="text-xs text-slate-400 leading-relaxed">A música toca após o início da partida. Os controles de volume também podem ser ajustados durante o jogo.</p>
+    </div>
+  </div>
+
+  <!-- CABEÇALHO DO JOGO -->
+  <header class="w-full max-w-4xl flex flex-wrap items-center justify-between gap-2 py-2.5 px-3 sm:px-4 bg-slate-800/90  backdrop-blur-md mb-2 border border-slate-700 shadow-md">
+    <div class="flex items-center gap-2">
+      <span class="text-xl sm:text-2xl">🎲</span>
+      <h1 class="font-extrabold text-lg sm:text-xl tracking-wider text-slate-100">LUUD</h1>
+    </div>
+
+    <!-- Placar da partida -->
+    <div id="scoreboard" class="order-first w-full sm:order-none sm:w-auto flex items-center justify-center gap-2 px-3 py-1.5 bg-slate-800 border border-slate-600 transition-all duration-300 text-slate-100 font-bold text-xs sm:text-sm whitespace-nowrap">
+      <span id="score-player-name" class="max-w-[38vw] truncate">Jogador</span>
+      <span id="score-human">0</span>
+      <span class="text-slate-500">-</span>
+      <span id="score-cpu">0</span>
+      <span id="score-cpu-label">CPU</span>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <button onclick="toggleSoundSettings()" id="sound-button" title="Configurar Som" class="px-2.5 py-1.5 bg-slate-700 hover:bg-slate-600 text-sm font-bold transition text-slate-200 border border-slate-600 flex items-center gap-1">
+        <span id="sound-icon">🔊</span>
+      </button>
+      <button onclick="toggleFullscreen()" title="Alternar Tela Cheia" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-xs font-bold  transition text-slate-200 border border-slate-600 flex items-center gap-1">
+        <span>⛶</span> <span class="hidden sm:inline">Tela Cheia</span>
+      </button>
+      <div id="account-area" class="relative">
+        <button type="button" id="account-button" onclick="handleAccountButtonClick(event)" title="Conta" class="flex items-center gap-2 pl-1.5 pr-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-xs font-bold transition text-slate-100 border border-slate-600 rounded-full">
+          <img id="account-avatar" src="/assets/avatar.svg" alt="Foto do perfil" class="w-7 h-7 rounded-full object-cover bg-slate-800 border border-slate-500">
+          <span id="account-name" class="max-w-[90px] truncate">Entrar</span>
+        </button>
+        <div id="account-dropdown" class="hidden absolute right-0 mt-2 w-60 bg-slate-800 border border-slate-600 shadow-2xl rounded-2xl overflow-hidden z-50">
+          <div class="px-4 py-3 border-b border-slate-700">
+            <p id="dropdown-account-name" class="text-sm font-bold text-slate-100 truncate">Conta</p>
+            <p id="dropdown-account-email" class="text-xs text-slate-400 truncate">Não conectado</p>
+          </div>
+          <button type="button" onclick="openProfileModal()" class="w-full px-4 py-3 text-left text-sm text-slate-100 hover:bg-slate-700 transition">Perfil</button>
+          <button type="button" onclick="logoutAccount()" class="w-full px-4 py-3 text-left text-sm text-red-300 hover:bg-slate-700 transition">Sair</button>
+        </div>
+      </div>
+      <button onclick="openPauseMenu()" class="px-3.5 py-1.5 bg-slate-700 hover:bg-slate-600 text-xs font-bold  transition text-slate-200 border border-slate-600">
+        ☰ Menu
+      </button>
+    </div>
+  </header>
+
+  <!-- ÁREA DO TABULEIRO E CONTROLES -->
+  <main class="flex flex-col lg:flex-row items-center justify-center gap-4 sm:gap-6 w-full max-w-5xl my-auto">
+    
+    <!-- Tabuleiro Ludo (Aumentado) -->
+    <div id="ludo-board" class="ludo-board">
+      <!-- Células geradas via JS -->
+    </div>
+
+    <!-- Painel de Controles e Dado -->
+    <div class="flex flex-row lg:flex-col items-center justify-around lg:justify-center gap-4 bg-slate-800/90 p-4 sm:p-5  border border-slate-700 w-full max-w-md lg:w-56 shadow-lg">
+      
+      <!-- Dado 3D e indicador de turno -->
+      <div class="flex flex-col items-center gap-3 w-full">
+        <div id="turn-badge" class="flex items-center justify-center gap-2 px-4 py-1.5 bg-red-500/20 border border-red-500/50 transition-all duration-300 max-w-full">
+          <div id="turn-color-dot" class="w-3.5 h-3.5 bg-red-500 shrink-0"></div>
+          <span id="turn-text" class="font-bold text-sm text-red-400 truncate">Turno: Jogador</span>
+        </div>
+
+        <div class="dice-container" onclick="handleDiceClick()">
+          <div id="dice" class="dice">
+            <div class="dice-face face-1"><div></div><div></div><div></div><div></div><div class="dot"></div><div></div><div></div><div></div><div></div></div>
+            <div class="dice-face face-2"><div class="dot"></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div class="dot"></div></div>
+            <div class="dice-face face-3"><div class="dot"></div><div></div><div></div><div></div><div class="dot"></div><div></div><div></div><div></div><div class="dot"></div></div>
+            <div class="dice-face face-4"><div class="dot"></div><div></div><div class="dot"></div><div></div><div></div><div></div><div class="dot"></div><div></div><div class="dot"></div></div>
+            <div class="dice-face face-5"><div class="dot"></div><div></div><div class="dot"></div><div></div><div class="dot"></div><div></div><div class="dot"></div><div></div><div class="dot"></div></div>
+            <div class="dice-face face-6"><div class="dot"></div><div class="dot"></div><div class="dot"></div><div></div><div></div><div></div><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+          </div>
+        </div>
+        <span id="dice-instruction" class="text-xs text-slate-400 font-medium text-center">Toque para rolar</span>
+      </div>
+
+      <!-- Botão Rolar Dado -->
+      <button id="roll-btn" onclick="handleDiceClick()" class="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm  shadow-lg transition active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
+        Rolar Dado 🎲
+      </button>
+
+    </div>
+  </main>
+
+  <!-- TELA FINAL -->
+  <div id="win-modal" class="hidden fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
+    <div class="bg-slate-800 border-2 border-slate-600 p-6 text-center max-w-sm w-full space-y-6 shadow-2xl">
+      <h2 id="win-title" class="text-3xl sm:text-5xl font-black tracking-[0.22em] text-amber-400">V I T Ó R I A</h2>
+      <div id="win-score" class="text-5xl sm:text-7xl font-black text-slate-100 leading-none">0 - 0</div>
+      <button onclick="openSetupModal()" class="w-full py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold  shadow transition">
+        Jogar Novamente 🔄
+      </button>
+    </div>
+  </div>
+
+  <!-- MODAL DE PERFIL DA CONTA -->
+  <div id="account-profile-modal" class="hidden fixed inset-0 z-[70] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-800 border border-slate-600 rounded-3xl shadow-2xl w-full max-w-lg p-6 space-y-5">
+      <div class="flex items-center justify-between gap-3">
+        <h2 class="text-2xl font-black text-slate-100">Perfil</h2>
+        <button type="button" onclick="closeProfileModal()" class="w-9 h-9 rounded-full bg-slate-700 hover:bg-slate-600 text-slate-200 text-lg leading-none">✕</button>
+      </div>
+
+      <div class="flex items-center gap-4">
+        <img id="profile-avatar-preview" src="/assets/avatar.svg" alt="Foto do perfil" class="w-20 h-20 rounded-full object-cover bg-slate-700 border-2 border-slate-500">
+        <div class="min-w-0">
+          <p id="profile-account-email" class="text-sm text-slate-300 truncate">conta@example.com</p>
+          <p class="text-xs text-slate-500">Conta Google conectada</p>
+        </div>
+      </div>
+
+      <form id="profile-form" onsubmit="saveProfile(event)" class="space-y-4">
+        <div>
+          <label for="profile-display-name" class="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">Nome de exibição</label>
+          <input id="profile-display-name" type="text" maxlength="60" class="w-full bg-slate-900 border border-slate-600 rounded-xl px-3 py-2.5 text-slate-100 outline-none focus:border-slate-300">
+        </div>
+
+        <div>
+          <label for="profile-player-name" class="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">Nome no jogo</label>
+          <input id="profile-player-name" type="text" maxlength="24" class="w-full bg-slate-900 border border-slate-600 rounded-xl px-3 py-2.5 text-slate-100 outline-none focus:border-slate-300">
+        </div>
+
+        <div>
+          <label for="profile-avatar-url" class="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">URL da foto</label>
+          <input id="profile-avatar-url" type="url" maxlength="500" placeholder="https://..." class="w-full bg-slate-900 border border-slate-600 rounded-xl px-3 py-2.5 text-slate-100 outline-none focus:border-slate-300">
+        </div>
+
+        <div>
+          <label for="profile-bio" class="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">Bio</label>
+          <textarea id="profile-bio" maxlength="280" rows="3" class="w-full bg-slate-900 border border-slate-600 rounded-xl px-3 py-2.5 text-slate-100 outline-none focus:border-slate-300 resize-none"></textarea>
+        </div>
+
+        <p id="profile-status" class="text-xs text-slate-400 min-h-[18px]"></p>
+        <div class="flex flex-col sm:flex-row gap-3 pt-2">
+          <button type="submit" class="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold transition">Salvar</button>
+          <button type="button" onclick="closeProfileModal()" class="flex-1 py-3 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    /* -------------------------------------------------------------
+       ESTILO DAS ESTRELAS E SETAS COM SVG EMBUTIDO
+    ------------------------------------------------------------- */
+    const SVG_STAR = (color) => `<svg class="w-4 h-4" viewBox="0 0 24 24" fill="${color}"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>`;
+    const SVG_ARROW_RIGHT = `<svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>`;
+    const SVG_ARROW_DOWN = `<svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path d="M12 5v14M5 12l7 7 7-7"/></svg>`;
+    const SVG_ARROW_LEFT = `<svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>`;
+    const SVG_ARROW_UP = `<svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path d="M12 19V5M19 12l-7-7-7 7"/></svg>`;
+
+    const PLAYERS = ['RED', 'GREEN', 'YELLOW', 'BLUE'];
+    const PLAYER_COLORS = {
+      RED: { bg: 'bg-red-ludo', text: 'text-red-400', border: 'border-red-500', name: 'Vermelho', hex: '#ef233c' },
+      GREEN: { bg: 'bg-green-ludo', text: 'text-green-400', border: 'border-green-500', name: 'Verde', hex: '#00a86b' },
+      YELLOW: { bg: 'bg-yellow-ludo', text: 'text-yellow-400', border: 'border-yellow-500', name: 'Amarelo', hex: '#ffcc00' },
+      BLUE: { bg: 'bg-blue-ludo', text: 'text-blue-400', border: 'border-blue-500', name: 'Azul', hex: '#0096ff' }
+    };
+
+    const MAIN_PATH = [
+      [6,1], [6,2], [6,3], [6,4], [6,5],
+      [5,6], [4,6], [3,6], [2,6], [1,6], [0,6],
+      [0,7],
+      [0,8], [1,8], [2,8], [3,8], [4,8], [5,8],
+      [6,9], [6,10], [6,11], [6,12], [6,13], [6,14],
+      [7,14],
+      [8,14], [8,13], [8,12], [8,11], [8,10], [8,9],
+      [9,8], [10,8], [11,8], [12,8], [13,8], [14,8],
+      [14,7],
+      [14,6], [13,6], [12,6], [11,6], [10,6], [9,6],
+      [8,5], [8,4], [8,3], [8,2], [8,1], [8,0],
+      [7,0],
+      [6,0]
+    ];
+
+    const TRACK_LENGTH = 52;
+    // A casa com a seta é a última casa do percurso e antecede a fila final.
+    const LAST_TRACK_POSITION = 50;
+    const FIRST_HOME_POSITION = 51;
+    const FINAL_POSITION = 56;
+
+    const START_INDEX = { RED: 0, GREEN: 13, YELLOW: 26, BLUE: 39 };
+
+    const HOME_PATHS = {
+      RED: [[7,1], [7,2], [7,3], [7,4], [7,5], [7,6]],
+      GREEN: [[1,7], [2,7], [3,7], [4,7], [5,7], [6,7]],
+      YELLOW: [[7,13], [7,12], [7,11], [7,10], [7,9], [7,8]],
+      BLUE: [[13,7], [12,7], [11,7], [10,7], [9,7], [8,7]]
+    };
+
+    const YARD_POSITIONS = {
+      RED: [[2,2], [2,3], [3,2], [3,3]],
+      GREEN: [[2,11], [2,12], [3,11], [3,12]],
+      YELLOW: [[11,11], [11,12], [12,11], [12,12]],
+      BLUE: [[11,2], [11,3], [12,2], [12,3]]
+    };
+
+    const STAR_CELLS = [
+      { r: 6, c: 1, color: 'var(--red-player-color)' },
+      { r: 2, c: 6, color: '#64748b' },
+      { r: 1, c: 8, color: 'var(--green-player-color)' },
+      { r: 6, c: 12, color: '#64748b' },
+      { r: 8, c: 13, color: 'var(--yellow-player-color)' },
+      { r: 12, c: 8, color: '#64748b' },
+      { r: 13, c: 6, color: 'var(--blue-player-color)' },
+      { r: 8, c: 2, color: '#64748b' }
+    ];
+
+    // Ordem no sentido horário mantida estritamente
+    const CLOCKWISE_COLORS = ['BLUE', 'RED', 'GREEN', 'YELLOW'];
+    const POSITIONS = ['BOTTOM_LEFT', 'TOP_LEFT', 'TOP_RIGHT', 'BOTTOM_RIGHT'];
+    const DIAGONAL_PARTNER = { RED: 'YELLOW', YELLOW: 'RED', GREEN: 'BLUE', BLUE: 'GREEN' };
+
+    const CUSTOM_PLAYER_SLOT = 'BLUE';
+    let selectedHumanColor = 'BLUE';
+    let usingCustomColor = false;
+    let customColorHex = '#8b5cf6';
+    let customColorPreviewHex = '#8b5cf6';
+    let customColorName = 'Violeta';
+    let customColorPreviewName = 'Violeta';
+    let playerName = '';
+    let opponentsCount = 1;
+    let boardRotationIndex = 0; // Rotacao do tabuleiro para alinhar a cor humana no canto inferior esquerdo
+
+    let playerTypes = { RED: 'CPU', GREEN: 'CPU', YELLOW: 'CPU', BLUE: 'HUMAN' };
+    let activePlayers = ['BLUE', 'RED', 'GREEN', 'YELLOW'];
+    let currentTurnIndex = 0;
+    let diceValue = 0;
+    let hasRolled = false;
+    let consecutiveSixes = 0;
+    let isAnimating = false;
+    let isPaused = false;
+    let diceCurrentX = 0;
+    let diceCurrentY = 0;
+    let diceCurrentTransform = 'translateY(0px) rotateX(0deg) rotateY(0deg) scale(1)';
+    let activeDiceAnimation = null;
+    let activeTokenAnimation = null;
+    let movementSession = 0;
+
+    /* -------------------------------------------------------------
+       MOTOR DE ÁUDIO (Web Audio API, sem arquivos externos)
+    ------------------------------------------------------------- */
+    const gameAudio = {
+      ctx: null,
+      musicGain: null,
+      effectsGain: null,
+      musicVolume: 0.35,
+      effectsVolume: 0.70,
+      muted: false,
+      musicTimer: null,
+      nextMusicTime: 0,
+      musicStep: 0,
+
+      init() {
+        if (this.ctx) {
+          if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
+          return true;
+        }
+
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return false;
+
+        try {
+          this.ctx = new AudioContextClass();
+          this.musicGain = this.ctx.createGain();
+          this.effectsGain = this.ctx.createGain();
+          this.musicGain.connect(this.ctx.destination);
+          this.effectsGain.connect(this.ctx.destination);
+          this.applyVolumes();
+          return true;
+        } catch (error) {
+          return false;
+        }
+      },
+
+      unlock() {
+        return this.init();
+      },
+
+      applyVolumes() {
+        if (!this.ctx) return;
+        this.musicGain.gain.value = this.muted ? 0 : this.musicVolume;
+        this.effectsGain.gain.value = this.muted ? 0 : this.effectsVolume;
+      },
+
+      playTone({ frequency = 440, duration = 0.15, type = 'sine', volume = 0.18, when = 0, slideTo = null, destination = 'effects' }) {
+        if (this.muted || !this.init() || !this.ctx) return;
+        if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
+
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        const start = this.ctx.currentTime + when;
+        const safeDuration = Math.max(0.03, duration);
+
+        osc.type = type;
+        osc.frequency.setValueAtTime(Math.max(20, frequency), start);
+        if (slideTo) {
+          osc.frequency.exponentialRampToValueAtTime(Math.max(20, slideTo), start + safeDuration);
+        }
+
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.exponentialRampToValueAtTime(Math.max(0.001, volume), start + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + safeDuration);
+
+        osc.connect(gain);
+        gain.connect(destination === 'music' ? this.musicGain : this.effectsGain);
+        osc.start(start);
+        osc.stop(start + safeDuration + 0.05);
+      },
+
+      playNoise(duration = 0.18, volume = 0.12, when = 0, destination = 'effects') {
+        if (this.muted || !this.init() || !this.ctx) return;
+        const safeDuration = Math.max(0.03, duration);
+        const buffer = this.ctx.createBuffer(1, Math.ceil(this.ctx.sampleRate * safeDuration), this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < data.length; i++) {
+          data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+        }
+
+        const source = this.ctx.createBufferSource();
+        const gain = this.ctx.createGain();
+        const start = this.ctx.currentTime + when;
+        source.buffer = buffer;
+        gain.gain.setValueAtTime(volume, start);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + safeDuration);
+        source.connect(gain);
+        gain.connect(destination === 'music' ? this.musicGain : this.effectsGain);
+        source.start(start);
+        source.stop(start + safeDuration + 0.02);
+      },
+
+      startMusic() {
+        if (!this.init() || this.musicTimer) return;
+        if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
+        this.nextMusicTime = this.ctx.currentTime + 0.15;
+        this.musicStep = 0;
+        this.musicTimer = setInterval(() => this.scheduleMusic(), 100);
+      },
+
+      stopMusic() {
+        if (this.musicTimer) {
+          clearInterval(this.musicTimer);
+          this.musicTimer = null;
+        }
+      },
+
+      scheduleMusic() {
+        if (!this.ctx) return;
+        if (this.nextMusicTime < this.ctx.currentTime - 0.5) {
+          this.nextMusicTime = this.ctx.currentTime + 0.1;
+        }
+
+        const stepDuration = 0.24;
+        while (this.nextMusicTime < this.ctx.currentTime + 0.5) {
+          this.playMusicStep(this.musicStep, this.nextMusicTime - this.ctx.currentTime);
+          this.nextMusicTime += stepDuration;
+          this.musicStep = (this.musicStep + 1) % 32;
+        }
+      },
+
+      playMusicStep(step, when) {
+        const chords = [
+          [261.63, 329.63, 392.00],
+          [220.00, 261.63, 329.63],
+          [174.61, 220.00, 261.63],
+          [196.00, 246.94, 293.66]
+        ];
+        const basses = [130.81, 110.00, 87.31, 98.00];
+        const melodies = [523.25, 587.33, 659.25, 523.25, 440.00, 523.25, 392.00, 440.00];
+        const chord = chords[Math.floor(step / 8) % 4];
+
+        if (step % 8 === 0) {
+          this.playTone({ frequency: basses[Math.floor(step / 8) % 4], duration: 0.48, type: 'triangle', volume: 0.10, when, destination: 'music' });
+        }
+        if (step % 8 === 4) {
+          this.playTone({ frequency: basses[Math.floor(step / 8) % 4] * 1.5, duration: 0.36, type: 'triangle', volume: 0.07, when, destination: 'music' });
+        }
+        if (step % 2 === 0) {
+          this.playTone({ frequency: chord[(step / 2) % 3], duration: 0.28, type: 'sine', volume: 0.055, when, destination: 'music' });
+        }
+        if (step % 4 === 2) {
+          this.playTone({ frequency: melodies[(Math.floor(step / 4) * 2) % 8], duration: 0.22, type: 'sine', volume: 0.045, when, destination: 'music' });
+        }
+        if (step % 8 === 0 || step % 8 === 5) {
+          this.playNoise(0.05, 0.025, when, 'music');
+        }
+      },
+
+      playClick() {
+        this.playTone({ frequency: 660, duration: 0.06, type: 'triangle', volume: 0.10 });
+      },
+
+      playDice() {
+        for (let i = 0; i < 6; i++) {
+          this.playTone({ frequency: 180 + i * 28, duration: 0.045, type: 'square', volume: 0.075, when: i * 0.05 });
+        }
+        this.playNoise(0.24, 0.07, 0.05);
+      },
+
+      playMove() {
+        this.playTone({ frequency: 520, duration: 0.09, type: 'triangle', volume: 0.12, slideTo: 680 });
+      },
+
+      playCapture() {
+        this.playTone({ frequency: 420, duration: 0.28, type: 'sawtooth', volume: 0.14, slideTo: 105 });
+        this.playNoise(0.22, 0.10);
+      },
+
+      playPoint() {
+        [523.25, 659.25, 783.99].forEach((frequency, index) => {
+          this.playTone({ frequency, duration: 0.16, type: 'triangle', volume: 0.14, when: index * 0.08 });
+        });
+      },
+
+      playVictory() {
+        [392.00, 523.25, 659.25, 783.99].forEach((frequency, index) => {
+          this.playTone({ frequency, duration: index === 3 ? 0.55 : 0.2, type: 'triangle', volume: 0.17, when: index * 0.14 });
+        });
+      },
+
+      playDefeat() {
+        [329.63, 261.63, 220.00, 174.61].forEach((frequency, index) => {
+          this.playTone({ frequency, duration: index === 3 ? 0.55 : 0.22, type: 'sine', volume: 0.15, when: index * 0.16 });
+        });
+      },
+
+      playNoMove() {
+        this.playTone({ frequency: 180, duration: 0.18, type: 'square', volume: 0.08, slideTo: 120 });
+      }
+    };
+
+    function updateSoundSettingsUI() {
+      const musicPercent = Math.round(gameAudio.musicVolume * 100);
+      const effectsPercent = Math.round(gameAudio.effectsVolume * 100);
+
+      document.getElementById('music-volume').value = musicPercent;
+      document.getElementById('effects-volume').value = effectsPercent;
+      document.getElementById('music-volume-value').innerText = `${musicPercent}%`;
+      document.getElementById('effects-volume-value').innerText = `${effectsPercent}%`;
+      document.getElementById('sound-icon').innerText = gameAudio.muted ? '🔇' : '🔊';
+      document.getElementById('sound-mute-button').innerText = gameAudio.muted ? 'Ativar Som' : 'Silenciar Som';
+    }
+
+    function toggleSoundSettings() {
+      gameAudio.unlock();
+      const modal = document.getElementById('sound-modal');
+      const willOpen = modal.classList.contains('hidden');
+      modal.classList.toggle('hidden', !willOpen);
+      if (willOpen) gameAudio.playClick();
+    }
+
+    function closeSoundSettings() {
+      gameAudio.playClick();
+      document.getElementById('sound-modal').classList.add('hidden');
+    }
+
+    function setMusicVolume(value) {
+      gameAudio.musicVolume = Math.max(0, Math.min(100, Number(value) || 0)) / 100;
+      gameAudio.applyVolumes();
+      updateSoundSettingsUI();
+    }
+
+    function setEffectsVolume(value) {
+      gameAudio.effectsVolume = Math.max(0, Math.min(100, Number(value) || 0)) / 100;
+      gameAudio.applyVolumes();
+      updateSoundSettingsUI();
+    }
+
+    function toggleSoundMute() {
+      gameAudio.muted = !gameAudio.muted;
+      gameAudio.applyVolumes();
+      updateSoundSettingsUI();
+      if (!gameAudio.muted) gameAudio.playClick();
+    }
+
+    function playSoundTest() {
+      gameAudio.unlock();
+      gameAudio.playPoint();
+    }
+
+    let tokensState = {
+      RED: [-1, -1, -1, -1],
+      GREEN: [-1, -1, -1, -1],
+      YELLOW: [-1, -1, -1, -1],
+      BLUE: [-1, -1, -1, -1]
+    };
+
+    let playerScores = {
+      RED: 0,
+      GREEN: 0,
+      YELLOW: 0,
+      BLUE: 0
+    };
+
+    function getHumanPlayerKey() {
+      return usingCustomColor ? CUSTOM_PLAYER_SLOT : selectedHumanColor;
+    }
+
+    function getColorAssignments() {
+      const assignments = {};
+      const humanPlayer = getHumanPlayerKey();
+      const humanHex = usingCustomColor ? customColorHex : PLAYER_COLORS[humanPlayer].hex;
+      const humanName = usingCustomColor ? customColorName : PLAYER_COLORS[humanPlayer].name;
+
+      if (isTeamMode()) {
+        const partner = DIAGONAL_PARTNER[humanPlayer];
+        const preferredOpponentThemes = humanPlayer === 'RED' || humanPlayer === 'YELLOW'
+          ? ['BLUE', 'GREEN', 'RED']
+          : ['RED', 'BLUE', 'GREEN'];
+        const opponentTheme = preferredOpponentThemes.find(theme => {
+          return !areColorsSimilar(humanHex, PLAYER_COLORS[theme].hex);
+        }) || preferredOpponentThemes[0];
+        const opponentHex = PLAYER_COLORS[opponentTheme].hex;
+        const opponentName = PLAYER_COLORS[opponentTheme].name;
+
+        PLAYERS.forEach(player => {
+          const belongsToHumanTeam = player === humanPlayer || player === partner;
+          assignments[player] = belongsToHumanTeam
+            ? { hex: humanHex, name: humanName, custom: usingCustomColor }
+            : { hex: opponentHex, name: opponentName, custom: false };
+        });
+      } else {
+        PLAYERS.forEach(player => {
+          assignments[player] = {
+            hex: PLAYER_COLORS[player].hex,
+            name: PLAYER_COLORS[player].name,
+            custom: false
+          };
+        });
+
+        if (usingCustomColor) {
+          assignments[humanPlayer] = {
+            hex: customColorHex,
+            name: customColorName,
+            custom: true
+          };
+
+          activePlayers.forEach(player => {
+            if (playerTypes[player] === 'CPU' && areColorsSimilar(humanHex, assignments[player].hex)) {
+              const alternativeTheme = ['RED', 'BLUE', 'GREEN', 'YELLOW'].find(theme => {
+                return !areColorsSimilar(humanHex, PLAYER_COLORS[theme].hex);
+              });
+              if (alternativeTheme) {
+                assignments[player] = {
+                  hex: PLAYER_COLORS[alternativeTheme].hex,
+                  name: PLAYER_COLORS[alternativeTheme].name,
+                  custom: false
+                };
+              }
+            }
+          });
+        }
+      }
+
+      return assignments;
+    }
+
+    function getPlayerColor(player) {
+      const assignment = getColorAssignments()[player];
+      if (!assignment) return PLAYER_COLORS[player];
+
+      const themePlayer = PLAYERS.find(key => PLAYER_COLORS[key].hex === assignment.hex);
+      const theme = themePlayer ? PLAYER_COLORS[themePlayer] : null;
+
+      return {
+        bg: `bg-${player.toLowerCase()}-ludo`,
+        text: assignment.custom ? 'text-player-custom' : (theme ? theme.text : 'text-slate-200'),
+        border: assignment.custom ? 'border-player-custom' : (theme ? theme.border : 'border-slate-500'),
+        name: assignment.name,
+        hex: assignment.hex,
+        custom: assignment.custom
+      };
+    }
+
+    function normalizeHexColor(value) {
+      let hex = String(value || '').trim();
+      if (!hex.startsWith('#')) hex = `#${hex}`;
+
+      if (/^#[0-9a-f]{3}$/i.test(hex)) {
+        hex = `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`;
+      }
+
+      return /^#[0-9a-f]{6}$/i.test(hex) ? hex.toLowerCase() : null;
+    }
+
+    function hexToRgb(hex) {
+      const normalized = normalizeHexColor(hex) || '#000000';
+      return {
+        r: parseInt(normalized.slice(1, 3), 16),
+        g: parseInt(normalized.slice(3, 5), 16),
+        b: parseInt(normalized.slice(5, 7), 16)
+      };
+    }
+
+    function mixHexWithWhite(hex, whiteAmount = 0.6) {
+      const { r, g, b } = hexToRgb(hex);
+      const amount = Math.max(0, Math.min(1, whiteAmount));
+      const mix = (channel) => Math.round(channel + (255 - channel) * amount).toString(16).padStart(2, '0');
+      return `#${mix(r)}${mix(g)}${mix(b)}`;
+    }
+
+    function hexToHsv(hex) {
+      const { r, g, b } = hexToRgb(hex);
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      const delta = max - min;
+      let hue = 0;
+
+      if (delta !== 0) {
+        if (max === r) hue = 60 * (((g - b) / delta) % 6);
+        else if (max === g) hue = 60 * (((b - r) / delta) + 2);
+        else hue = 60 * (((r - g) / delta) + 4);
+      }
+      if (hue < 0) hue += 360;
+
+      return {
+        hue,
+        saturation: max === 0 ? 0 : delta / max,
+        value: max / 255
+      };
+    }
+
+    function areColorsSimilar(hexA, hexB) {
+      const a = hexToHsv(hexA);
+      const b = hexToHsv(hexB);
+      const hueDifference = Math.abs(a.hue - b.hue);
+      const circularHueDifference = Math.min(hueDifference, 360 - hueDifference);
+
+      if (a.saturation < 0.12 || b.saturation < 0.12) {
+        return Math.abs(a.value - b.value) < 0.16 && Math.abs(a.saturation - b.saturation) < 0.12;
+      }
+
+      return circularHueDifference < 40 &&
+        Math.abs(a.value - b.value) < 0.30 &&
+        Math.abs(a.saturation - b.saturation) < 0.32;
+    }
+
+    function getReadableAccent(hex) {
+      const { r, g, b } = hexToRgb(hex);
+      const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+      return luminance < 0.45 ? mixHexWithWhite(hex, 0.55) : hex;
+    }
+
+    function identifyColorName(hex) {
+      const { r, g, b } = hexToRgb(hex);
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      const delta = max - min;
+      const lightness = (max + min) / 510;
+
+      if (delta < 18) {
+        if (lightness < 0.16) return 'Preto';
+        if (lightness < 0.38) return 'Cinza Escuro';
+        if (lightness < 0.68) return 'Cinza';
+        if (lightness < 0.9) return 'Cinza Claro';
+        return 'Branco';
+      }
+
+      const saturation = max === 0 ? 0 : delta / max;
+      let hue;
+
+      if (max === r) {
+        hue = 60 * (((g - b) / delta) % 6);
+      } else if (max === g) {
+        hue = 60 * (((b - r) / delta) + 2);
+      } else {
+        hue = 60 * (((r - g) / delta) + 4);
+      }
+
+      if (hue < 0) hue += 360;
+
+      if (hue < 12 || hue >= 345) {
+        return lightness < 0.3 ? 'Vermelho Escuro' : 'Vermelho';
+      }
+      if (hue < 40) {
+        return lightness < 0.38 ? 'Marrom' : 'Laranja';
+      }
+      if (hue < 68) {
+        return lightness < 0.3 ? 'Marrom' : 'Amarelo';
+      }
+      if (hue < 95) return 'Verde-limão';
+      if (hue < 160) {
+        return lightness < 0.32 ? 'Verde Escuro' : 'Verde';
+      }
+      if (hue < 190) return 'Ciano';
+      if (hue < 215) return 'Azul-claro';
+      if (hue < 250) {
+        return lightness < 0.3 ? 'Azul-marinho' : 'Azul';
+      }
+      if (hue < 285) {
+        return lightness < 0.35 && hue > 260 ? 'Roxo' : 'Violeta';
+      }
+      if (hue < 320) {
+        if (lightness < 0.35) return 'Roxo';
+        return lightness > 0.68 ? 'Rosa' : 'Magenta';
+      }
+      return 'Rosa';
+    }
+
+    function isLightColor(hex) {
+      const { r, g, b } = hexToRgb(hex);
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      const saturation = max === 0 ? 0 : (max - min) / max;
+      const lightness = (max + min) / 510;
+      return (saturation < 0.22 && lightness >= 0.68) || min >= 205;
+    }
+
+    function updatePlayerName(value) {
+      playerName = String(value || '')
+        .replace(/[\u0000-\u001f\u007f]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 24);
+    }
+
+    function updateColorVariables() {
+      const root = document.documentElement;
+      const assignments = getColorAssignments();
+      const defaultPastels = {
+        RED: '#fca5a5',
+        GREEN: '#86efac',
+        YELLOW: '#fde047',
+        BLUE: '#93c5fd'
+      };
+      const lightCustomColor = usingCustomColor && isLightColor(customColorHex);
+
+      root.style.setProperty('--custom-player-color', customColorHex);
+      root.style.setProperty('--custom-player-text', getReadableAccent(customColorHex));
+
+      PLAYERS.forEach(player => {
+        const assignment = assignments[player];
+        const lightColor = isLightColor(assignment.hex);
+        const pastel = lightColor ? '#e2e8f0' : mixHexWithWhite(assignment.hex, 0.68);
+
+        root.style.setProperty(`--${player.toLowerCase()}-player-color`, assignment.hex);
+        root.style.setProperty(`--${player.toLowerCase()}-player-border`, lightColor ? '#000000' : assignment.hex);
+        root.style.setProperty(`--${player.toLowerCase()}-player-cell-border`, lightColor ? '#000000' : '#cbd5e1');
+        const useDefaultPastel = !assignment.custom && assignment.hex === PLAYER_COLORS[player].hex;
+        root.style.setProperty(`--${player.toLowerCase()}-player-pastel`, useDefaultPastel ? defaultPastels[player] : pastel);
+      });
+
+      document.body.classList.toggle('custom-light-color', lightCustomColor);
+    }
+
+    function updateColorSelectionUI() {
+      PLAYERS.forEach(player => {
+        const btn = document.getElementById(`color-btn-${player}`);
+        const isSelected = !usingCustomColor && player === selectedHumanColor;
+        btn.classList.toggle('border-white', isSelected);
+        btn.classList.toggle('border-transparent', !isSelected);
+      });
+
+      const customBtn = document.getElementById('color-btn-CUSTOM');
+      customBtn.classList.toggle('border-white', usingCustomColor);
+      customBtn.classList.toggle('border-transparent', !usingCustomColor);
+      document.getElementById('custom-color-label').textContent = customColorPreviewName;
+      document.getElementById('custom-color-hex-label').textContent = customColorPreviewHex.toUpperCase();
+    }
+
+    function selectHumanColor(color) {
+      if (!PLAYERS.includes(color)) return;
+
+      gameAudio.playClick();
+      selectedHumanColor = color;
+      usingCustomColor = false;
+      updateColorVariables();
+      updateColorSelectionUI();
+      document.getElementById('custom-color-menu').classList.add('hidden');
+      document.getElementById('color-btn-CUSTOM').setAttribute('aria-expanded', 'false');
+    }
+
+    function toggleCustomColorMenu() {
+      gameAudio.playClick();
+      const menu = document.getElementById('custom-color-menu');
+      const willOpen = menu.classList.contains('hidden');
+      menu.classList.toggle('hidden', !willOpen);
+      document.getElementById('color-btn-CUSTOM').setAttribute('aria-expanded', String(willOpen));
+
+      if (willOpen) {
+        previewCustomColor(customColorPreviewHex);
+        document.getElementById('custom-color-picker').focus();
+      }
+    }
+
+    function previewCustomColor(value) {
+      const normalized = normalizeHexColor(value);
+      if (!normalized) return;
+
+      customColorPreviewHex = normalized;
+      customColorPreviewName = identifyColorName(normalized);
+      document.getElementById('custom-color-picker').value = normalized;
+      document.getElementById('custom-color-hex').value = normalized.toUpperCase();
+      document.getElementById('custom-color-swatch').style.backgroundColor = normalized;
+      document.getElementById('custom-color-label').textContent = customColorPreviewName;
+      document.getElementById('custom-color-hex-label').textContent = normalized.toUpperCase();
+      document.getElementById('custom-color-message').textContent = `Pré-visualização da cor ${customColorPreviewName} (${normalized.toUpperCase()}).`;
+    }
+
+    function applyCustomColor() {
+      const hexInput = document.getElementById('custom-color-hex');
+      const normalized = normalizeHexColor(hexInput.value);
+      const message = document.getElementById('custom-color-message');
+
+      if (!normalized) {
+        message.textContent = 'Informe uma cor hexadecimal válida, como #8B5CF6.';
+        hexInput.focus();
+        return;
+      }
+
+      customColorHex = normalized;
+      customColorPreviewHex = normalized;
+      customColorName = identifyColorName(normalized);
+      customColorPreviewName = customColorName;
+      selectedHumanColor = 'CUSTOM';
+      usingCustomColor = true;
+      gameAudio.playClick();
+      updateColorVariables();
+      updateColorSelectionUI();
+      previewCustomColor(normalized);
+      message.textContent = `Cor ${customColorName} (${normalized.toUpperCase()}) aplicada à sua equipe.`;
+    }
+
+    function isTeamMode() {
+      return opponentsCount === 3;
+    }
+
+    function getWinningScore() {
+      return isTeamMode() ? 8 : 4;
+    }
+
+    function isHumanTeamPlayer(player) {
+      return playerTypes[player] === 'HUMAN' || playerTypes[player] === 'ALLY';
+    }
+
+    function isAutomatedPlayer(player) {
+      return playerTypes[player] === 'CPU' || playerTypes[player] === 'ALLY';
+    }
+
+    function areSameTeam(playerA, playerB) {
+      if (!isTeamMode()) return playerA === playerB;
+      return isHumanTeamPlayer(playerA) === isHumanTeamPlayer(playerB);
+    }
+
+    function getPlayerDisplayName(player) {
+      if (playerTypes[player] === 'HUMAN') return playerName || 'Você';
+      if (playerTypes[player] === 'ALLY') return playerName ? `Aliado de ${playerName}` : 'Aliado';
+      return isTeamMode() ? 'CPU adversária' : 'CPU';
+    }
+
+    function updateModeUI() {
+      const teamMode = isTeamMode();
+      [1, 3].forEach(count => {
+        const btn = document.getElementById(`mode-btn-${count}`);
+        const isSelected = count === opponentsCount;
+        btn.classList.toggle('border-white', isSelected);
+        btn.classList.toggle('border-transparent', !isSelected);
+      });
+
+      document.getElementById('player-name-label').innerText = teamMode ? 'Nome da Dupla' : 'Nome do Jogador';
+      document.getElementById('player-name-input').placeholder = teamMode
+        ? 'Digite o nome da dupla (opcional)'
+        : 'Digite seu nome (opcional)';
+      document.getElementById('setup-subtitle').innerText = teamMode
+        ? 'Escolha o nome da dupla, a cor e enfrente as CPUs!'
+        : 'Escolha seu nome e sua cor e enfrente os bots!';
+    }
+
+    function selectOpponentsMode(count) {
+      opponentsCount = count;
+      updateModeUI();
+      updateColorVariables();
+      updateScoreboardUI();
+      gameAudio.playClick();
+    }
+
+    function openPauseMenu() {
+      gameAudio.playClick();
+      isPaused = true;
+      if (activeDiceAnimation) activeDiceAnimation.pause();
+      if (activeTokenAnimation) activeTokenAnimation.pause();
+      document.getElementById('pause-modal').classList.remove('hidden');
+    }
+
+    function closePauseMenu() {
+      gameAudio.playClick();
+      isPaused = false;
+      if (activeDiceAnimation) activeDiceAnimation.play();
+      if (activeTokenAnimation) activeTokenAnimation.play();
+      document.getElementById('pause-modal').classList.add('hidden');
+      checkCPUTurn();
+    }
+
+    function restartCurrentGame() {
+      closePauseMenu();
+      startGame();
+    }
+
+    function openSetupModal() {
+      gameAudio.stopMusic();
+      gameAudio.playClick();
+      document.getElementById('pause-modal').classList.add('hidden');
+      document.getElementById('win-modal').classList.add('hidden');
+      document.getElementById('setup-screen').classList.remove('hidden');
+    }
+
+    function getCurrentPlayer() {
+      return activePlayers[currentTurnIndex];
+    }
+
+    function logStatus(msg) {
+      const statusLog = document.getElementById('status-log');
+      if (statusLog) statusLog.innerText = msg;
+    }
+
+    function getHumanTeamScore() {
+      return activePlayers.reduce((total, player) => {
+        return total + (isHumanTeamPlayer(player) ? (playerScores[player] || 0) : 0);
+      }, 0);
+    }
+
+    function getCpuScore() {
+      return activePlayers.reduce((total, player) => {
+        return total + (playerTypes[player] === 'CPU' ? (playerScores[player] || 0) : 0);
+      }, 0);
+    }
+
+    function updateScoreboardUI() {
+      document.getElementById('score-player-name').innerText = playerName || (isTeamMode() ? 'Dupla' : 'Jogador');
+      document.getElementById('score-cpu-label').innerText = isTeamMode() ? 'CPUs' : 'CPU';
+      document.getElementById('score-human').innerText = getHumanTeamScore();
+      document.getElementById('score-cpu').innerText = getCpuScore();
+      document.getElementById('scoreboard').title = `Primeiro a marcar ${getWinningScore()} pontos vence`;
+    }
+
+    function awardFinalPoint(player) {
+      playerScores[player] = (playerScores[player] || 0) + 1;
+      updateScoreboardUI();
+      gameAudio.playPoint();
+    }
+
+    function updateTurnUI() {
+      const player = getCurrentPlayer();
+      const color = getPlayerColor(player);
+      const dot = document.getElementById('turn-color-dot');
+      const text = document.getElementById('turn-text');
+      const badge = document.getElementById('turn-badge');
+      const currentPlayerName = getPlayerDisplayName(player);
+
+      dot.className = `w-3.5 h-3.5 shrink-0 ${color.bg}`;
+      text.className = `font-bold text-sm truncate ${color.text}`;
+      text.innerText = `Turno: ${currentPlayerName}`;
+      badge.className = `flex items-center justify-center gap-2 px-4 py-1.5 bg-slate-800 border max-w-full ${color.border}`;
+
+      const rollBtn = document.getElementById('roll-btn');
+      rollBtn.disabled = hasRolled || isAnimating || isAutomatedPlayer(player);
+    }
+
+    function handleDiceClick() {
+      if (playerTypes[getCurrentPlayer()] === 'HUMAN' && !hasRolled && !isAnimating && !isPaused) {
+        rollDice();
+      }
+    }
+
+    function initBoard() {
+      const board = document.getElementById('ludo-board');
+      board.innerHTML = '';
+
+      for (let r = 0; r < 15; r++) {
+        for (let c = 0; c < 15; c++) {
+          const cell = document.createElement('div');
+          cell.id = `cell-${r}-${c}`;
+          cell.className = 'cell';
+
+          styleCell(cell, r, c);
+          board.appendChild(cell);
+        }
+      }
+    }
+
+    function styleCell(cell, r, c) {
+      if (r < 6 && c < 6) cell.classList.add('bg-red-ludo');
+      else if (r < 6 && c > 8) cell.classList.add('bg-green-ludo');
+      else if (r > 8 && c > 8) cell.classList.add('bg-yellow-ludo');
+      else if (r > 8 && c < 6) cell.classList.add('bg-blue-ludo');
+
+      if ((r >= 1 && r <= 4) && (c >= 1 && c <= 4)) cell.classList.add('!bg-white', 'border-red-ludo');
+      if ((r >= 1 && r <= 4) && (c >= 10 && c <= 13)) cell.classList.add('!bg-white', 'border-green-ludo');
+      if ((r >= 10 && r <= 13) && (c >= 10 && c <= 13)) cell.classList.add('!bg-white', 'border-yellow-ludo');
+      if ((r >= 10 && r <= 13) && (c >= 1 && c <= 4)) cell.classList.add('!bg-white', 'border-blue-ludo');
+
+      if ((r===2||r===3) && (c===2||c===3)) cell.classList.add('!border-2', 'border-red-ludo', '!rounded-full');
+      if ((r===2||r===3) && (c===11||c===12)) cell.classList.add('!border-2', 'border-green-ludo', '!rounded-full');
+      if ((r===11||r===12) && (c===11||c===12)) cell.classList.add('!border-2', 'border-yellow-ludo', '!rounded-full');
+      if ((r===11||r===12) && (c===2||c===3)) cell.classList.add('!border-2', 'border-blue-ludo', '!rounded-full');
+
+      if (r === 7 && c >= 1 && c <= 5) cell.classList.add('bg-red-ludo');
+      if (c === 7 && r >= 1 && r <= 5) cell.classList.add('bg-green-ludo');
+      if (r === 7 && c >= 9 && c <= 13) cell.classList.add('bg-yellow-ludo');
+      if (c === 7 && r >= 9 && r <= 13) cell.classList.add('bg-blue-ludo');
+
+      /* Cores Pastéis para Casas Iniciais/Especiais */
+      if (r === 6 && c === 1) cell.style.backgroundColor = 'var(--red-player-pastel)';
+      if (r === 1 && c === 8) cell.style.backgroundColor = 'var(--green-player-pastel)';
+      if (r === 8 && c === 13) cell.style.backgroundColor = 'var(--yellow-player-pastel)';
+      if (r === 13 && c === 6) cell.style.backgroundColor = 'var(--blue-player-pastel)';
+
+      if (r === 7 && c === 0) cell.innerHTML = `<div class="cell-bg-icon" style="background-color: var(--red-player-pastel);">${SVG_ARROW_RIGHT}</div>`;
+      if (r === 0 && c === 7) cell.innerHTML = `<div class="cell-bg-icon" style="background-color: var(--green-player-pastel);">${SVG_ARROW_DOWN}</div>`;
+      if (r === 7 && c === 14) cell.innerHTML = `<div class="cell-bg-icon" style="background-color: var(--yellow-player-pastel);">${SVG_ARROW_LEFT}</div>`;
+      if (r === 14 && c === 7) {
+        cell.classList.add('bg-blue-ludo');
+        cell.innerHTML = `<div class="cell-bg-icon" style="background-color: var(--blue-player-pastel);">${SVG_ARROW_UP}</div>`;
+      }
+
+      STAR_CELLS.forEach(star => {
+        if (star.r === r && star.c === c) {
+          let pastelBg = '#f1f5f9';
+          if (r === 6 && c === 1) pastelBg = 'var(--red-player-pastel)';
+          if (r === 1 && c === 8) pastelBg = 'var(--green-player-pastel)';
+          if (r === 8 && c === 13) pastelBg = 'var(--yellow-player-pastel)';
+          if (r === 13 && c === 6) pastelBg = 'var(--blue-player-pastel)';
+          cell.innerHTML = `<div class="cell-bg-icon" style="background-color: ${pastelBg};">${SVG_STAR(star.color)}</div>`;
+        }
+      });
+
+      /* Triângulos centrais alinhados */
+      if (r >= 6 && r <= 8 && c >= 6 && c <= 8) {
+        cell.classList.add('!border-none', '!p-0');
+        if (r === 7 && c === 6) cell.innerHTML = '<div class="w-full h-full bg-red-ludo center-triangle-red"></div>';
+        if (r === 6 && c === 7) cell.innerHTML = '<div class="w-full h-full bg-green-ludo center-triangle-green"></div>';
+        if (r === 7 && c === 8) cell.innerHTML = '<div class="w-full h-full bg-yellow-ludo center-triangle-yellow"></div>';
+        if (r === 8 && c === 7) cell.innerHTML = '<div class="w-full h-full bg-blue-ludo center-triangle-blue"></div>';
+      }
+    }
+
+    function toggleFullscreen() {
+      gameAudio.playClick();
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        }
+      }
+    }
+
+    function getForwardRotation(current, desired) {
+      const currentMod = ((current % 360) + 360) % 360;
+      const desiredMod = ((desired % 360) + 360) % 360;
+      const delta = (desiredMod - currentMod + 360) % 360;
+      return current + delta;
+    }
+
+    function completeDiceRoll() {
+      isAnimating = false;
+      hasRolled = true;
+      document.getElementById('dice-instruction').textContent = 'Toque para rolar';
+      logStatus(`${getPlayerColor(getCurrentPlayer()).name} tirou ${diceValue} no dado!`);
+
+      if (diceValue === 6) {
+        consecutiveSixes++;
+        if (consecutiveSixes === 3) {
+          gameAudio.playNoMove();
+          logStatus(`3 Seis consecutivos! Perdeu a vez.`);
+          consecutiveSixes = 0;
+          setTimeout(nextTurn, 1200);
+          return;
+        }
+      } else {
+        consecutiveSixes = 0;
+      }
+
+      evaluateMoves();
+    }
+
+    function animateDiceRoll(dice, rotations) {
+      const rot = rotations[diceValue];
+      const extraSpins = 1080;
+      const finalX = getForwardRotation(diceCurrentX, rot.x) + extraSpins;
+      const finalY = getForwardRotation(diceCurrentY, rot.y) + extraSpins;
+      const finalTransform = `translateY(0px) rotateX(${finalX}deg) rotateY(${finalY}deg) scale(1)`;
+      const deltaX = finalX - diceCurrentX;
+      const deltaY = finalY - diceCurrentY;
+      const frameAt = (progress, lift, scale) =>
+        `translateY(${lift}px) rotateX(${diceCurrentX + deltaX * progress}deg) rotateY(${diceCurrentY + deltaY * progress}deg) scale(${scale})`;
+
+      const keyframes = [
+        { transform: diceCurrentTransform, offset: 0 },
+        { transform: frameAt(0.22, -2, 1.04), offset: 0.22 },
+        { transform: frameAt(0.52, -6, 1.13), offset: 0.52 },
+        { transform: frameAt(0.78, -2, 1.06), offset: 0.78 },
+        { transform: finalTransform, offset: 1 }
+      ];
+
+      if (typeof dice.animate !== 'function') {
+        dice.style.transform = finalTransform;
+        setTimeout(() => {
+          diceCurrentX = finalX;
+          diceCurrentY = finalY;
+          diceCurrentTransform = finalTransform;
+          completeDiceRoll();
+        }, 1500);
+        return;
+      }
+
+      const animation = dice.animate(keyframes, {
+        duration: 1500,
+        easing: 'cubic-bezier(0.16, 0.78, 0.18, 1)',
+        fill: 'forwards'
+      });
+
+      activeDiceAnimation = animation;
+      animation.addEventListener('finish', () => {
+        dice.style.transition = 'none';
+        dice.style.transform = finalTransform;
+        diceCurrentX = finalX;
+        diceCurrentY = finalY;
+        diceCurrentTransform = finalTransform;
+        void dice.offsetWidth;
+        dice.style.transition = '';
+        activeDiceAnimation = null;
+        animation.cancel();
+        completeDiceRoll();
+      }, { once: true });
+    }
+
+    function rollDice() {
+      if (hasRolled || isAnimating || isPaused) return;
+
+      isAnimating = true;
+      const dice = document.getElementById('dice');
+      const rollBtn = document.getElementById('roll-btn');
+      rollBtn.disabled = true;
+      document.getElementById('dice-instruction').textContent = 'Girando o dado...';
+      gameAudio.playDice();
+
+      diceValue = Math.floor(Math.random() * 6) + 1;
+
+      /* Mapeamento exato e inequívoco das faces 3D do dado */
+      const rotations = {
+        1: { x: 0, y: 0 },
+        2: { x: 0, y: 90 },
+        3: { x: 90, y: 0 },
+        4: { x: -90, y: 0 },
+        5: { x: 0, y: -90 },
+        6: { x: 0, y: 180 }
+      };
+
+      animateDiceRoll(dice, rotations);
+    }
+
+    function evaluateMoves() {
+      const player = getCurrentPlayer();
+      const validTokens = getValidTokenIndices(player, diceValue);
+
+      if (validTokens.length === 0) {
+        gameAudio.playNoMove();
+        logStatus(`Nenhum movimento possível para ${getPlayerColor(player).name}.`);
+        setTimeout(nextTurn, 1200);
+      } else if (isAutomatedPlayer(player)) {
+        setTimeout(() => makeCPUMove(validTokens), 800);
+      } else {
+        highlightSelectableTokens(validTokens);
+      }
+    }
+
+    function getValidTokenIndices(player, roll) {
+      const tokens = tokensState[player];
+      const valid = [];
+
+      tokens.forEach((pos, idx) => {
+        if (pos === -1) {
+          if (roll === 6) valid.push(idx);
+        } else if (pos < FINAL_POSITION) {
+          if (pos + roll <= FINAL_POSITION) valid.push(idx);
+        }
+      });
+
+      return valid;
+    }
+
+    function highlightSelectableTokens(validIndices) {
+      const player = getCurrentPlayer();
+      validIndices.forEach(idx => {
+        const el = document.getElementById(`token-${player}-${idx}`);
+        if (el) {
+          el.classList.add('selectable');
+          el.onclick = () => moveToken(player, idx, diceValue);
+        }
+      });
+    }
+
+    function clearHighlights() {
+      document.querySelectorAll('.token.selectable').forEach(el => {
+        el.classList.remove('selectable');
+        el.onclick = null;
+      });
+    }
+
+    function wait(duration) {
+      return new Promise(resolve => setTimeout(resolve, duration));
+    }
+
+    async function animateTokenTransition(player, tokenIdx, fromPos, toPos, duration = 320) {
+      const token = document.getElementById(`token-${player}-${tokenIdx}`);
+      if (!token) return;
+
+      const [fromRow, fromCol] = getCoords(player, tokenIdx, fromPos);
+      const [toRow, toCol] = getCoords(player, tokenIdx, toPos);
+      const board = document.getElementById('ludo-board');
+      const cellSize = board.clientWidth / 15;
+      const deltaX = (fromCol - toCol) * cellSize;
+      const deltaY = (fromRow - toRow) * cellSize;
+
+      const keyframes = [
+        {
+          transform: `translate(${deltaX}px, ${deltaY}px) scale(0.92) rotate(-4deg)`,
+          filter: 'brightness(0.96)',
+          boxShadow: '0 2px 4px rgba(0, 0, 0, 0.28)',
+          offset: 0
+        },
+        {
+          transform: `translate(${deltaX * 0.46}px, ${deltaY * 0.46 - 10}px) scale(1.12) rotate(3deg)`,
+          filter: 'brightness(1.16)',
+          boxShadow: '0 10px 14px rgba(0, 0, 0, 0.42)',
+          offset: 0.48
+        },
+        {
+          transform: `translate(${deltaX * 0.12}px, ${deltaY * 0.12 - 3}px) scale(1.04) rotate(1deg)`,
+          filter: 'brightness(1.05)',
+          boxShadow: '0 5px 8px rgba(0, 0, 0, 0.34)',
+          offset: 0.8
+        },
+        {
+          transform: 'translate(0px, 0px) scale(1) rotate(0deg)',
+          filter: 'brightness(1)',
+          boxShadow: '0 3px 6px rgba(0, 0, 0, 0.4)',
+          offset: 1
+        }
+      ];
+
+      if (typeof token.animate !== 'function') {
+        token.style.transition = `transform ${duration}ms cubic-bezier(0.2, 0.78, 0.24, 1)`;
+        token.style.transform = `translate(${deltaX}px, ${deltaY}px) scale(0.92)`;
+        requestAnimationFrame(() => {
+          token.style.transform = 'translate(0px, 0px) scale(1)';
+        });
+        await wait(duration);
+        token.style.transition = '';
+        token.style.transform = '';
+        return;
+      }
+
+      const animation = token.animate(keyframes, {
+        duration,
+        easing: 'cubic-bezier(0.2, 0.78, 0.24, 1)',
+        fill: 'both'
+      });
+
+      activeTokenAnimation = animation;
+      try {
+        await animation.finished;
+      } catch (error) {
+        // A animação pode ser cancelada ao reiniciar a partida.
+      }
+
+      if (activeTokenAnimation === animation) {
+        activeTokenAnimation = null;
+        animation.cancel();
+      }
+    }
+
+    async function moveToken(player, tokenIdx, steps) {
+      clearHighlights();
+      isAnimating = true;
+      const session = movementSession;
+      const startingPosition = tokensState[player][tokenIdx];
+
+      try {
+        if (startingPosition === -1 && steps === 6) {
+          gameAudio.playMove();
+          tokensState[player][tokenIdx] = 0;
+          renderTokens();
+          await animateTokenTransition(player, tokenIdx, -1, 0, 560);
+        } else {
+          for (let step = 0; step < steps; step++) {
+            while (isPaused && session === movementSession) {
+              await wait(80);
+            }
+            if (session !== movementSession) return;
+
+            const fromPosition = tokensState[player][tokenIdx];
+            gameAudio.playMove();
+            tokensState[player][tokenIdx]++;
+            renderTokens();
+            await animateTokenTransition(player, tokenIdx, fromPosition, tokensState[player][tokenIdx], 320);
+            if (session !== movementSession) return;
+            if (tokensState[player][tokenIdx] === FINAL_POSITION) {
+              awardFinalPoint(player);
+            }
+          }
+        }
+
+        if (session !== movementSession) return;
+        checkCapture(player, tokensState[player][tokenIdx]);
+        finishMove();
+      } catch (error) {
+        if (session === movementSession) finishMove();
+      }
+    }
+
+    function checkCapture(player, pos) {
+      if (pos < 0 || pos >= FIRST_HOME_POSITION) return;
+
+      const [r, c] = getCoords(player, 0, pos);
+      const isStar = STAR_CELLS.some(star => star.r === r && star.c === c);
+
+      if (isStar) return;
+
+      const mainIdx = getMainPathIndex(player, pos);
+      let captured = false;
+
+      activePlayers.forEach(otherPlayer => {
+        if (otherPlayer === player || areSameTeam(player, otherPlayer)) return;
+
+        tokensState[otherPlayer].forEach((otherPos, otherIdx) => {
+          if (otherPos >= 0 && otherPos < FIRST_HOME_POSITION) {
+            const otherMainIdx = getMainPathIndex(otherPlayer, otherPos);
+            if (otherMainIdx === mainIdx) {
+              // Captura apenas peças da equipe adversária.
+              tokensState[otherPlayer][otherIdx] = -1;
+              captured = true;
+              logStatus(`💥 ${getPlayerDisplayName(player)} capturou a peça de ${getPlayerDisplayName(otherPlayer)}!`);
+            }
+          }
+        });
+      });
+
+      if (captured) gameAudio.playCapture();
+    }
+
+    function finishMove() {
+      renderTokens();
+      isAnimating = false;
+
+      const player = getCurrentPlayer();
+      const winningTeam = getWinningTeam();
+      if (winningTeam) {
+        const humanWon = winningTeam === 'HUMAN';
+        const winTitle = document.getElementById('win-title');
+
+        winTitle.innerText = humanWon ? 'V I T Ó R I A' : 'D E R R O T A';
+        winTitle.className = `text-3xl sm:text-5xl font-black tracking-[0.22em] ${humanWon ? 'text-amber-400' : 'text-red-500'}`;
+        document.getElementById('win-score').innerText = `${getHumanTeamScore()} - ${getCpuScore()}`;
+        document.getElementById('win-modal').classList.remove('hidden');
+
+        if (humanWon) {
+          gameAudio.playVictory();
+        } else {
+          gameAudio.playDefeat();
+        }
+        return;
+      }
+
+      // Se tirou 6 no dado, ganha outro turno!
+      if (diceValue === 6) {
+        hasRolled = false;
+        logStatus(`${getPlayerColor(player).name} tirou 6 e joga novamente! 🎲`);
+        updateTurnUI();
+        checkCPUTurn();
+      } else {
+        nextTurn();
+      }
+    }
+
+    function getWinningTeam() {
+      const target = getWinningScore();
+      if (getHumanTeamScore() >= target) return 'HUMAN';
+      if (getCpuScore() >= target) return 'CPU';
+      return null;
+    }
+
+    function checkWin() {
+      return getWinningTeam() !== null;
+    }
+
+    function nextTurn() {
+      hasRolled = false;
+      currentTurnIndex = (currentTurnIndex + 1) % activePlayers.length;
+      updateTurnUI();
+      checkCPUTurn();
+    }
+
+    function startGame() {
+      updatePlayerName(document.getElementById('player-name-input').value);
+      movementSession++;
+
+      if (activeDiceAnimation) {
+        activeDiceAnimation.cancel();
+        activeDiceAnimation = null;
+      }
+      if (activeTokenAnimation) {
+        activeTokenAnimation.cancel();
+        activeTokenAnimation = null;
+      }
+
+      // O jogador humano sempre fica na posição BOTTOM_LEFT (canto inferior esquerdo)
+      const humanPlayerKey = getHumanPlayerKey();
+      const humanColorIdx = CLOCKWISE_COLORS.indexOf(humanPlayerKey);
+      boardRotationIndex = (4 - humanColorIdx) % 4;
+
+      playerTypes = { RED: 'NONE', GREEN: 'NONE', YELLOW: 'NONE', BLUE: 'NONE' };
+      playerTypes[humanPlayerKey] = 'HUMAN';
+
+      if (isTeamMode()) {
+        // Duplas nas bases diagonais: humano + 1 CPU aliado vs 2 CPUs adversárias.
+        const partnerColor = DIAGONAL_PARTNER[humanPlayerKey];
+        playerTypes[partnerColor] = 'ALLY';
+        CLOCKWISE_COLORS.forEach(color => {
+          if (color !== humanPlayerKey && color !== partnerColor) {
+            playerTypes[color] = 'CPU';
+          }
+        });
+      } else {
+        const opponentColor = CLOCKWISE_COLORS[(humanColorIdx + 2) % 4];
+        playerTypes[opponentColor] = 'CPU';
+      }
+
+      activePlayers = CLOCKWISE_COLORS.filter(c => playerTypes[c] !== 'NONE');
+      updateColorVariables();
+
+      tokensState = {
+        RED: [-1, -1, -1, -1],
+        GREEN: [-1, -1, -1, -1],
+        YELLOW: [-1, -1, -1, -1],
+        BLUE: [-1, -1, -1, -1]
+      };
+
+      playerScores = {
+        RED: 0,
+        GREEN: 0,
+        YELLOW: 0,
+        BLUE: 0
+      };
+
+      currentTurnIndex = activePlayers.indexOf(humanPlayerKey);
+      hasRolled = false;
+      consecutiveSixes = 0;
+      isAnimating = false;
+      isPaused = false;
+
+      document.getElementById('setup-screen').classList.add('hidden');
+      document.getElementById('win-modal').classList.add('hidden');
+      document.getElementById('pause-modal').classList.add('hidden');
+
+      initBoard();
+      
+      // Rotaciona visualmente o tabuleiro para alinhar a cor escolhida ao canto inferior esquerdo
+      const boardEl = document.getElementById('ludo-board');
+      const degrees = boardRotationIndex * 90;
+      boardEl.style.transform = `rotate(${degrees}deg)`;
+
+      renderTokens();
+      updateTurnUI();
+      updateScoreboardUI();
+      gameAudio.unlock();
+      gameAudio.startMusic();
+      const greeting = playerName ? `Boa sorte, ${playerName}! ` : '';
+      logStatus(`${greeting}Partida iniciada! Sua cor (${getPlayerColor(humanPlayerKey).name}) está no Canto Inferior Esquerdo.`);
+      checkCPUTurn();
+    }
+
+    function checkCPUTurn() {
+      const player = getCurrentPlayer();
+      if (isAutomatedPlayer(player) && !hasRolled && !isPaused) {
+        setTimeout(() => {
+          if (!isPaused) rollDice();
+        }, 600);
+      }
+    }
+
+    function makeCPUMove(validIndices) {
+      const player = getCurrentPlayer();
+      let chosenTokenIndex = validIndices[0];
+      let maxScore = -999;
+
+      validIndices.forEach(idx => {
+        let score = 0;
+        const currentPos = tokensState[player][idx];
+
+        if (currentPos === -1) {
+          score += 50;
+        } else {
+          const nextPos = currentPos + diceValue;
+          if (nextPos < FIRST_HOME_POSITION) {
+            const targetMainIdx = getMainPathIndex(player, nextPos);
+            activePlayers.forEach(other => {
+              if (other !== player && !areSameTeam(player, other)) {
+                tokensState[other].forEach(oPos => {
+                  if (oPos >= 0 && oPos < FIRST_HOME_POSITION && getMainPathIndex(other, oPos) === targetMainIdx) {
+                    score += 100;
+                  }
+                });
+              }
+            });
+          }
+          score += nextPos;
+        }
+
+        if (score > maxScore) {
+          maxScore = score;
+          chosenTokenIndex = idx;
+        }
+      });
+
+      moveToken(player, chosenTokenIndex, diceValue);
+    }
+
+    function getMainPathIndex(player, relativePos) {
+      const start = START_INDEX[player];
+      return (start + relativePos) % TRACK_LENGTH;
+    }
+
+    function getCoords(player, tokenIdx, pos) {
+      if (pos === -1) {
+        return YARD_POSITIONS[player][tokenIdx];
+      } else if (pos < FIRST_HOME_POSITION) {
+        const mainIdx = getMainPathIndex(player, pos);
+        return MAIN_PATH[mainIdx];
+      } else {
+        const homeIdx = pos - FIRST_HOME_POSITION;
+        return HOME_PATHS[player][homeIdx];
+      }
+    }
+
+    function renderTokens() {
+      document.querySelectorAll('.tokens-container').forEach(el => el.remove());
+
+      const cellMap = {};
+
+      activePlayers.forEach(player => {
+        tokensState[player].forEach((pos, idx) => {
+          const [r, c] = getCoords(player, idx, pos);
+          const key = `${r}-${c}`;
+          if (!cellMap[key]) cellMap[key] = [];
+          cellMap[key].push({ player, idx });
+        });
+      });
+
+      Object.keys(cellMap).forEach(key => {
+        const cell = document.getElementById(`cell-${key}`);
+        if (!cell) return;
+
+        const container = document.createElement('div');
+        container.className = 'tokens-container';
+
+        cellMap[key].forEach(({ player, idx }) => {
+          const token = document.createElement('div');
+          const teamClass = isHumanTeamPlayer(player) ? 'human-piece' : 'cpu-piece';
+          token.id = `token-${player}-${idx}`;
+          token.className = `token ${teamClass} ${getPlayerColor(player).bg}`;
+          token.innerHTML = '<div class="token-center"></div>';
+          container.appendChild(token);
+        });
+
+        cell.appendChild(container);
+      });
+    }
+
+    window.onload = function() {
+      updatePlayerName(document.getElementById('player-name-input').value);
+      updateModeUI();
+      updateColorVariables();
+      updateColorSelectionUI();
+      updateScoreboardUI();
+      updateSoundSettingsUI();
+      initBoard();
+    };
+  </script>
+  <script src="/auth.js" defer></script>
+</body>
+</html>

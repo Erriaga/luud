@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Entrar no LUUD</title>
+  <link rel="icon" href="/assets/avatar.svg" type="image/svg+xml">
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: 'Segoe UI', 'Fredoka', system-ui, sans-serif;
+      background: #020617;
+      color: #e2e8f0;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: radial-gradient(circle at top, #10243f 0%, #020617 55%);
+    }
+
+    .login-card {
+      width: min(430px, 100%);
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 22px;
+      padding: 34px;
+      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+      text-align: center;
+    }
+
+    .logo {
+      font-size: 42px;
+      font-weight: 800;
+      margin: 0 0 6px;
+      background: linear-gradient(100deg, #ff5566, #ffcc33, #43d17c, #36a9ff);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      letter-spacing: 2px;
+    }
+
+    .subtitle {
+      margin: 0 0 30px;
+      color: #94a3b8;
+      font-size: 16px;
+      line-height: 1.55;
+    }
+
+    .google-button {
+      min-height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .status {
+      margin-top: 18px;
+      min-height: 24px;
+      color: #f87171;
+      font-size: 14px;
+    }
+
+    .hint {
+      margin-top: 24px;
+      padding: 14px;
+      border: 1px dashed #475569;
+      border-radius: 14px;
+      color: #cbd5e1;
+      font-size: 13px;
+      line-height: 1.6;
+      text-align: left;
+    }
+
+    .hint code {
+      color: #fbbf24;
+      background: #1e293b;
+      padding: 2px 5px;
+      border-radius: 5px;
+    }
+
+    .back-link {
+      display: inline-block;
+      margin-top: 22px;
+      color: #93c5fd;
+      text-decoration: none;
+      font-size: 14px;
+    }
+
+    .back-link:hover {
+      text-decoration: underline;
+    }
+
+    @media (max-width: 480px) {
+      .login-card {
+        padding: 26px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="login-card">
+    <h1 class="logo">LUUD</h1>
+    <p class="subtitle">
+      Crie sua conta ou entre com a sua Conta Google.<br>
+      No primeiro acesso, a conta é criada automaticamente.
+    </p>
+
+    <div id="google-button" class="google-button"></div>
+    <div id="login-status" class="status" role="status"></div>
+
+    <div id="setup-hint" class="hint">
+      <strong>Para ativar o login Google:</strong><br>
+      1. Crie um <em>ID do cliente OAuth 2.0</em> no Google Cloud Console.<br>
+      2. Em <em>Origens JavaScript autorizadas</em>, adicione:<br>
+      <code>http://127.0.0.1:3000</code><br>
+      3. Coloque o valor em <code>.env</code> como <code>GOOGLE_CLIENT_ID=...</code><br>
+      4. Reinicie o servidor com <code>npm start</code>.
+    </div>
+
+    <a class="back-link" href="/">Voltar ao jogo</a>
+  </main>
+
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script>
+    const statusEl = document.getElementById('login-status');
+    const buttonEl = document.getElementById('google-button');
+    const hintEl = document.getElementById('setup-hint');
+
+    async function initLogin() {
+      let config = { configured: false, clientId: '' };
+
+      try {
+        const response = await fetch('/api/auth/config');
+        config = await response.json();
+      } catch (error) {
+        statusEl.textContent = 'Não foi possível carregar as configurações de login.';
+        return;
+      }
+
+      if (!config.configured || !config.clientId) {
+        hintEl.hidden = false;
+        statusEl.textContent = 'Login Google ainda não configurado.';
+        return;
+      }
+
+      hintEl.hidden = true;
+      statusEl.textContent = '';
+
+      const waitForGoogle = setInterval(() => {
+        if (!window.google?.accounts?.id) return;
+        clearInterval(waitForGoogle);
+
+        window.google.accounts.id.initialize({
+          client_id: config.clientId,
+          callback: handleGoogleCredential,
+          auto_select: false,
+          cancel_on_tap_outside: true
+        });
+
+        window.google.accounts.id.renderButton(buttonEl, {
+          theme: 'filled_blue',
+          size: 'large',
+          shape: 'pill',
+          text: 'signin_with',
+          logo_alignment: 'center',
+          width: 280
+        });
+      }, 100);
+    }
+
+    async function handleGoogleCredential(response) {
+      statusEl.style.color = '#94a3b8';
+      statusEl.textContent = 'Verificando sua conta...';
+
+      try {
+        const serverResponse = await fetch('/api/auth/google', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ credential: response.credential })
+        });
+
+        if (!serverResponse.ok) {
+          const error = await serverResponse.json();
+          throw new Error(error.error || 'Não foi possível entrar.');
+        }
+
+        window.location.href = '/';
+      } catch (error) {
+        statusEl.style.color = '#f87171';
+        statusEl.textContent = error.message;
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', initLogin);
+  </script>
+</body>
+</html>
