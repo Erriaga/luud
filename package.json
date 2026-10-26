@@ -1,0 +1,14 @@
+{
+  "name": "luud-node",
+  "version": "1.0.0",
+  "description": "Versão Node.js do jogo LUUD com login por Conta Google.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "private": true
+}
