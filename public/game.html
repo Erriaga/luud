@@ -660,7 +660,7 @@
       </button>
       <div id="account-area" class="relative">
         <button type="button" id="account-button" onclick="handleAccountButtonClick(event)" title="Conta" class="flex items-center gap-2 pl-1.5 pr-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-xs font-bold transition text-slate-100 border border-slate-600">
-          <img id="account-avatar" src="/assets/avatar.svg" alt="Foto do perfil" class="w-7 h-7  object-cover bg-slate-800 border border-slate-500">
+          <img id="account-avatar" src="/assets/avatar.svg" alt="Foto do perfil" class="w-7 h-7 rounded-none object-cover bg-slate-800 border border-slate-500">
           <span id="account-name" class="max-w-[90px] truncate">Entrar</span>
         </button>
         <div id="account-dropdown" class="hidden absolute right-0 mt-2 w-60 bg-slate-800 border border-slate-600 shadow-2xl overflow-hidden z-50">
@@ -1561,7 +1561,7 @@
       if (typeof accountUser !== 'undefined' && accountUser && onlineSingleBtn) {
         onlineSingleBtn.disabled = false;
         onlineSingleBtn.classList.remove('opacity-70', 'cursor-not-allowed', 'text-slate-500', 'bg-slate-700');
-        onlineSingleBtn.classList.add('border-white', 'bg-slate-700', 'hover:bg-slate-600');
+        onlineSingleBtn.classList.add('bg-slate-700', 'hover:bg-slate-600');
         onlineSingleBtn.querySelector('span:last-child').textContent = '1 vs 1';
       } else if (onlineSingleBtn) {
         onlineSingleBtn.disabled = true;
@@ -2716,7 +2716,7 @@
           if (onlineSingleBtn) {
             onlineSingleBtn.disabled = false;
             onlineSingleBtn.classList.remove('opacity-70', 'cursor-not-allowed', 'text-slate-500', 'bg-slate-700');
-            onlineSingleBtn.classList.add('border-white', 'bg-slate-700', 'hover:bg-slate-600');
+            onlineSingleBtn.classList.add('bg-slate-700', 'hover:bg-slate-600');
             onlineSingleBtn.querySelector('span:last-child').textContent = '1 vs 1';
           }
         } catch (error) {
