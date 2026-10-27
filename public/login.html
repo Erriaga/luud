@@ -5,10 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Entrar no LUUD</title>
   <link rel="icon" href="/assets/avatar.svg" type="image/svg+xml">
+  <!-- Google Fonts: Anton (display), Oswald (interface) e Fredoka (texto) -->
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Fredoka:wght@400;600;700&family=Oswald:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     :root {
       color-scheme: dark;
-      font-family: 'Segoe UI', 'Fredoka', system-ui, sans-serif;
+      font-family: 'Fredoka', 'Segoe UI', system-ui, sans-serif;
       background: #020617;
       color: #e2e8f0;
     }
@@ -33,22 +35,36 @@
       text-align: center;
     }
 
-    .logo {
-      font-size: 42px;
-      font-weight: 800;
-      margin: 0 0 6px;
+    /* Logo oficial em placa branca (o logo original tem fundo transparente e grafite) */
+    .brand-logo {
+      width: min(240px, 100%);
+      height: auto;
+      background: #ffffff;
+      border-radius: 18px;
+      padding: 12px 16px;
+      box-shadow: 0 16px 34px rgba(0, 0, 0, 0.45);
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .title {
+      font-family: 'Anton', 'Arial Narrow', Impact, sans-serif;
+      font-size: 34px;
+      line-height: 1.1;
+      letter-spacing: 0.08em;
+      margin: 22px 0 6px;
       background: linear-gradient(100deg, #ff5566, #ffcc33, #43d17c, #36a9ff);
       -webkit-background-clip: text;
       background-clip: text;
       color: transparent;
-      letter-spacing: 2px;
+      text-transform: uppercase;
     }
 
     .subtitle {
-      margin: 0 0 30px;
-      color: #94a3b8;
       font-size: 16px;
       line-height: 1.55;
+      color: #94a3b8;
+      margin: 0 0 30px;
     }
 
     .google-button {
@@ -58,6 +74,22 @@
       justify-content: center;
       border-radius: 12px;
       overflow: hidden;
+    }
+
+    /* O botão do Google vem com um contorno branco: removemos bordas e fonds dos wrappers */
+    .google-button iframe,
+    .google-button [role="button"],
+    .google-button [role="button"] div,
+    .google-button > div,
+    .google-button > div > div {
+      border: 0 !important;
+      outline: none !important;
+      box-shadow: none !important;
+    }
+
+    .google-button > div,
+    .google-button > div > div {
+      background: transparent !important;
     }
 
     .status {
@@ -91,10 +123,20 @@
       color: #93c5fd;
       text-decoration: none;
       font-size: 14px;
+      font-family: 'Oswald', 'Arial Narrow', sans-serif;
+      letter-spacing: 0.05em;
     }
 
     .back-link:hover {
-      text-decoration: underline;
+      color: #bfdbfe;
+    }
+
+    .footer {
+      margin-top: 18px;
+      font-family: 'Oswald', 'Arial Narrow', sans-serif;
+      font-size: 12px;
+      letter-spacing: 0.14em;
+      color: #64748b;
     }
 
     @media (max-width: 480px) {
@@ -106,7 +148,9 @@
 </head>
 <body>
   <main class="login-card">
-    <h1 class="logo">LUUD</h1>
+    <img src="/assets/luud-logo.png" alt="LUUD" class="brand-logo" draggable="false">
+
+    <h1 class="title">Entrar no LUUD</h1>
     <p class="subtitle">
       Crie sua conta ou entre com a sua Conta Google.<br>
       No primeiro acesso, a conta é criada automaticamente.
@@ -125,6 +169,8 @@
     </div>
 
     <a class="back-link" href="/">Voltar ao jogo</a>
+
+    <p class="footer">© 2026 LUUD Studios™</p>
   </main>
 
   <script src="https://accounts.google.com/gsi/client" async defer></script>
