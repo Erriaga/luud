@@ -24,6 +24,11 @@ function setAvatarImage(imageElement, url) {
   imageElement.src = url || DEFAULT_AVATAR;
 }
 
+function getAccountFirstName(user) {
+  const name = (user && (user.displayName || user.playerName || user.email)) || '';
+  return String(name).trim().split(/\s+/)[0] || '';
+}
+
 function updateAccountUI(user) {
   if (!user) {
     accountUser = null;
@@ -37,7 +42,8 @@ function updateAccountUI(user) {
   }
 
   accountUser = user;
-  accountName.textContent = user.displayName || user.playerName || 'Conta';
+  // No cabeçalho, ao lado da foto, apenas o primeiro nome
+  accountName.textContent = getAccountFirstName(user) || 'Conta';
   setAvatarImage(accountAvatar, user.avatarUrl || user.picture || DEFAULT_AVATAR);
   dropdownAccountName.textContent = user.displayName || user.playerName || 'Conta';
   dropdownAccountEmail.textContent = user.email || '';
