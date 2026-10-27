@@ -5,6 +5,7 @@ const fs = require('fs/promises');
 const fss = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { WebSocketServer } = require('ws');
 
 const ROOT = __dirname;
 
@@ -16,10 +17,38 @@ const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
 
 const PORT = Number(process.env.PORT || 3000);
+const HOST = process.env.HOST || '0.0.0.0';
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const COOKIE_NAME = 'luud_session';
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7;
+
+/* -------------------------------------------------------------
+   SALAS DE JOGO ONLINE (multiplayer entre computadores)
+------------------------------------------------------------- */
+const rooms = new Map(); // roomCode -> { players: [ws, ws], names: [str, str], ready: [bool, bool] }
+
+function generateRoomCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
+
+function broadcastRoom(roomCode, message, excludeWs = null) {
+  const room = rooms.get(roomCode);
+  if (!room) return;
+  const payload = JSON.stringify(message);
+  for (const ws of room.players) {
+    if (ws && ws !== excludeWs && ws.readyState === 1) {
+      ws.send(payload);
+    }
+  }
+}
+
+function otherPlayerIndex(idx) {
+  return idx === 0 ? 1 : 0;
+}
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -368,6 +397,11 @@ async function handleRequest(request, response) {
   const urlPath = requestUrl.pathname;
 
   try {
+    if (request.method === 'GET' && urlPath === '/healthz') {
+      sendJson(response, 200, { ok: true });
+      return;
+    }
+
     if (request.method === 'GET' && urlPath === '/api/auth/config') {
       await handleAuthConfig(request, response);
       return;
@@ -420,10 +454,132 @@ async function main() {
   await ensureDataFiles();
 
   const server = http.createServer(handleRequest);
-  server.listen(PORT, '0.0.0.0', () => {
-    console.log(`LUUD Node.js rodando em http://0.0.0.0:${PORT}`);
+
+  /* -------------------------------------------------------------
+     WEBSOCKET - Salas multiplayer online
+  ------------------------------------------------------------- */
+  const wss = new WebSocketServer({ server, path: '/ws' });
+
+  wss.on('connection', (ws) => {
+    let roomCode = null;
+    let playerIdx = null;
+
+    ws.on('message', (raw) => {
+      let data;
+      try {
+        data = JSON.parse(raw.toString('utf8'));
+      } catch (error) {
+        return;
+      }
+
+      if (data.type === 'join_room') {
+        const { room: code, name } = data || {};
+        if (!code) {
+          ws.send(JSON.stringify({ type: 'error', error: 'Código da sala obrigatório.' }));
+          return;
+        }
+
+        let room = rooms.get(code);
+        if (!room) {
+          roomCode = code;
+          rooms.set(code, {
+            players: [ws, null],
+            names: [name || 'Jogador 1', null],
+            ready: [false, false]
+          });
+          playerIdx = 0;
+          ws.send(JSON.stringify({
+            type: 'room_created',
+            room: code,
+            player: playerIdx,
+            name: room.names[0]
+          }));
+          return;
+        }
+
+        if (room.players[0] && room.players[1]) {
+          ws.send(JSON.stringify({ type: 'error', error: 'Sala cheia.' }));
+          return;
+        }
+
+        roomCode = code;
+        playerIdx = room.players[0] ? 1 : 0;
+        room.players[playerIdx] = ws;
+        room.names[playerIdx] = name || `Jogador ${playerIdx + 1}`;
+        room.ready[playerIdx] = true;
+
+        ws.send(JSON.stringify({
+          type: 'room_joined',
+          room: code,
+          player: playerIdx,
+          name: room.names[playerIdx],
+          opponent: room.names[otherPlayerIndex(playerIdx)]
+        }));
+
+        // Notifica ambos que a sala está pronta quando tiver 2 jogadores
+        if (room.players[0] && room.players[1]) {
+          room.ready = [true, true];
+          broadcastRoom(code, {
+            type: 'room_ready',
+            players: [
+              { id: 0, name: room.names[0] },
+              { id: 1, name: room.names[1] }
+            ]
+          });
+        }
+        return;
+      }
+
+      if (!roomCode || playerIdx === null) return;
+
+      // Relay de mensagens de jogo para o oponente
+      const room = rooms.get(roomCode);
+      if (!room) return;
+
+      const forward = {
+        type: data.type,
+        from: playerIdx,
+        to: otherPlayerIndex(playerIdx),
+        ...data
+      };
+
+      const target = room.players[otherPlayerIndex(playerIdx)];
+      if (target && target.readyState === 1) {
+        target.send(JSON.stringify(forward));
+      }
+
+      // Eco de confirmação para o remetente (opcional)
+      ws.send(JSON.stringify({ type: 'ack', original: data.type }));
+    });
+
+    ws.on('close', () => {
+      if (!roomCode) return;
+      const room = rooms.get(roomCode);
+      if (!room) return;
+
+      // Notifica o oponente da desconexão
+      const target = room.players[otherPlayerIndex(playerIdx)];
+      if (target && target.readyState === 1) {
+        target.send(JSON.stringify({ type: 'opponent_disconnected' }));
+      }
+
+      room.players[playerIdx] = null;
+      room.names[playerIdx] = null;
+      room.ready[playerIdx] = false;
+
+      // Remove a sala se ficou vazia
+      if (!room.players[0] && !room.players[1]) {
+        rooms.delete(roomCode);
+      }
+    });
+
+    ws.on('error', () => {});
+  });
+
+  server.listen(PORT, HOST, () => {
+    console.log(`LUUD Node.js rodando em http://${HOST}:${PORT}`);
     console.log(GOOGLE_CLIENT_ID ? 'Login Google configurado.' : 'Login Google aguardando GOOGLE_CLIENT_ID no arquivo .env.');
-});
+  });
 }
 
 main().catch(error => {
