@@ -6,8 +6,8 @@
   <title>Jogo de Ludo Clássico</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Google Fonts -->
-  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap" rel="stylesheet">
+  <!-- Google Fonts: Anton (display), Oswald (interface) e Fredoka (texto do jogo) -->
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Fredoka:wght@400;600;700&family=Oswald:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <style>
     :root {
@@ -35,6 +35,108 @@
       font-family: 'Fredoka', sans-serif;
       user-select: none;
       -webkit-user-select: none;
+    }
+
+    /* Identidade da marca: mesma linguagem do logo (letras angulares e condensadas) */
+    .font-display {
+      font-family: 'Anton', 'Arial Narrow', Impact, sans-serif !important;
+      letter-spacing: 0.04em;
+    }
+
+    .font-brand {
+      font-family: 'Oswald', 'Arial Narrow', sans-serif !important;
+      letter-spacing: 0.05em;
+    }
+
+    /* Interface (botões e etiquetas) na tipografia condensada da marca */
+    button,
+    label {
+      font-family: 'Oswald', 'Arial Narrow', sans-serif !important;
+      letter-spacing: 0.05em;
+    }
+
+    /* Relógio do turno (30 segundos) */
+    .turn-timer {
+      position: relative;
+      width: 62px;
+      height: 62px;
+      flex-shrink: 0;
+      --timer-color: #fbbf24;
+    }
+
+    .turn-timer svg {
+      width: 100%;
+      height: 100%;
+      transform: rotate(-90deg);
+      display: block;
+    }
+
+    .timer-track {
+      fill: none;
+      stroke: rgba(148, 163, 184, 0.22);
+      stroke-width: 9;
+    }
+
+    .timer-progress {
+      fill: none;
+      stroke: var(--timer-color);
+      stroke-width: 9;
+      stroke-linecap: round;
+      stroke-dasharray: 276.46;
+      stroke-dashoffset: 0;
+      transition: stroke-dashoffset 0.15s linear, stroke 0.3s ease;
+    }
+
+    .timer-face {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1px;
+      pointer-events: none;
+    }
+
+    .timer-value {
+      font-family: 'Anton', 'Arial Narrow', sans-serif;
+      font-size: 1.4rem;
+      line-height: 1;
+      color: #e2e8f0;
+    }
+
+    .timer-unit {
+      font-family: 'Oswald', sans-serif;
+      font-size: 0.6rem;
+      font-weight: 600;
+      color: #64748b;
+      text-transform: uppercase;
+      align-self: flex-end;
+      padding-bottom: 3px;
+    }
+
+    .turn-timer.is-idle {
+      opacity: 0.4;
+    }
+
+    .turn-timer.is-warning .timer-progress {
+      stroke: #f97316;
+    }
+
+    .turn-timer.is-danger .timer-progress {
+      stroke: #ef233c;
+    }
+
+    .turn-timer.is-danger .timer-value {
+      color: #fca5a5;
+    }
+
+    .turn-timer.is-expired {
+      animation: timer-pulse 0.7s ease-in-out infinite;
+    }
+
+    @keyframes timer-pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.1); }
     }
 
     input,
@@ -329,11 +431,9 @@
   <!-- TELA INICIAL DE CONFIGURAÇÃO -->
   <div id="setup-screen" class="fixed inset-0 bg-slate-950/95 z-50 flex items-center justify-center overflow-y-auto p-4">
     <div class="bg-slate-800 border border-slate-700 p-4 sm:p-6 max-w-md w-full shadow-2xl text-center space-y-5 sm:space-y-6 my-auto">
-      <div>
-        <h1 class="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-yellow-400 to-green-400">
-          LUUD
-        </h1>
-        <p id="setup-subtitle" class="text-slate-400 mt-2 text-sm">Escolha seu nome e sua cor e enfrente os bots!</p>
+      <div class="flex flex-col items-center gap-3">
+        <img src="/assets/luud-logo.png" alt="LUUD" class="w-48 sm:w-56 h-auto bg-white rounded-2xl px-4 py-3 shadow-lg shadow-black/30 select-none" draggable="false">
+        <p id="setup-subtitle" class="text-slate-400 text-sm">Escolha seu nome e sua cor e enfrente os bots!</p>
       </div>
 
       <!-- Nome do Jogador Humano -->
@@ -405,7 +505,7 @@
         </div>
       </div>
 
-      <button onclick="startGame()" class="w-full py-3.5 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold  shadow-lg transform hover:-translate-y-0.5 transition active:translate-y-0">
+      <button onclick="startGame()" class="font-display w-full py-3.5 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold  shadow-lg transform hover:-translate-y-0.5 transition active:translate-y-0">
         INICIAR PARTIDA 🚀
       </button>
     </div>
@@ -414,7 +514,7 @@
   <!-- MENU DE PAUSA -->
   <div id="pause-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
     <div class="bg-slate-800 border border-slate-700  p-6 max-w-xs w-full text-center space-y-4 shadow-2xl">
-      <h2 class="text-2xl font-black text-slate-100 flex items-center justify-center gap-2">
+      <h2 class="font-display text-2xl font-black text-slate-100 flex items-center justify-center gap-2">
         ⏸️ Jogo Pausado
       </h2>
       <p class="text-slate-400 text-xs">O que deseja fazer agora?</p>
@@ -437,7 +537,7 @@
   <div id="sound-modal" class="hidden fixed inset-0 z-[60] bg-slate-950/75 backdrop-blur-sm flex items-start sm:items-center justify-center p-4">
     <div class="bg-slate-800 border-2 border-slate-600 p-5 max-w-sm w-full shadow-2xl space-y-5">
       <div class="flex items-center justify-between gap-3">
-        <h2 class="text-xl font-black text-slate-100">🎵 Configurações de Som</h2>
+        <h2 class="font-display text-xl font-black text-slate-100">🎵 Configurações de Som</h2>
         <button type="button" onclick="closeSoundSettings()" class="w-9 h-9 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold border border-slate-500" aria-label="Fechar configurações de som">✕</button>
       </div>
 
@@ -468,8 +568,7 @@
   <!-- CABEÇALHO DO JOGO -->
   <header class="relative z-40 w-full max-w-4xl flex flex-wrap items-center justify-between gap-2 py-2.5 px-3 sm:px-4 bg-slate-800/90  backdrop-blur-md mb-2 border border-slate-700 shadow-md">
     <div class="flex items-center gap-2">
-      <span class="text-xl sm:text-2xl">🎲</span>
-      <h1 class="font-extrabold text-lg sm:text-xl tracking-wider text-slate-100">LUUD</h1>
+      <img src="/assets/luud-logo.png" alt="LUUD" class="h-9 sm:h-11 w-auto bg-white rounded-xl px-2 py-1 shadow shadow-black/25 select-none" draggable="false">
     </div>
 
     <div class="flex items-center gap-2">
@@ -507,8 +606,20 @@
       <!-- Células geradas via JS -->
     </div>
 
-    <!-- Coluna do Placar e dos Controles -->
+    <!-- Coluna do Relógio, Placar e Controles -->
     <div class="flex flex-col items-center gap-3 w-full max-w-md lg:w-56">
+
+      <!-- Relógio do turno (30 segundos) -->
+      <div id="turn-timer" class="turn-timer is-idle" role="timer" aria-label="Tempo restante para jogar">
+        <svg viewBox="0 0 100 100" aria-hidden="true" focusable="false">
+          <circle class="timer-track" cx="50" cy="50" r="44"></circle>
+          <circle id="timer-progress" class="timer-progress" cx="50" cy="50" r="44"></circle>
+        </svg>
+        <div class="timer-face">
+          <span id="timer-value" class="timer-value">30</span>
+          <span class="timer-unit">s</span>
+        </div>
+      </div>
 
       <!-- Placar da partida (fica acima e fora da caixa de turno e dado) -->
       <div id="scoreboard" class="w-full flex items-center justify-center gap-2 px-3 py-1.5 bg-slate-800 border border-slate-600 transition-all duration-300 text-slate-100 font-bold text-xs sm:text-sm whitespace-nowrap">
@@ -540,10 +651,11 @@
             </div>
           </div>
           <span id="dice-instruction" class="text-xs text-slate-400 font-medium text-center">Toque para rolar</span>
+          <p id="status-log" class="text-[11px] text-slate-500 font-medium text-center leading-tight min-h-[14px] max-w-[240px]"></p>
         </div>
 
         <!-- Botão Rolar Dado -->
-        <button id="roll-btn" onclick="handleDiceClick()" class="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm  shadow-lg transition active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
+        <button id="roll-btn" onclick="handleDiceClick()" class="font-brand px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm  shadow-lg transition active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
           Rolar Dado 🎲
         </button>
 
@@ -551,12 +663,17 @@
     </div>
   </main>
 
+  <!-- RODAPÉ -->
+  <footer class="w-full max-w-5xl mt-4 mb-1 flex items-center justify-center gap-2 text-center">
+    <p class="font-brand text-xs sm:text-sm text-slate-500 tracking-widest">© 2026 LUUD Studios™</p>
+  </footer>
+
   <!-- TELA FINAL -->
   <div id="win-modal" class="hidden fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
     <div class="win-card bg-slate-800 border-2 border-slate-600 p-6 text-center max-w-sm w-full space-y-6 shadow-2xl">
-      <h2 id="win-title" class="win-title font-black text-amber-400">V I T Ó R I A</h2>
-      <div id="win-score" class="text-5xl sm:text-7xl font-black text-slate-100 leading-none">0 - 0</div>
-      <button onclick="openSetupModal()" class="w-full py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold  shadow transition">
+      <h2 id="win-title" class="win-title font-display font-black text-amber-400">V I T Ó R I A</h2>
+      <div id="win-score" class="font-display text-5xl sm:text-7xl font-black text-slate-100 leading-none">0 - 0</div>
+      <button onclick="openSetupModal()" class="font-display w-full py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold  shadow transition">
         Jogar Novamente 🔄
       </button>
     </div>
@@ -566,7 +683,7 @@
   <div id="account-profile-modal" class="hidden fixed inset-0 z-[70] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="bg-slate-800 border border-slate-600 rounded-3xl shadow-2xl w-full max-w-lg p-6 space-y-5">
       <div class="flex items-center justify-between gap-3">
-        <h2 class="text-2xl font-black text-slate-100">Perfil</h2>
+        <h2 class="font-display text-2xl font-black text-slate-100">Perfil</h2>
         <button type="button" onclick="closeProfileModal()" class="w-9 h-9 rounded-full bg-slate-700 hover:bg-slate-600 text-slate-200 text-lg leading-none">✕</button>
       </div>
 
@@ -1346,6 +1463,7 @@
     function openPauseMenu() {
       gameAudio.playClick();
       isPaused = true;
+      pauseTurnTimer();
       if (activeDiceAnimation) activeDiceAnimation.pause();
       if (activeTokenAnimation) activeTokenAnimation.pause();
       document.getElementById('pause-modal').classList.remove('hidden');
@@ -1354,6 +1472,7 @@
     function closePauseMenu() {
       gameAudio.playClick();
       isPaused = false;
+      resumeTurnTimer();
       if (activeDiceAnimation) activeDiceAnimation.play();
       if (activeTokenAnimation) activeTokenAnimation.play();
       document.getElementById('pause-modal').classList.add('hidden');
@@ -1368,6 +1487,7 @@
     function openSetupModal() {
       gameAudio.stopMusic();
       gameAudio.playClick();
+      stopTurnTimer();
       document.getElementById('pause-modal').classList.add('hidden');
       document.getElementById('win-modal').classList.add('hidden');
       document.getElementById('setup-screen').classList.remove('hidden');
@@ -1380,6 +1500,147 @@
     function logStatus(msg) {
       const statusLog = document.getElementById('status-log');
       if (statusLog) statusLog.innerText = msg;
+    }
+
+    /* -------------------------------------------------------------
+       RELÓGIO DO TURNO (30 SEGUNDOS)
+       Quando o tempo do jogador humano acaba, ele perde a vez.
+    ------------------------------------------------------------- */
+    const TURN_TIMER_DURATION = 30;
+    const TURN_TIMER_CIRCUMFERENCE = 2 * Math.PI * 44;
+
+    const turnTimer = {
+      duration: TURN_TIMER_DURATION,
+      remaining: TURN_TIMER_DURATION,
+      endsAt: null,
+      interval: null,
+      expired: false
+    };
+
+    function isHumanTurn() {
+      return playerTypes[getCurrentPlayer()] === 'HUMAN';
+    }
+
+    function renderTurnTimer() {
+      const root = document.getElementById('turn-timer');
+      const value = document.getElementById('timer-value');
+      const progress = document.getElementById('timer-progress');
+      if (!root || !value || !progress) return;
+
+      const running = Boolean(turnTimer.endsAt);
+      const seconds = Math.max(0, Math.ceil(turnTimer.remaining));
+
+      value.textContent = String(seconds);
+      progress.style.strokeDashoffset = String(
+        TURN_TIMER_CIRCUMFERENCE * (1 - Math.max(0, Math.min(1, turnTimer.remaining / turnTimer.duration)))
+      );
+
+      root.classList.toggle('is-idle', !running);
+      root.classList.toggle('is-warning', running && seconds <= 10 && seconds > 5);
+      root.classList.toggle('is-danger', running && seconds <= 5);
+      root.classList.toggle('is-expired', turnTimer.expired);
+      root.setAttribute('aria-label', `Tempo restante para jogar: ${seconds} segundos`);
+    }
+
+    function clearTurnTimerInterval() {
+      if (turnTimer.interval) {
+        clearInterval(turnTimer.interval);
+        turnTimer.interval = null;
+      }
+    }
+
+    function startTurnTimer() {
+      clearTurnTimerInterval();
+      turnTimer.remaining = turnTimer.duration;
+      turnTimer.endsAt = Date.now() + turnTimer.duration * 1000;
+      turnTimer.expired = false;
+      renderTurnTimer();
+      turnTimer.interval = setInterval(tickTurnTimer, 100);
+    }
+
+    function stopTurnTimer() {
+      clearTurnTimerInterval();
+      turnTimer.endsAt = null;
+      turnTimer.remaining = turnTimer.duration;
+      turnTimer.expired = false;
+      renderTurnTimer();
+    }
+
+    function pauseTurnTimer() {
+      if (!turnTimer.endsAt) return;
+      turnTimer.remaining = Math.max(0, (turnTimer.endsAt - Date.now()) / 1000);
+      turnTimer.endsAt = null;
+      clearTurnTimerInterval();
+      renderTurnTimer();
+    }
+
+    function resumeTurnTimer() {
+      if (turnTimer.endsAt || turnTimer.remaining <= 0 || turnTimer.expired) return;
+      if (!isHumanTurn() || isPaused) return;
+      turnTimer.endsAt = Date.now() + turnTimer.remaining * 1000;
+      clearTurnTimerInterval();
+      turnTimer.interval = setInterval(tickTurnTimer, 100);
+      renderTurnTimer();
+    }
+
+    function tickTurnTimer() {
+      if (!turnTimer.endsAt) return;
+      turnTimer.remaining = Math.max(0, (turnTimer.endsAt - Date.now()) / 1000);
+
+      if (turnTimer.remaining <= 0) {
+        onTurnTimeout();
+        return;
+      }
+
+      renderTurnTimer();
+    }
+
+    function onTurnTimeout() {
+      if (turnTimer.expired || isPaused || !isHumanTurn()) return;
+
+      if (isAnimating) {
+        // Aguarda a animação em andamento para não quebrar o estado do tabuleiro.
+        turnTimer.endsAt = Date.now() + 1000;
+        renderTurnTimer();
+        return;
+      }
+
+      clearTurnTimerInterval();
+      turnTimer.endsAt = null;
+      turnTimer.remaining = 0;
+      turnTimer.expired = true;
+      renderTurnTimer();
+
+      gameAudio.playNoMove();
+      logStatus('⏱️ Tempo esgotado! Você perdeu a vez.');
+      const instruction = document.getElementById('dice-instruction');
+      if (instruction) instruction.textContent = 'Tempo esgotado!';
+
+      hasRolled = false;
+      isAnimating = false;
+      clearHighlights();
+
+      setTimeout(() => {
+        turnTimer.expired = false;
+        if (isPaused) {
+          renderTurnTimer();
+          return;
+        }
+        nextTurn();
+      }, 1200);
+    }
+
+    function syncTurnTimerWithTurn() {
+      const player = getCurrentPlayer();
+      const color = getPlayerColor(player);
+      const root = document.getElementById('turn-timer');
+      if (root) root.style.setProperty('--timer-color', color.hex);
+
+      if (playerTypes[player] === 'HUMAN' && !isPaused) {
+        startTurnTimer();
+      } else {
+        stopTurnTimer();
+      }
     }
 
     function getHumanTeamScore() {
@@ -1423,6 +1684,8 @@
 
       const rollBtn = document.getElementById('roll-btn');
       rollBtn.disabled = hasRolled || isAnimating || isAutomatedPlayer(player);
+
+      syncTurnTimerWithTurn();
     }
 
     function handleDiceClick() {
@@ -1819,8 +2082,9 @@
         const humanWon = winningTeam === 'HUMAN';
         const winTitle = document.getElementById('win-title');
 
+        stopTurnTimer();
         winTitle.innerText = humanWon ? 'V I T Ó R I A' : 'D E R R O T A';
-        winTitle.className = `win-title font-black ${humanWon ? 'text-amber-400' : 'text-red-500'}`;
+        winTitle.className = `win-title font-display font-black ${humanWon ? 'text-amber-400' : 'text-red-500'}`;
         document.getElementById('win-score').innerText = `${getHumanTeamScore()} - ${getCpuScore()}`;
         document.getElementById('win-modal').classList.remove('hidden');
 
