@@ -2519,19 +2519,11 @@
     }
 
     function createOnlineRoom() {
-      if (!onlineWs || onlineWs.readyState !== WebSocket.OPEN) {
-        document.getElementById('online-status').textContent = 'Conectando ao servidor...';
-        return;
-      }
       const name = document.getElementById('player-name-input').value || 'Jogador 1';
       sendOnline({ type: 'join_room', room: '', name });
     }
 
     function joinOnlineRoom() {
-      if (!onlineWs || onlineWs.readyState !== WebSocket.OPEN) {
-        document.getElementById('online-status').textContent = 'Conectando ao servidor...';
-        return;
-      }
       const code = document.getElementById('online-room-code').value.trim().toUpperCase();
       const name = document.getElementById('player-name-input').value || 'Jogador 2';
       if (!code) {
