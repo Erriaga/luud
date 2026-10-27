@@ -547,9 +547,9 @@
       <div class="space-y-2 text-center">
         <p class="text-xs font-bold uppercase tracking-wider text-slate-400">ONLINE</p>
         <div class="grid grid-cols-3 gap-1">
-          <button type="button" onclick="openOnlineModal()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
+          <button type="button" id="online-single-btn" onclick="createOnlineRoom()" class="p-3 border-2 border-transparent bg-slate-700 text-slate-500 transition flex flex-col items-center opacity-70 cursor-not-allowed disabled:opacity-70 disabled:cursor-not-allowed">
             <span class="font-bold text-sm text-slate-100">SINGLE PLAYER</span>
-            <span class="text-xs text-slate-400">1 vs 1</span>
+            <span class="text-xs text-slate-400">FAZER LOGIN</span>
           </button>
           <button type="button" disabled class="p-3 border-2 border-transparent bg-slate-700 text-slate-500 transition flex flex-col items-center opacity-70 cursor-not-allowed">
             <span class="font-bold text-sm text-slate-100">MULTIPLAYER</span>
@@ -774,7 +774,7 @@
       </div>
 
       <div class="flex items-center gap-4">
-        <img id="profile-avatar-preview" src="/assets/avatar.svg" alt="Foto do perfil" class="w-20 h-20  object-cover bg-slate-700 border-2 border-slate-500">
+        <img id="profile-avatar-preview" src="/assets/avatar.svg" alt="Foto do perfil" class="w-20 h-20 rounded-full object-cover bg-slate-700 border-2 border-slate-500">
         <div class="min-w-0">
           <p id="profile-account-email" class="text-sm text-slate-300 truncate">conta@example.com</p>
           <p class="text-xs text-slate-500">Conta Google conectada</p>
@@ -783,23 +783,8 @@
 
       <form id="profile-form" onsubmit="saveProfile(event)" class="space-y-4">
         <div>
-          <label for="profile-display-name" class="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">Nome de exibição</label>
-          <input id="profile-display-name" type="text" maxlength="60" class="w-full bg-slate-900 border border-slate-600  px-3 py-2.5 text-slate-100 outline-none focus:border-slate-300">
-        </div>
-
-        <div>
           <label for="profile-player-name" class="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">Nome no jogo</label>
           <input id="profile-player-name" type="text" maxlength="24" class="w-full bg-slate-900 border border-slate-600  px-3 py-2.5 text-slate-100 outline-none focus:border-slate-300">
-        </div>
-
-        <div>
-          <label for="profile-avatar-url" class="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">URL da foto</label>
-          <input id="profile-avatar-url" type="url" maxlength="500" placeholder="https://..." class="w-full bg-slate-900 border border-slate-600  px-3 py-2.5 text-slate-100 outline-none focus:border-slate-300">
-        </div>
-
-        <div>
-          <label for="profile-bio" class="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">Bio</label>
-          <textarea id="profile-bio" maxlength="280" rows="3" class="w-full bg-slate-900 border border-slate-600  px-3 py-2.5 text-slate-100 outline-none focus:border-slate-300 resize-none"></textarea>
         </div>
 
         <p id="profile-status" class="text-xs text-slate-400 min-h-[18px]"></p>
@@ -2401,14 +2386,21 @@
     let onlineOpponentName = null;
     let isOnlineGame = false;
     let onlineSendQueue = [];
+    let onlineConnecting = false;
 
     const WS_URL = (window.location.protocol === 'https:' ? 'wss:' : 'ws:') +
       '//' + window.location.host + '/ws';
 
     function initWebSocket() {
+      if (onlineConnecting) return;
+      onlineConnecting = true;
+
       try {
-        // Fecha conexão anterior se existir
         if (onlineWs) {
+          onlineWs.onopen = null;
+          onlineWs.onmessage = null;
+          onlineWs.onclose = null;
+          onlineWs.onerror = null;
           onlineWs.close();
           onlineWs = null;
         }
@@ -2417,22 +2409,24 @@
 
         let connectTimeout = setTimeout(() => {
           if (onlineWs && onlineWs.readyState === WebSocket.CONNECTING) {
+            onlineConnecting = false;
             onlineWs.close();
             document.getElementById('online-status').textContent = 'Falha ao conectar ao servidor. Tente novamente.';
           }
         }, 8000);
 
-        onlineWs.addEventListener('open', () => {
+        onlineWs.onopen = () => {
+          onlineConnecting = false;
           clearTimeout(connectTimeout);
           console.log('[WS] conectado');
-          // Processa mensagens que ficaram na fila enquanto conectava
+          document.getElementById('online-status').textContent = 'Conectado.';
           while (onlineSendQueue.length > 0) {
             const msg = onlineSendQueue.shift();
             sendOnlineRaw(msg);
           }
-        });
+        };
 
-        onlineWs.addEventListener('message', (event) => {
+        onlineWs.onmessage = (event) => {
           let data;
           try {
             data = JSON.parse(event.data);
@@ -2440,28 +2434,28 @@
             return;
           }
           handleOnlineMessage(data);
-        });
+        };
 
-        onlineWs.addEventListener('close', () => {
+        onlineWs.onclose = () => {
+          onlineConnecting = false;
           clearTimeout(connectTimeout);
           if (isOnlineGame) {
             logStatus('Conexão com o oponente perdida.');
             onlineWs = null;
           } else if (onlineSendQueue.length > 0) {
-            // Ainda há mensagens pendentes, tenta reconectar
             setTimeout(() => {
               if (onlineSendQueue.length > 0) initWebSocket();
             }, 1000);
           }
-        });
+        };
 
-        onlineWs.addEventListener('error', () => {
+        onlineWs.onerror = () => {
+          onlineConnecting = false;
           clearTimeout(connectTimeout);
-          console.error('[WS] erro de conexão');
           document.getElementById('online-status').textContent = 'Erro ao conectar ao servidor.';
-        });
+        };
       } catch (error) {
-        console.error('[WS] não foi possível conectar:', error);
+        onlineConnecting = false;
         document.getElementById('online-status').textContent = 'Erro ao conectar ao servidor.';
       }
     }
@@ -2473,17 +2467,15 @@
     }
 
     function sendOnline(payload) {
-      // Se o WebSocket não está aberto, enfileira e tenta (re)conectar
-      if (!onlineWs || onlineWs.readyState !== WebSocket.OPEN) {
+      if (onlineWs && onlineWs.readyState === WebSocket.OPEN) {
+        onlineWs.send(JSON.stringify(payload));
+      } else {
         onlineSendQueue.push(payload);
         document.getElementById('online-status').textContent = 'Conectando ao servidor...';
-        // Sempre tenta (re)iniciar o WebSocket quando não está aberto
-        if (!onlineWs || onlineWs.readyState === WebSocket.CLOSED || onlineWs.readyState === WebSocket.CLOSING) {
+        if (!onlineConnecting && (!onlineWs || onlineWs.readyState === WebSocket.CLOSED || onlineWs.readyState === WebSocket.CLOSING)) {
           initWebSocket();
         }
-        return;
       }
-      onlineWs.send(JSON.stringify(payload));
     }
 
     function handleOnlineMessage(data) {
@@ -2543,7 +2535,11 @@
     }
 
     function createOnlineRoom() {
-      const name = document.getElementById('player-name-input').value || 'Jogador 1';
+      if (!accountUser) {
+        document.getElementById('online-status').textContent = 'Você precisa fazer login com o Google para jogar online.';
+        return;
+      }
+      const name = accountUser.playerName || accountUser.displayName || 'Jogador 1';
       sendOnline({ type: 'join_room', room: '', name });
     }
 
@@ -2684,6 +2680,14 @@
           }
           statusEl.style.color = '#4ade80';
           statusEl.textContent = 'Conta Google conectada com sucesso!';
+          // Habilita o botão Single Player Online
+          const onlineSingleBtn = document.getElementById('online-single-btn');
+          if (onlineSingleBtn) {
+            onlineSingleBtn.disabled = false;
+            onlineSingleBtn.classList.remove('opacity-70', 'cursor-not-allowed', 'text-slate-500', 'bg-slate-700');
+            onlineSingleBtn.classList.add('border-white', 'bg-slate-700', 'hover:bg-slate-600');
+            onlineSingleBtn.querySelector('span:last-child').textContent = '1 vs 1';
+          }
         } catch (error) {
           statusEl.style.color = '#f87171';
           statusEl.textContent = error.message;
@@ -2703,6 +2707,17 @@
       initBoard();
       initWebSocket();
       initGoogleLoginSetup();
+
+      // Se já estiver logado, habilita o botão Single Player Online
+      if (typeof accountUser !== 'undefined' && accountUser) {
+        const onlineSingleBtn = document.getElementById('online-single-btn');
+        if (onlineSingleBtn) {
+          onlineSingleBtn.disabled = false;
+          onlineSingleBtn.classList.remove('opacity-70', 'cursor-not-allowed', 'text-slate-500', 'bg-slate-700');
+          onlineSingleBtn.classList.add('border-white', 'bg-slate-700', 'hover:bg-slate-600');
+          onlineSingleBtn.querySelector('span:last-child').textContent = '1 vs 1';
+        }
+      }
     };
   </script>
   <script src="/auth.js" defer></script>
