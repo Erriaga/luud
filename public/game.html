@@ -2675,7 +2675,6 @@
           if (googleButtonSetup) googleButtonSetup.style.display = 'none';
           // Usa o primeiro nome da conta Google
           const firstName = data.user.displayName ? data.user.displayName.split(' ')[0] : data.user.playerName || 'Jogador';
-          const nameInput = document.getElementById('player-name-input');
           if (nameInput) {
             nameInput.value = firstName;
             if (typeof updatePlayerName === 'function') updatePlayerName(firstName);
