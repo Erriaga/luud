@@ -432,19 +432,18 @@
   <div id="setup-screen" class="fixed inset-0 bg-slate-950/95 z-50 flex items-center justify-center overflow-y-auto p-4">
     <div class="bg-slate-800 border border-slate-700 p-4 sm:p-6 max-w-md w-full shadow-2xl text-center space-y-5 sm:space-y-6 my-auto">
       <div class="flex flex-col items-center gap-3">
-        <img src="https://raw.githubusercontent.com/Erriaga/luud/refs/heads/main/luud.png" alt="LUUD" class="w-48 sm:w-56 h-auto rounded-2xl px-4 py-3 shadow-lg shadow-black/30 select-none" draggable="false">
-        <p id="setup-subtitle" class="text-slate-400 text-sm">Escolha seu nome e sua cor e enfrente os bots!</p>
+        <img src="https://raw.githubusercontent.com/Erriaga/luud/refs/heads/main/luud.png" alt="LUUD" class="w-64 sm:w-80 h-auto select-none" draggable="false">
       </div>
 
       <!-- Nome do Jogador Humano -->
-      <div class="space-y-2 text-left">
-        <label for="player-name-input" id="player-name-label" class="text-xs font-bold uppercase tracking-wider text-slate-300">Nome do Jogador</label>
-        <input id="player-name-input" type="text" maxlength="24" placeholder="Digite seu nome (opcional)" oninput="updatePlayerName(this.value)" class="w-full border border-slate-600 bg-slate-900 px-3 py-2.5 text-slate-100 outline-none focus:border-slate-300 placeholder:text-slate-500" autocomplete="off">
+      <div class="space-y-2 text-center">
+        <label for="player-name-input" id="player-name-label" class="text-xs font-bold uppercase tracking-wider text-slate-300">NOME DO JOGADOR</label>
+        <input id="player-name-input" type="text" maxlength="24" oninput="updatePlayerName(this.value)" class="w-full border border-slate-600 bg-slate-900 px-3 py-2.5 text-slate-100 outline-none focus:border-slate-300" autocomplete="off">
       </div>
 
       <!-- Escolha da Cor do Jogador Humano -->
-      <div class="space-y-2 text-left">
-        <label class="text-xs font-bold uppercase tracking-wider text-slate-300">Sua Cor (Ficará no Canto Inferior Esquerdo)</label>
+      <div class="space-y-2 text-center">
+        <label class="text-xs font-bold uppercase tracking-wider text-slate-300">SUA COR</label>
         <div class="grid grid-cols-4 gap-2">
           <button type="button" onclick="selectHumanColor('RED')" id="color-btn-RED" class="color-select-btn p-3 border-2 border-transparent flex flex-col items-center justify-center bg-red-500/20 hover:bg-red-500/30 transition">
             <div class="w-6 h-6 bg-red-500 mb-1 border border-white"></div>
@@ -491,16 +490,16 @@
       </div>
 
       <!-- Escolha do Número de Oponentes (CPU) -->
-      <div class="space-y-2 text-left">
-        <label class="text-xs font-bold uppercase tracking-wider text-slate-300">Modo de Jogo (Oponentes CPU)</label>
+      <div class="space-y-2 text-center">
+        <label class="text-xs font-bold uppercase tracking-wider text-slate-300">MODO DE JOGO</label>
         <div class="grid grid-cols-2 gap-3">
           <button type="button" onclick="selectOpponentsMode(1)" id="mode-btn-1" class="p-3 border-2 border-white bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
-            <span class="font-bold text-sm text-slate-100">1 vs 1 (1 CPU)</span>
-            <span class="text-xs text-slate-400">Duelo rápido</span>
+            <span class="font-bold text-sm text-slate-100">SINGLE PLAYER</span>
+            <span class="text-xs text-slate-400">1 vs 1</span>
           </button>
           <button type="button" onclick="selectOpponentsMode(3)" id="mode-btn-3" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
-            <span class="font-bold text-sm text-slate-100">2 vs 2 (3 CPUs)</span>
-            <span class="text-xs text-slate-400">Duplas por cor</span>
+            <span class="font-bold text-sm text-slate-100">MULTIPLAYER</span>
+            <span class="text-xs text-slate-400">2 vs 2</span>
           </button>
         </div>
       </div>
@@ -517,10 +516,9 @@
       <h2 class="font-display text-2xl font-black text-slate-100 flex items-center justify-center gap-2">
         ⏸️ Jogo Pausado
       </h2>
-      <p class="text-slate-400 text-xs">O que deseja fazer agora?</p>
 
       <div class="space-y-2 pt-2">
-        <button onclick="closePauseMenu()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold  shadow transition text-sm">
+        <button onclick="closePauseMenu()" class="w-full py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-bold text-sm">
           ▶️ Voltar ao Jogo
         </button>
         <button onclick="restartCurrentGame()" class="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold  shadow transition text-sm">
@@ -561,14 +559,13 @@
         <button type="button" onclick="toggleSoundMute()" id="sound-mute-button" class="py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold text-sm border border-slate-500">Silenciar Som</button>
         <button type="button" onclick="playSoundTest()" class="py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-bold text-sm">Testar Efeito</button>
       </div>
-      <p class="text-xs text-slate-400 leading-relaxed">A música toca após o início da partida. Os controles de volume também podem ser ajustados durante o jogo.</p>
     </div>
   </div>
 
   <!-- CABEÇALHO DO JOGO -->
   <header class="relative z-40 w-full max-w-4xl flex flex-wrap items-center justify-between gap-2 py-2.5 px-3 sm:px-4 bg-slate-800/90  backdrop-blur-md mb-2 border border-slate-700 shadow-md">
     <div class="flex items-center gap-2">
-      <img src="https://raw.githubusercontent.com/Erriaga/luud/refs/heads/main/luud.png" alt="LUUD" class="h-9 sm:h-11 w-auto rounded-xl px-2 py-1 shadow shadow-black/25 select-none" draggable="false">
+      <img src="https://raw.githubusercontent.com/Erriaga/luud/refs/heads/main/luud.png" alt="LUUD" class="h-14 sm:h-20 w-auto select-none" draggable="false">
     </div>
 
     <div class="flex items-center gap-2">
@@ -582,11 +579,11 @@
         ☰ Menu
       </button>
       <div id="account-area" class="relative">
-        <button type="button" id="account-button" onclick="handleAccountButtonClick(event)" title="Conta" class="flex items-center gap-2 pl-1.5 pr-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-xs font-bold transition text-slate-100 border border-slate-600 rounded-full">
-          <img id="account-avatar" src="/assets/avatar.svg" alt="Foto do perfil" class="w-7 h-7 rounded-full object-cover bg-slate-800 border border-slate-500">
+        <button type="button" id="account-button" onclick="handleAccountButtonClick(event)" title="Conta" class="flex items-center gap-2 pl-1.5 pr-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-xs font-bold transition text-slate-100 border border-slate-600">
+          <img id="account-avatar" src="/assets/avatar.svg" alt="Foto do perfil" class="w-7 h-7  object-cover bg-slate-800 border border-slate-500">
           <span id="account-name" class="max-w-[90px] truncate">Entrar</span>
         </button>
-        <div id="account-dropdown" class="hidden absolute right-0 mt-2 w-60 bg-slate-800 border border-slate-600 shadow-2xl rounded-2xl overflow-hidden z-50">
+        <div id="account-dropdown" class="hidden absolute right-0 mt-2 w-60 bg-slate-800 border border-slate-600 shadow-2xl overflow-hidden z-50">
           <div class="px-4 py-3 border-b border-slate-700">
             <p id="dropdown-account-name" class="text-sm font-bold text-slate-100 truncate">Conta</p>
             <p id="dropdown-account-email" class="text-xs text-slate-400 truncate">Não conectado</p>
@@ -617,7 +614,6 @@
         </svg>
         <div class="timer-face">
           <span id="timer-value" class="timer-value">30</span>
-          <span class="timer-unit">s</span>
         </div>
       </div>
 
@@ -681,14 +677,14 @@
 
   <!-- MODAL DE PERFIL DA CONTA -->
   <div id="account-profile-modal" class="hidden fixed inset-0 z-[70] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="bg-slate-800 border border-slate-600 rounded-3xl shadow-2xl w-full max-w-lg p-6 space-y-5">
+    <div class="bg-slate-800 border border-slate-600 shadow-2xl w-full max-w-lg p-6 space-y-5">
       <div class="flex items-center justify-between gap-3">
         <h2 class="font-display text-2xl font-black text-slate-100">Perfil</h2>
-        <button type="button" onclick="closeProfileModal()" class="w-9 h-9 rounded-full bg-slate-700 hover:bg-slate-600 text-slate-200 text-lg leading-none">✕</button>
+        <button type="button" onclick="closeProfileModal()" class="w-9 h-9 bg-slate-700 hover:bg-slate-600 text-slate-200 text-lg leading-none">✕</button>
       </div>
 
       <div class="flex items-center gap-4">
-        <img id="profile-avatar-preview" src="/assets/avatar.svg" alt="Foto do perfil" class="w-20 h-20 rounded-full object-cover bg-slate-700 border-2 border-slate-500">
+        <img id="profile-avatar-preview" src="/assets/avatar.svg" alt="Foto do perfil" class="w-20 h-20  object-cover bg-slate-700 border-2 border-slate-500">
         <div class="min-w-0">
           <p id="profile-account-email" class="text-sm text-slate-300 truncate">conta@example.com</p>
           <p class="text-xs text-slate-500">Conta Google conectada</p>
@@ -698,28 +694,28 @@
       <form id="profile-form" onsubmit="saveProfile(event)" class="space-y-4">
         <div>
           <label for="profile-display-name" class="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">Nome de exibição</label>
-          <input id="profile-display-name" type="text" maxlength="60" class="w-full bg-slate-900 border border-slate-600 rounded-xl px-3 py-2.5 text-slate-100 outline-none focus:border-slate-300">
+          <input id="profile-display-name" type="text" maxlength="60" class="w-full bg-slate-900 border border-slate-600  px-3 py-2.5 text-slate-100 outline-none focus:border-slate-300">
         </div>
 
         <div>
           <label for="profile-player-name" class="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">Nome no jogo</label>
-          <input id="profile-player-name" type="text" maxlength="24" class="w-full bg-slate-900 border border-slate-600 rounded-xl px-3 py-2.5 text-slate-100 outline-none focus:border-slate-300">
+          <input id="profile-player-name" type="text" maxlength="24" class="w-full bg-slate-900 border border-slate-600  px-3 py-2.5 text-slate-100 outline-none focus:border-slate-300">
         </div>
 
         <div>
           <label for="profile-avatar-url" class="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">URL da foto</label>
-          <input id="profile-avatar-url" type="url" maxlength="500" placeholder="https://..." class="w-full bg-slate-900 border border-slate-600 rounded-xl px-3 py-2.5 text-slate-100 outline-none focus:border-slate-300">
+          <input id="profile-avatar-url" type="url" maxlength="500" placeholder="https://..." class="w-full bg-slate-900 border border-slate-600  px-3 py-2.5 text-slate-100 outline-none focus:border-slate-300">
         </div>
 
         <div>
           <label for="profile-bio" class="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">Bio</label>
-          <textarea id="profile-bio" maxlength="280" rows="3" class="w-full bg-slate-900 border border-slate-600 rounded-xl px-3 py-2.5 text-slate-100 outline-none focus:border-slate-300 resize-none"></textarea>
+          <textarea id="profile-bio" maxlength="280" rows="3" class="w-full bg-slate-900 border border-slate-600  px-3 py-2.5 text-slate-100 outline-none focus:border-slate-300 resize-none"></textarea>
         </div>
 
         <p id="profile-status" class="text-xs text-slate-400 min-h-[18px]"></p>
         <div class="flex flex-col sm:flex-row gap-3 pt-2">
-          <button type="submit" class="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold transition">Salvar</button>
-          <button type="button" onclick="closeProfileModal()" class="flex-1 py-3 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition">Cancelar</button>
+          <button type="submit" class="flex-1 py-3  bg-blue-600 hover:bg-blue-500 text-white font-bold transition">Salvar</button>
+          <button type="button" onclick="closeProfileModal()" class="flex-1 py-3  bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition">Cancelar</button>
         </div>
       </form>
     </div>
@@ -1444,12 +1440,6 @@
       });
 
       document.getElementById('player-name-label').innerText = teamMode ? 'Nome da Dupla' : 'Nome do Jogador';
-      document.getElementById('player-name-input').placeholder = teamMode
-        ? 'Digite o nome da dupla (opcional)'
-        : 'Digite seu nome (opcional)';
-      document.getElementById('setup-subtitle').innerText = teamMode
-        ? 'Escolha o nome da dupla, a cor e enfrente as CPUs!'
-        : 'Escolha seu nome e sua cor e enfrente os bots!';
     }
 
     function selectOpponentsMode(count) {
@@ -1721,10 +1711,10 @@
       if ((r >= 10 && r <= 13) && (c >= 10 && c <= 13)) cell.classList.add('!bg-white', 'border-yellow-ludo');
       if ((r >= 10 && r <= 13) && (c >= 1 && c <= 4)) cell.classList.add('!bg-white', 'border-blue-ludo');
 
-      if ((r===2||r===3) && (c===2||c===3)) cell.classList.add('!border-2', 'border-red-ludo', '!rounded-full');
-      if ((r===2||r===3) && (c===11||c===12)) cell.classList.add('!border-2', 'border-green-ludo', '!rounded-full');
-      if ((r===11||r===12) && (c===11||c===12)) cell.classList.add('!border-2', 'border-yellow-ludo', '!rounded-full');
-      if ((r===11||r===12) && (c===2||c===3)) cell.classList.add('!border-2', 'border-blue-ludo', '!rounded-full');
+      if ((r===2||r===3) && (c===2||c===3)) cell.classList.add('!border-2', 'border-red-ludo', '!');
+      if ((r===2||r===3) && (c===11||c===12)) cell.classList.add('!border-2', 'border-green-ludo', '!');
+      if ((r===11||r===12) && (c===11||c===12)) cell.classList.add('!border-2', 'border-yellow-ludo', '!');
+      if ((r===11||r===12) && (c===2||c===3)) cell.classList.add('!border-2', 'border-blue-ludo', '!');
 
       if (r === 7 && c >= 1 && c <= 5) cell.classList.add('bg-red-ludo');
       if (c === 7 && r >= 1 && r <= 5) cell.classList.add('bg-green-ludo');
