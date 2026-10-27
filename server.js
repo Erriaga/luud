@@ -474,19 +474,22 @@ async function main() {
 
       if (data.type === 'join_room') {
         const { room: code, name } = data || {};
-        if (!code) {
-          ws.send(JSON.stringify({ type: 'error', error: 'Código da sala obrigatório.' }));
-          return;
-        }
 
-        let room = rooms.get(code);
-        if (!room) {
-          roomCode = code;
-          rooms.set(code, {
+        // Se não houver código, gera um novo (criar sala)
+        if (!code || String(code).trim() === '') {
+          let newCode;
+          do {
+            newCode = generateRoomCode();
+          } while (rooms.has(newCode));
+          code = newCode;
+
+          const room = {
             players: [ws, null],
             names: [name || 'Jogador 1', null],
             ready: [false, false]
-          });
+          };
+          rooms.set(code, room);
+          roomCode = code;
           playerIdx = 0;
           ws.send(JSON.stringify({
             type: 'room_created',
@@ -494,6 +497,12 @@ async function main() {
             player: playerIdx,
             name: room.names[0]
           }));
+          return;
+        }
+
+        let room = rooms.get(code);
+        if (!room) {
+          ws.send(JSON.stringify({ type: 'error', error: 'Sala não encontrada.' }));
           return;
         }
 
