@@ -273,6 +273,21 @@
       z-index: 1;
       pointer-events: none;
     }
+
+    /* Cartão da tela de vitória: permite medir o título em cqw (largura do cartão) */
+    .win-card {
+      container-type: inline-size;
+    }
+
+    /* Título "VITÓRIA"/"DERROTA" sempre em uma única linha */
+    .win-title {
+      font-size: 1.5rem;
+      font-size: clamp(1rem, 11cqw, 2.5rem);
+      letter-spacing: 0.1em;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+
     .tokens-container .token {
       width: 54% !important;
       height: 54% !important;
@@ -451,19 +466,10 @@
   </div>
 
   <!-- CABEÇALHO DO JOGO -->
-  <header class="w-full max-w-4xl flex flex-wrap items-center justify-between gap-2 py-2.5 px-3 sm:px-4 bg-slate-800/90  backdrop-blur-md mb-2 border border-slate-700 shadow-md">
+  <header class="relative z-40 w-full max-w-4xl flex flex-wrap items-center justify-between gap-2 py-2.5 px-3 sm:px-4 bg-slate-800/90  backdrop-blur-md mb-2 border border-slate-700 shadow-md">
     <div class="flex items-center gap-2">
       <span class="text-xl sm:text-2xl">🎲</span>
       <h1 class="font-extrabold text-lg sm:text-xl tracking-wider text-slate-100">LUUD</h1>
-    </div>
-
-    <!-- Placar da partida -->
-    <div id="scoreboard" class="order-first w-full sm:order-none sm:w-auto flex items-center justify-center gap-2 px-3 py-1.5 bg-slate-800 border border-slate-600 transition-all duration-300 text-slate-100 font-bold text-xs sm:text-sm whitespace-nowrap">
-      <span id="score-player-name" class="max-w-[38vw] truncate">Jogador</span>
-      <span id="score-human">0</span>
-      <span class="text-slate-500">-</span>
-      <span id="score-cpu">0</span>
-      <span id="score-cpu-label">CPU</span>
     </div>
 
     <div class="flex items-center gap-2">
@@ -472,6 +478,9 @@
       </button>
       <button onclick="toggleFullscreen()" title="Alternar Tela Cheia" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-xs font-bold  transition text-slate-200 border border-slate-600 flex items-center gap-1">
         <span>⛶</span> <span class="hidden sm:inline">Tela Cheia</span>
+      </button>
+      <button onclick="openPauseMenu()" class="px-3.5 py-1.5 bg-slate-700 hover:bg-slate-600 text-xs font-bold  transition text-slate-200 border border-slate-600">
+        ☰ Menu
       </button>
       <div id="account-area" class="relative">
         <button type="button" id="account-button" onclick="handleAccountButtonClick(event)" title="Conta" class="flex items-center gap-2 pl-1.5 pr-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-xs font-bold transition text-slate-100 border border-slate-600 rounded-full">
@@ -487,9 +496,6 @@
           <button type="button" onclick="logoutAccount()" class="w-full px-4 py-3 text-left text-sm text-red-300 hover:bg-slate-700 transition">Sair</button>
         </div>
       </div>
-      <button onclick="openPauseMenu()" class="px-3.5 py-1.5 bg-slate-700 hover:bg-slate-600 text-xs font-bold  transition text-slate-200 border border-slate-600">
-        ☰ Menu
-      </button>
     </div>
   </header>
 
@@ -501,41 +507,54 @@
       <!-- Células geradas via JS -->
     </div>
 
-    <!-- Painel de Controles e Dado -->
-    <div class="flex flex-row lg:flex-col items-center justify-around lg:justify-center gap-4 bg-slate-800/90 p-4 sm:p-5  border border-slate-700 w-full max-w-md lg:w-56 shadow-lg">
-      
-      <!-- Dado 3D e indicador de turno -->
-      <div class="flex flex-col items-center gap-3 w-full">
-        <div id="turn-badge" class="flex items-center justify-center gap-2 px-4 py-1.5 bg-red-500/20 border border-red-500/50 transition-all duration-300 max-w-full">
-          <div id="turn-color-dot" class="w-3.5 h-3.5 bg-red-500 shrink-0"></div>
-          <span id="turn-text" class="font-bold text-sm text-red-400 truncate">Turno: Jogador</span>
-        </div>
+    <!-- Coluna do Placar e dos Controles -->
+    <div class="flex flex-col items-center gap-3 w-full max-w-md lg:w-56">
 
-        <div class="dice-container" onclick="handleDiceClick()">
-          <div id="dice" class="dice">
-            <div class="dice-face face-1"><div></div><div></div><div></div><div></div><div class="dot"></div><div></div><div></div><div></div><div></div></div>
-            <div class="dice-face face-2"><div class="dot"></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div class="dot"></div></div>
-            <div class="dice-face face-3"><div class="dot"></div><div></div><div></div><div></div><div class="dot"></div><div></div><div></div><div></div><div class="dot"></div></div>
-            <div class="dice-face face-4"><div class="dot"></div><div></div><div class="dot"></div><div></div><div></div><div></div><div class="dot"></div><div></div><div class="dot"></div></div>
-            <div class="dice-face face-5"><div class="dot"></div><div></div><div class="dot"></div><div></div><div class="dot"></div><div></div><div class="dot"></div><div></div><div class="dot"></div></div>
-            <div class="dice-face face-6"><div class="dot"></div><div class="dot"></div><div class="dot"></div><div></div><div></div><div></div><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
-          </div>
-        </div>
-        <span id="dice-instruction" class="text-xs text-slate-400 font-medium text-center">Toque para rolar</span>
+      <!-- Placar da partida (fica acima e fora da caixa de turno e dado) -->
+      <div id="scoreboard" class="w-full flex items-center justify-center gap-2 px-3 py-1.5 bg-slate-800 border border-slate-600 transition-all duration-300 text-slate-100 font-bold text-xs sm:text-sm whitespace-nowrap">
+        <span id="score-player-name" class="max-w-[38vw] lg:max-w-[140px] truncate">Jogador</span>
+        <span id="score-human">0</span>
+        <span class="text-slate-500">-</span>
+        <span id="score-cpu">0</span>
+        <span id="score-cpu-label">CPU</span>
       </div>
 
-      <!-- Botão Rolar Dado -->
-      <button id="roll-btn" onclick="handleDiceClick()" class="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm  shadow-lg transition active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
-        Rolar Dado 🎲
-      </button>
+      <!-- Painel de Controles e Dado -->
+      <div class="flex flex-row lg:flex-col items-center justify-around lg:justify-center gap-4 bg-slate-800/90 p-4 sm:p-5  border border-slate-700 w-full shadow-lg">
 
+        <!-- Dado 3D e indicador de turno -->
+        <div class="flex flex-col items-center gap-3 w-full">
+          <div id="turn-badge" class="flex items-center justify-center gap-2 px-4 py-1.5 bg-red-500/20 border border-red-500/50 transition-all duration-300 max-w-full">
+            <div id="turn-color-dot" class="w-3.5 h-3.5 bg-red-500 shrink-0"></div>
+            <span id="turn-text" class="font-bold text-sm text-red-400 truncate">Turno: Jogador</span>
+          </div>
+
+          <div class="dice-container" onclick="handleDiceClick()">
+            <div id="dice" class="dice">
+              <div class="dice-face face-1"><div></div><div></div><div></div><div></div><div class="dot"></div><div></div><div></div><div></div><div></div></div>
+              <div class="dice-face face-2"><div class="dot"></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div class="dot"></div></div>
+              <div class="dice-face face-3"><div class="dot"></div><div></div><div></div><div></div><div class="dot"></div><div></div><div></div><div></div><div class="dot"></div></div>
+              <div class="dice-face face-4"><div class="dot"></div><div></div><div class="dot"></div><div></div><div></div><div></div><div class="dot"></div><div></div><div class="dot"></div></div>
+              <div class="dice-face face-5"><div class="dot"></div><div></div><div class="dot"></div><div></div><div class="dot"></div><div></div><div class="dot"></div><div></div><div class="dot"></div></div>
+              <div class="dice-face face-6"><div class="dot"></div><div class="dot"></div><div class="dot"></div><div></div><div></div><div></div><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+            </div>
+          </div>
+          <span id="dice-instruction" class="text-xs text-slate-400 font-medium text-center">Toque para rolar</span>
+        </div>
+
+        <!-- Botão Rolar Dado -->
+        <button id="roll-btn" onclick="handleDiceClick()" class="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm  shadow-lg transition active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
+          Rolar Dado 🎲
+        </button>
+
+      </div>
     </div>
   </main>
 
   <!-- TELA FINAL -->
   <div id="win-modal" class="hidden fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
-    <div class="bg-slate-800 border-2 border-slate-600 p-6 text-center max-w-sm w-full space-y-6 shadow-2xl">
-      <h2 id="win-title" class="text-3xl sm:text-5xl font-black tracking-[0.22em] text-amber-400">V I T Ó R I A</h2>
+    <div class="win-card bg-slate-800 border-2 border-slate-600 p-6 text-center max-w-sm w-full space-y-6 shadow-2xl">
+      <h2 id="win-title" class="win-title font-black text-amber-400">V I T Ó R I A</h2>
       <div id="win-score" class="text-5xl sm:text-7xl font-black text-slate-100 leading-none">0 - 0</div>
       <button onclick="openSetupModal()" class="w-full py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold  shadow transition">
         Jogar Novamente 🔄
@@ -1801,7 +1820,7 @@
         const winTitle = document.getElementById('win-title');
 
         winTitle.innerText = humanWon ? 'V I T Ó R I A' : 'D E R R O T A';
-        winTitle.className = `text-3xl sm:text-5xl font-black tracking-[0.22em] ${humanWon ? 'text-amber-400' : 'text-red-500'}`;
+        winTitle.className = `win-title font-black ${humanWon ? 'text-amber-400' : 'text-red-500'}`;
         document.getElementById('win-score').innerText = `${getHumanTeamScore()} - ${getCpuScore()}`;
         document.getElementById('win-modal').classList.remove('hidden');
 
