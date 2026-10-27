@@ -1544,6 +1544,31 @@
       document.getElementById('pause-modal').classList.add('hidden');
       document.getElementById('win-modal').classList.add('hidden');
       document.getElementById('setup-screen').classList.remove('hidden');
+
+      // Reseta o estado do jogo online
+      isOnlineGame = false;
+
+      // Reseta o modo de jogo (nenhum pré-selecionado)
+      opponentsCount = null;
+      updateModeUI();
+
+      // Limpa a mensagem de status do login Google
+      const statusEl = document.getElementById('login-status-setup');
+      if (statusEl) statusEl.textContent = '';
+
+      // Atualiza o estado do botão Single Player Online baseado na sessão atual
+      const onlineSingleBtn = document.getElementById('online-single-btn');
+      if (typeof accountUser !== 'undefined' && accountUser && onlineSingleBtn) {
+        onlineSingleBtn.disabled = false;
+        onlineSingleBtn.classList.remove('opacity-70', 'cursor-not-allowed', 'text-slate-500', 'bg-slate-700');
+        onlineSingleBtn.classList.add('border-white', 'bg-slate-700', 'hover:bg-slate-600');
+        onlineSingleBtn.querySelector('span:last-child').textContent = '1 vs 1';
+      } else if (onlineSingleBtn) {
+        onlineSingleBtn.disabled = true;
+        onlineSingleBtn.classList.add('opacity-70', 'cursor-not-allowed', 'text-slate-500', 'bg-slate-700');
+        onlineSingleBtn.classList.remove('border-white', 'bg-slate-700', 'hover:bg-slate-600');
+        onlineSingleBtn.querySelector('span:last-child').textContent = 'FAZER LOGIN';
+      }
     }
 
     function getCurrentPlayer() {
@@ -2606,6 +2631,13 @@
       const buttonEl = document.getElementById('google-button-setup');
       const statusEl = document.getElementById('login-status-setup');
       if (!buttonEl || !statusEl) return;
+
+      // Se já estiver logado, esconde o botão de login e não faz nada mais
+      if (typeof accountUser !== 'undefined' && accountUser) {
+        buttonEl.style.display = 'none';
+        statusEl.textContent = '';
+        return;
+      }
 
       async function init() {
         let config = { configured: false, clientId: '' };
