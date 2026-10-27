@@ -1490,6 +1490,7 @@
     }
 
     function getPlayerDisplayName(player) {
+      if (isOnlineGame && player !== getHumanPlayerKey()) return onlineOpponentName || 'Oponente';
       if (playerTypes[player] === 'HUMAN') return playerName || 'Você';
       if (playerTypes[player] === 'ALLY') return playerName ? `Aliado de ${playerName}` : 'Aliado';
       return isTeamMode() ? 'CPU adversária' : 'CPU';
@@ -1545,8 +1546,11 @@
       document.getElementById('win-modal').classList.add('hidden');
       document.getElementById('setup-screen').classList.remove('hidden');
 
-      // Reseta o estado do jogo online
+      // Reseta o estado do jogo online (a sala anterior deixa de ser válida)
       isOnlineGame = false;
+      onlineRoomCode = null;
+      onlinePlayerIdx = null;
+      onlineOpponentName = null;
 
       // Reseta o modo de jogo (nenhum pré-selecionado)
       opponentsCount = null;
@@ -1557,20 +1561,7 @@
       if (statusEl) statusEl.textContent = '';
 
       // Atualiza o estado do botão Single Player Online baseado na sessão atual
-      const onlineSingleBtn = document.getElementById('online-single-btn');
-      const googleBtnSetup = document.getElementById('google-button-setup');
-      const isLoggedIn = googleBtnSetup && googleBtnSetup.style.display === 'none';
-      if (isLoggedIn && onlineSingleBtn) {
-        onlineSingleBtn.disabled = false;
-        onlineSingleBtn.classList.remove('opacity-70', 'cursor-not-allowed', 'text-slate-500', 'bg-slate-700');
-        onlineSingleBtn.classList.add('bg-slate-700', 'hover:bg-slate-600');
-        onlineSingleBtn.querySelector('span:last-child').textContent = '1 vs 1';
-      } else if (onlineSingleBtn) {
-        onlineSingleBtn.disabled = true;
-        onlineSingleBtn.classList.add('opacity-70', 'cursor-not-allowed', 'text-slate-500', 'bg-slate-700');
-        onlineSingleBtn.classList.remove('border-white', 'bg-slate-700', 'hover:bg-slate-600');
-        onlineSingleBtn.querySelector('span:last-child').textContent = 'FAZER LOGIN';
-      }
+      updateOnlineSingleButton();
     }
 
     function getCurrentPlayer() {
@@ -1706,6 +1697,8 @@
           renderTurnTimer();
           return;
         }
+        // No modo online, avisa o oponente de que o tempo esgotou e a vez passou
+        if (isOnlineGame) sendOnlinePassTurn();
         nextTurn();
       }, 1200);
     }
@@ -1724,12 +1717,19 @@
     }
 
     function getHumanTeamScore() {
+      // No modo online, apenas os pontos do jogador local contam para o placar
+      if (isOnlineGame) return playerScores[getHumanPlayerKey()] || 0;
       return activePlayers.reduce((total, player) => {
         return total + (isHumanTeamPlayer(player) ? (playerScores[player] || 0) : 0);
       }, 0);
     }
 
     function getCpuScore() {
+      // No modo online, o slot do oponente mostra os pontos do jogador remoto
+      if (isOnlineGame) {
+        const opponentKey = activePlayers.find(player => player !== getHumanPlayerKey());
+        return opponentKey ? (playerScores[opponentKey] || 0) : 0;
+      }
       return activePlayers.reduce((total, player) => {
         return total + (playerTypes[player] === 'CPU' ? (playerScores[player] || 0) : 0);
       }, 0);
@@ -1737,7 +1737,9 @@
 
     function updateScoreboardUI() {
       document.getElementById('score-player-name').innerText = playerName || (isTeamMode() ? 'Dupla' : 'Jogador');
-      document.getElementById('score-cpu-label').innerText = isTeamMode() ? 'CPUs' : 'CPU';
+      document.getElementById('score-cpu-label').innerText = isOnlineGame
+        ? (onlineOpponentName || 'Oponente')
+        : (isTeamMode() ? 'CPUs' : 'CPU');
       document.getElementById('score-human').innerText = getHumanTeamScore();
       document.getElementById('score-cpu').innerText = getCpuScore();
       document.getElementById('scoreboard').title = `Primeiro a marcar ${getWinningScore()} pontos vence`;
@@ -1770,6 +1772,8 @@
 
     function handleDiceClick() {
       if (playerTypes[getCurrentPlayer()] === 'HUMAN' && !hasRolled && !isAnimating && !isPaused) {
+        // No modo online, só é permitido rolar quando é o turno do jogador local
+        if (isOnlineGame && getCurrentPlayer() !== getHumanPlayerKey()) return;
         rollDice();
       }
     }
@@ -1876,6 +1880,8 @@
           gameAudio.playNoMove();
           logStatus(`3 Seis consecutivos! Perdeu a vez.`);
           consecutiveSixes = 0;
+          // No modo online, o turno também precisa avançar no oponente
+          if (isOnlineGame) sendOnlinePassTurn();
           setTimeout(nextTurn, 1200);
           return;
         }
@@ -1972,9 +1978,14 @@
       if (validTokens.length === 0) {
         gameAudio.playNoMove();
         logStatus(`Nenhum movimento possível para ${getPlayerColor(player).name}.`);
+        // No modo online, avisa o oponente para também avançar o turno
+        if (isOnlineGame && player === getHumanPlayerKey()) sendOnlinePassTurn();
         setTimeout(nextTurn, 1200);
       } else if (isAutomatedPlayer(player)) {
         setTimeout(() => makeCPUMove(validTokens), 800);
+      } else if (isOnlineGame && player !== getHumanPlayerKey()) {
+        // Turno do oponente remoto: aguardar o movimento chegar via WebSocket
+        return;
       } else {
         highlightSelectableTokens(validTokens);
       }
@@ -2269,7 +2280,12 @@
         BLUE: 0
       };
 
-      currentTurnIndex = activePlayers.indexOf(humanPlayerKey);
+      // No modo local, o jogador humano começa. No modo online, ambos os
+      // clientes precisam concordar com o turno inicial: o player 0
+      // (criador da sala, cor AZUL) começa, garantindo turno sincronizado.
+      currentTurnIndex = isOnlineGame
+        ? 0
+        : activePlayers.indexOf(humanPlayerKey);
       hasRolled = false;
       consecutiveSixes = 0;
       isAnimating = false;
@@ -2532,8 +2548,21 @@
           handleRemoteTokenMove(data.from, data.player, data.tokenIdx, data.steps);
           break;
 
+        case 'pass_turn':
+          if (!isOnlineGame) return;
+          // O oponente passou a vez (sem movimentos, 3 seis ou tempo esgotado):
+          // avança o turno aqui também para manter os dois clientes sincronizados
+          logStatus(`${onlineOpponentName || 'Oponente'} passou a vez.`);
+          document.getElementById('dice-instruction').textContent = 'Toque para rolar';
+          nextTurn();
+          break;
+
         case 'ack':
           // confirmação de entrega, não requer ação
+          break;
+
+        case 'error':
+          document.getElementById('online-status').textContent = data.error || 'Ocorreu um erro no modo online.';
           break;
       }
     }
@@ -2551,10 +2580,24 @@
     }
 
     function createOnlineRoom() {
-      if (!accountUser) {
+      // Abre o modal da sala para que o código e o status fiquem visíveis
+      openOnlineModal();
+
+      if (typeof accountUser === 'undefined' || !accountUser) {
         document.getElementById('online-status').textContent = 'Você precisa fazer login com o Google para jogar online.';
         return;
       }
+
+      // Se este jogador já criou uma sala, apenas exibe o código existente
+      // (evita criar salas duplicadas ao clicar várias vezes no botão)
+      if (onlineRoomCode && !isOnlineGame) {
+        document.getElementById('online-room-code-display').textContent = onlineRoomCode;
+        document.getElementById('online-room-created').classList.remove('hidden');
+        document.getElementById('online-waiting').textContent = 'Aguardando oponente...';
+        document.getElementById('online-status').textContent = 'Sala criada. Aguardando oponente...';
+        return;
+      }
+
       const name = accountUser.playerName || accountUser.displayName || 'Jogador 1';
       sendOnline({ type: 'join_room', room: '', name });
     }
@@ -2574,9 +2617,17 @@
       isOnlineGame = true;
       opponentsCount = 1; // 1 vs 1 online
 
-      // Define a cor do jogador local com base no índice do player
-      const localColorKey = CLOCKWISE_COLORS[onlinePlayerIdx] || 'BLUE';
+      // Define a cor do jogador local com base no índice do player.
+      // Os índices 0 e 1 recebem cores DIAGONAIS (AZUL e VERDE) para que
+      // ambos os clientes usem as mesmas chaves de cor nas mensagens WS.
+      const localColorKey = CLOCKWISE_COLORS[(onlinePlayerIdx * 2) % 4] || 'BLUE';
       selectHumanColor(localColorKey);
+
+      // Guarda o nome do oponente (vindo do room_ready) para exibir no jogo
+      const opponentEntry = Array.isArray(players) ? players.find(p => p.id !== onlinePlayerIdx) : null;
+      if (opponentEntry && opponentEntry.name) {
+        onlineOpponentName = opponentEntry.name;
+      }
 
       // Inicia o jogo normalmente (o oponente é o outro humano, controlado via WS)
       startGame();
@@ -2598,6 +2649,13 @@
         tokenIdx,
         steps
       });
+    }
+
+    function sendOnlinePassTurn() {
+      // Avisa o oponente de que o turno passou sem movimento de peça
+      // (sem movimentos possíveis, 3 seis seguidos ou tempo esgotado),
+      // para que o turno avance nos dois clientes.
+      sendOnline({ type: 'pass_turn', from: onlinePlayerIdx });
     }
 
     function handleRemoteDiceRoll(from, value) {
@@ -2629,6 +2687,43 @@
     /* -------------------------------------------------------------
        LOGIN GOOGLE NA TELA INICIAL (setup-screen)
     ------------------------------------------------------------- */
+
+    // Habilita/desabilita o botão Single Player Online conforme o login
+    function updateOnlineSingleButton() {
+      const onlineSingleBtn = document.getElementById('online-single-btn');
+      if (!onlineSingleBtn) return;
+
+      const loggedIn = typeof accountUser !== 'undefined' && Boolean(accountUser);
+      const label = onlineSingleBtn.querySelector('span:last-child');
+
+      if (loggedIn) {
+        onlineSingleBtn.disabled = false;
+        onlineSingleBtn.classList.remove('opacity-70', 'cursor-not-allowed', 'text-slate-500', 'border-white');
+        onlineSingleBtn.classList.add('hover:bg-slate-600');
+        if (label) label.textContent = '1 vs 1';
+      } else {
+        onlineSingleBtn.disabled = true;
+        onlineSingleBtn.classList.add('opacity-70', 'cursor-not-allowed', 'text-slate-500');
+        onlineSingleBtn.classList.remove('hover:bg-slate-600', 'border-white');
+        if (label) label.textContent = 'FAZER LOGIN';
+      }
+    }
+
+    // Sincroniza a tela inicial com o estado de login atual
+    // (também chamado pelo auth.js depois que a sessão da conta é carregada)
+    function syncSetupLoginUI() {
+      const loggedIn = typeof accountUser !== 'undefined' && Boolean(accountUser);
+
+      if (loggedIn) {
+        const googleBtnSetup = document.getElementById('google-button-setup');
+        if (googleBtnSetup) googleBtnSetup.style.display = 'none';
+        const statusEl = document.getElementById('login-status-setup');
+        if (statusEl) statusEl.textContent = '';
+      }
+
+      updateOnlineSingleButton();
+    }
+
     function initGoogleLoginSetup() {
       const buttonEl = document.getElementById('google-button-setup');
       const statusEl = document.getElementById('login-status-setup');
@@ -2704,23 +2799,14 @@
           }
           statusEl.style.color = '#4ade80';
           statusEl.textContent = 'Conta Google conectada com sucesso!';
-          // Remove o botão de login
-          const googleButtonSetup = document.getElementById('google-button-setup');
-          if (googleButtonSetup) googleButtonSetup.style.display = 'none';
           // Usa o primeiro nome da conta Google
           const firstName = data.user.displayName ? data.user.displayName.split(' ')[0] : data.user.playerName || 'Jogador';
           if (nameInput) {
             nameInput.value = firstName;
             if (typeof updatePlayerName === 'function') updatePlayerName(firstName);
           }
-          // Habilita o botão Single Player Online
-          const onlineSingleBtn = document.getElementById('online-single-btn');
-          if (onlineSingleBtn) {
-            onlineSingleBtn.disabled = false;
-            onlineSingleBtn.classList.remove('opacity-70', 'cursor-not-allowed', 'text-slate-500', 'bg-slate-700');
-            onlineSingleBtn.classList.add('bg-slate-700', 'hover:bg-slate-600');
-            onlineSingleBtn.querySelector('span:last-child').textContent = '1 vs 1';
-          }
+          // Esconde o botão de login e habilita o botão Single Player Online
+          syncSetupLoginUI();
         } catch (error) {
           statusEl.style.color = '#f87171';
           statusEl.textContent = error.message;
@@ -2742,16 +2828,9 @@
       initWebSocket();
       initGoogleLoginSetup();
 
-      // Se já estiver logado, habilita o botão Single Player Online
-      const googleBtnSetup = document.getElementById('google-button-setup');
-      const isLoggedIn = googleBtnSetup && googleBtnSetup.style.display === 'none';
-      const onlineSingleBtn = document.getElementById('online-single-btn');
-      if (isLoggedIn && onlineSingleBtn) {
-        onlineSingleBtn.disabled = false;
-        onlineSingleBtn.classList.remove('opacity-70', 'cursor-not-allowed', 'text-slate-500', 'bg-slate-700');
-        onlineSingleBtn.classList.add('bg-slate-700', 'hover:bg-slate-600');
-        onlineSingleBtn.querySelector('span:last-child').textContent = '1 vs 1';
-      }
+      // Se já estiver logado, habilita o botão Single Player Online.
+      // (a sessão também é reavaliada pelo auth.js após carregar /api/session)
+      syncSetupLoginUI();
     };
   </script>
   <script src="/auth.js" defer></script>
