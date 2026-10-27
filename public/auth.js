@@ -31,6 +31,8 @@ function updateAccountUI(user) {
     setAvatarImage(accountAvatar, DEFAULT_AVATAR);
     dropdownAccountName.textContent = 'Conta';
     dropdownAccountEmail.textContent = 'Não conectado';
+    // Sincroniza a tela inicial do jogo com o estado "desconectado".
+    if (typeof syncSetupLoginUI === 'function') syncSetupLoginUI();
     return;
   }
 
@@ -39,6 +41,9 @@ function updateAccountUI(user) {
   setAvatarImage(accountAvatar, user.avatarUrl || user.picture || DEFAULT_AVATAR);
   dropdownAccountName.textContent = user.displayName || user.playerName || 'Conta';
   dropdownAccountEmail.textContent = user.email || '';
+  // Sincroniza a tela inicial do jogo (esconde o login Google e habilita
+  // o botão Single Player Online) assim que a sessão é carregada.
+  if (typeof syncSetupLoginUI === 'function') syncSetupLoginUI();
 }
 
 function hideAccountDropdown() {
