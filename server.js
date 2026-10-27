@@ -475,6 +475,28 @@ async function main() {
       if (data.type === 'join_room') {
         let { room: code, name } = data || {};
 
+        // Sai de qualquer sala anterior antes de entrar/criar outra,
+        // avisando quem ficou nela e removendo salas vazias.
+        if (roomCode && playerIdx !== null && rooms.has(roomCode)) {
+          const previousRoom = rooms.get(roomCode);
+          if (previousRoom.players[playerIdx] === ws) {
+            previousRoom.players[playerIdx] = null;
+            previousRoom.names[playerIdx] = null;
+            previousRoom.ready[playerIdx] = false;
+
+            const remaining = previousRoom.players[otherPlayerIndex(playerIdx)];
+            if (remaining && remaining.readyState === 1) {
+              remaining.send(JSON.stringify({ type: 'opponent_disconnected' }));
+            }
+
+            if (!previousRoom.players[0] && !previousRoom.players[1]) {
+              rooms.delete(roomCode);
+            }
+          }
+        }
+        roomCode = null;
+        playerIdx = null;
+
         // Se não houver código, gera um novo (criar sala)
         if (!code || String(code).trim() === '') {
           let newCode;
