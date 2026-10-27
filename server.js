@@ -473,7 +473,7 @@ async function main() {
       }
 
       if (data.type === 'join_room') {
-        const { room: code, name } = data || {};
+        let { room: code, name } = data || {};
 
         // Se não houver código, gera um novo (criar sala)
         if (!code || String(code).trim() === '') {
