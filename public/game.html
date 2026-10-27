@@ -8,6 +8,8 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Google Fonts: Anton (display), Oswald (interface) e Fredoka (texto do jogo) -->
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=Fredoka:wght@400;600;700&family=Oswald:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Google Identity Services (login Conta Google) -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 
   <style>
     :root {
@@ -137,6 +139,37 @@
     @keyframes timer-pulse {
       0%, 100% { transform: scale(1); }
       50% { transform: scale(1.1); }
+    }
+
+    /* Botão Google na tela inicial */
+    .google-button {
+      min-height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 0;
+    }
+
+    .google-button iframe,
+    .google-button [role="button"],
+    .google-button [role="button"] div,
+    .google-button > div,
+    .google-button > div > div {
+      border: 0 !important;
+      outline: none !important;
+      box-shadow: none !important;
+    }
+
+    .google-button > div,
+    .google-button > div > div {
+      background: transparent !important;
+    }
+
+    .status {
+      margin-top: 18px;
+      min-height: 24px;
+      color: #f87171;
+      font-size: 14px;
     }
 
     input,
@@ -431,12 +464,18 @@
   <!-- TELA INICIAL DE CONFIGURAÇÃO -->
   <div id="setup-screen" class="fixed inset-0 bg-slate-950/95 z-50 flex items-center justify-center overflow-y-auto p-4">
     <div class="bg-slate-800 border border-slate-700 p-4 sm:p-6 max-w-md w-full shadow-2xl text-center space-y-5 sm:space-y-6 my-auto">
-      <div class="flex flex-col items-center gap-3">
+      <div class="flex flex-col items-center gap-1">
         <img src="https://raw.githubusercontent.com/Erriaga/luud/refs/heads/main/luud.png" alt="LUUD" class="w-64 sm:w-80 h-auto select-none" draggable="false">
       </div>
 
+      <!-- Login Google na tela inicial -->
+      <div class="space-y-1 w-full mb-0">
+        <div id="google-button-setup" class="google-button"></div>
+        <div id="login-status-setup" class="status" role="status"></div>
+      </div>
+
       <!-- Nome do Jogador Humano -->
-      <div class="space-y-2 text-center">
+      <div class="space-y-2 text-center mt-0">
         <label for="player-name-input" id="player-name-label" class="text-xs font-bold uppercase tracking-wider text-slate-300">NOME DO JOGADOR</label>
         <input id="player-name-input" type="text" maxlength="24" oninput="updatePlayerName(this.value)" class="w-full border border-slate-600 bg-slate-900 px-3 py-2.5 text-slate-100 outline-none focus:border-slate-300" autocomplete="off">
       </div>
@@ -492,6 +531,7 @@
       <!-- Escolha do Número de Oponentes (CPU) -->
       <div class="space-y-2 text-center">
         <label class="text-xs font-bold uppercase tracking-wider text-slate-300">MODO DE JOGO</label>
+        <p class="text-xs font-bold uppercase tracking-wider text-slate-400">vs CPU</p>
         <div class="grid grid-cols-2 gap-3">
           <button type="button" onclick="selectOpponentsMode(1)" id="mode-btn-1" class="p-3 border-2 border-white bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
             <span class="font-bold text-sm text-slate-100">SINGLE PLAYER</span>
@@ -504,9 +544,23 @@
         </div>
       </div>
 
-      <button onclick="openOnlineModal()" class="w-full py-3 bg-purple-600 hover:bg-purple-500 text-white font-bold shadow transition text-sm">
-        🌐 JOGAR ONLINE (outro computador)
-      </button>
+      <div class="space-y-2 text-center">
+        <p class="text-xs font-bold uppercase tracking-wider text-slate-400">ONLINE</p>
+        <div class="grid grid-cols-3 gap-1">
+          <button type="button" onclick="openOnlineModal()" class="p-3 border-2 border-white bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
+            <span class="font-bold text-sm text-slate-100">SINGLE PLAYER</span>
+            <span class="text-xs text-slate-400">1 vs 1</span>
+          </button>
+          <button type="button" disabled class="p-3 border-2 border-transparent bg-slate-700 text-slate-500 transition flex flex-col items-center opacity-70 cursor-not-allowed">
+            <span class="font-bold text-sm text-slate-100">MULTIPLAYER</span>
+            <span class="text-xs text-slate-400">EM BREVE</span>
+          </button>
+          <button type="button" disabled class="p-3 border-2 border-transparent bg-yellow-500 text-slate-900 transition flex flex-col items-center opacity-90 cursor-not-allowed">
+            <span class="font-bold text-sm text-slate-900">CLASSIFICATÓRIA</span>
+            <span class="text-xs text-slate-400">EM BREVE</span>
+          </button>
+        </div>
+      </div>
 
       <button onclick="startGame()" class="font-display w-full py-3.5 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold  shadow-lg transform hover:-translate-y-0.5 transition active:translate-y-0">
         INICIAR PARTIDA 🚀
@@ -2346,6 +2400,7 @@
     let onlinePlayerIdx = null;
     let onlineOpponentName = null;
     let isOnlineGame = false;
+    let onlineSendQueue = [];
 
     const WS_URL = (window.location.protocol === 'https:' ? 'wss:' : 'ws:') +
       '//' + window.location.host + '/ws';
@@ -2356,6 +2411,11 @@
 
         onlineWs.addEventListener('open', () => {
           console.log('[WS] conectado');
+          // Processa mensagens que ficaram na fila enquanto conectava
+          while (onlineSendQueue.length > 0) {
+            const msg = onlineSendQueue.shift();
+            sendOnlineRaw(msg);
+          }
         });
 
         onlineWs.addEventListener('message', (event) => {
@@ -2383,9 +2443,22 @@
       }
     }
 
+    function sendOnlineRaw(payload) {
+      if (onlineWs && onlineWs.readyState === WebSocket.OPEN) {
+        onlineWs.send(JSON.stringify(payload));
+      }
+    }
+
     function sendOnline(payload) {
       if (onlineWs && onlineWs.readyState === WebSocket.OPEN) {
         onlineWs.send(JSON.stringify(payload));
+      } else {
+        onlineSendQueue.push(payload);
+        // Tenta conectar se ainda não houver WebSocket
+        if (!onlineWs || onlineWs.readyState === WebSocket.CLOSED) {
+          initWebSocket();
+        }
+        document.getElementById('online-status').textContent = 'Conectando ao servidor...';
       }
     }
 
@@ -2524,6 +2597,86 @@
       finishMove();
     }
 
+    /* -------------------------------------------------------------
+       LOGIN GOOGLE NA TELA INICIAL (setup-screen)
+    ------------------------------------------------------------- */
+    function initGoogleLoginSetup() {
+      const buttonEl = document.getElementById('google-button-setup');
+      const statusEl = document.getElementById('login-status-setup');
+      if (!buttonEl || !statusEl) return;
+
+      async function init() {
+        let config = { configured: false, clientId: '' };
+        try {
+          const response = await fetch('/api/auth/config');
+          config = await response.json();
+        } catch (error) {
+          statusEl.textContent = 'Não foi possível carregar as configurações de login.';
+          return;
+        }
+
+        if (!config.configured || !config.clientId) {
+          statusEl.textContent = 'Login Google ainda não configurado.';
+          return;
+        }
+
+        const waitForGoogle = setInterval(() => {
+          if (!window.google?.accounts?.id) return;
+          clearInterval(waitForGoogle);
+
+          window.google.accounts.id.initialize({
+            client_id: config.clientId,
+            callback: handleGoogleCredentialSetup,
+            auto_select: false,
+            cancel_on_tap_outside: true
+          });
+
+          window.google.accounts.id.renderButton(buttonEl, {
+            theme: 'filled_blue',
+            size: 'large',
+            shape: 'rect',
+            text: 'signin_with',
+            logo_alignment: 'center',
+            width: 280
+          });
+        }, 100);
+      }
+
+      async function handleGoogleCredentialSetup(response) {
+        statusEl.style.color = '#94a3b8';
+        statusEl.textContent = 'Verificando sua conta...';
+
+        try {
+          const serverResponse = await fetch('/api/auth/google', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ credential: response.credential })
+          });
+
+          if (!serverResponse.ok) {
+            const error = await serverResponse.json();
+            throw new Error(error.error || 'Não foi possível entrar.');
+          }
+
+          const data = await serverResponse.json();
+          // Atualiza a UI da conta no header (se existir) e o nome do jogador
+          if (typeof updateAccountUI === 'function') updateAccountUI(data.user);
+          const nameInput = document.getElementById('player-name-input');
+          if (nameInput && !nameInput.value) {
+            nameInput.value = data.user.playerName || data.user.displayName || '';
+            if (typeof updatePlayerName === 'function') updatePlayerName(nameInput.value);
+          }
+          statusEl.style.color = '#4ade80';
+          statusEl.textContent = 'Conta Google conectada com sucesso!';
+        } catch (error) {
+          statusEl.style.color = '#f87171';
+          statusEl.textContent = error.message;
+        }
+      }
+
+      init();
+    }
+
     window.onload = function() {
       updatePlayerName(document.getElementById('player-name-input').value);
       updateModeUI();
@@ -2533,6 +2686,7 @@
       updateSoundSettingsUI();
       initBoard();
       initWebSocket();
+      initGoogleLoginSetup();
     };
   </script>
   <script src="/auth.js" defer></script>
