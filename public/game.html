@@ -504,8 +504,44 @@
         </div>
       </div>
 
+      <button onclick="openOnlineModal()" class="w-full py-3 bg-purple-600 hover:bg-purple-500 text-white font-bold shadow transition text-sm">
+        🌐 JOGAR ONLINE (outro computador)
+      </button>
+
       <button onclick="startGame()" class="font-display w-full py-3.5 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold  shadow-lg transform hover:-translate-y-0.5 transition active:translate-y-0">
         INICIAR PARTIDA 🚀
+      </button>
+    </div>
+  </div>
+
+  <!-- MODAL DE SALA ONLINE -->
+  <div id="online-modal" class="hidden fixed inset-0 bg-slate-950/90 z-50 flex items-center justify-center p-4">
+    <div class="bg-slate-800 border border-slate-700 p-6 sm:p-8 max-w-md w-full text-center space-y-5 shadow-2xl">
+      <h2 class="font-display text-2xl font-black text-slate-100">🌐 Sala Online</h2>
+
+      <div class="space-y-3">
+        <button onclick="createOnlineRoom()" class="w-full py-3 bg-purple-600 hover:bg-purple-500 text-white font-bold shadow transition text-sm">
+          Criar Sala
+        </button>
+        <div class="flex gap-2">
+          <input id="online-room-code" type="text" maxlength="6" placeholder="Código da sala" class="flex-1 border border-slate-600 bg-slate-900 px-3 py-2.5 text-slate-100 outline-none focus:border-slate-300 text-center uppercase tracking-widest" autocomplete="off">
+          <button onclick="joinOnlineRoom()" class="py-2.5 bg-slate-700 hover:bg-slate-600 text-white font-bold shadow transition text-sm px-4">
+            Entrar
+          </button>
+        </div>
+      </div>
+
+      <div id="online-room-created" class="hidden space-y-2">
+        <p class="text-xs text-slate-400 uppercase tracking-wider">Seu código da sala:</p>
+        <div id="online-room-code-display" class="font-mono text-xl text-amber-400"></div>
+        <p class="text-xs text-slate-500">Envie este código para o seu amigo.</p>
+        <p id="online-waiting" class="text-sm text-slate-300">Aguardando oponente...</p>
+      </div>
+
+      <p id="online-status" class="text-xs text-slate-400 min-h-[16px]"></p>
+
+      <button onclick="closeOnlineModal()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
+        Voltar
       </button>
     </div>
   </div>
@@ -1626,7 +1662,7 @@
       const root = document.getElementById('turn-timer');
       if (root) root.style.setProperty('--timer-color', color.hex);
 
-      if (playerTypes[player] === 'HUMAN' && !isPaused) {
+      if (playerTypes[player] === 'HUMAN' && !isPaused && (!isOnlineGame || player === getHumanPlayerKey())) {
         startTurnTimer();
       } else {
         stopTurnTimer();
@@ -1673,7 +1709,7 @@
       badge.className = `flex items-center justify-center gap-2 px-4 py-1.5 bg-slate-800 border max-w-full ${color.border}`;
 
       const rollBtn = document.getElementById('roll-btn');
-      rollBtn.disabled = hasRolled || isAnimating || isAutomatedPlayer(player);
+      rollBtn.disabled = hasRolled || isAnimating || isAutomatedPlayer(player) || (isOnlineGame && player !== getHumanPlayerKey());
 
       syncTurnTimerWithTurn();
     }
@@ -1793,6 +1829,9 @@
         consecutiveSixes = 0;
       }
 
+      if (isOnlineGame) {
+        sendOnlineDiceRoll(diceValue);
+      }
       evaluateMoves();
     }
 
@@ -1999,6 +2038,10 @@
       const session = movementSession;
       const startingPosition = tokensState[player][tokenIdx];
 
+      if (isOnlineGame) {
+        sendOnlineTokenMove(player, tokenIdx, steps);
+      }
+
       try {
         if (startingPosition === -1 && steps === 6) {
           gameAudio.playMove();
@@ -2145,6 +2188,10 @@
             playerTypes[color] = 'CPU';
           }
         });
+      } else if (isOnlineGame) {
+        // No modo online o oponente é outro humano, controlado via WebSocket
+        const opponentColor = CLOCKWISE_COLORS[(humanColorIdx + 2) % 4];
+        playerTypes[opponentColor] = 'HUMAN';
       } else {
         const opponentColor = CLOCKWISE_COLORS[(humanColorIdx + 2) % 4];
         playerTypes[opponentColor] = 'CPU';
@@ -2291,6 +2338,192 @@
       });
     }
 
+    /* -------------------------------------------------------------
+       MULTIPLAYER ONLINE - WebSocket (jogar com outra pessoa em outro computador)
+    ------------------------------------------------------------- */
+    let onlineWs = null;
+    let onlineRoomCode = null;
+    let onlinePlayerIdx = null;
+    let onlineOpponentName = null;
+    let isOnlineGame = false;
+
+    const WS_URL = (window.location.protocol === 'https:' ? 'wss:' : 'ws:') +
+      '//' + window.location.host + '/ws';
+
+    function initWebSocket() {
+      try {
+        onlineWs = new WebSocket(WS_URL);
+
+        onlineWs.addEventListener('open', () => {
+          console.log('[WS] conectado');
+        });
+
+        onlineWs.addEventListener('message', (event) => {
+          let data;
+          try {
+            data = JSON.parse(event.data);
+          } catch (error) {
+            return;
+          }
+          handleOnlineMessage(data);
+        });
+
+        onlineWs.addEventListener('close', () => {
+          if (isOnlineGame) {
+            logStatus('Conexão com o oponente perdida.');
+            onlineWs = null;
+          }
+        });
+
+        onlineWs.addEventListener('error', () => {
+          console.error('[WS] erro');
+        });
+      } catch (error) {
+        console.error('[WS] não foi possível conectar:', error);
+      }
+    }
+
+    function sendOnline(payload) {
+      if (onlineWs && onlineWs.readyState === WebSocket.OPEN) {
+        onlineWs.send(JSON.stringify(payload));
+      }
+    }
+
+    function handleOnlineMessage(data) {
+      switch (data.type) {
+        case 'room_created':
+          onlineRoomCode = data.room;
+          onlinePlayerIdx = data.player;
+          document.getElementById('online-room-code-display').textContent = data.room;
+          document.getElementById('online-room-created').classList.remove('hidden');
+          document.getElementById('online-status').textContent = 'Sala criada. Aguardando oponente...';
+          break;
+
+        case 'room_joined':
+          onlineRoomCode = data.room;
+          onlinePlayerIdx = data.player;
+          onlineOpponentName = data.opponent;
+          document.getElementById('online-status').textContent =
+            `Você entrou como ${data.name}. Oponente: ${data.opponent}. Aguardando início...`;
+          break;
+
+        case 'room_ready':
+          closeOnlineModal();
+          startOnlineGame(data.players);
+          break;
+
+        case 'opponent_disconnected':
+          logStatus('O oponente saiu da sala.');
+          closeOnlineModal();
+          break;
+
+        case 'dice_roll':
+          if (!isOnlineGame) return;
+          handleRemoteDiceRoll(data.from, data.value);
+          break;
+
+        case 'token_move':
+          if (!isOnlineGame) return;
+          handleRemoteTokenMove(data.from, data.player, data.tokenIdx, data.steps);
+          break;
+
+        case 'ack':
+          // confirmação de entrega, não requer ação
+          break;
+      }
+    }
+
+    function openOnlineModal() {
+      document.getElementById('online-modal').classList.remove('hidden');
+      document.getElementById('online-status').textContent = '';
+      document.getElementById('online-room-created').classList.add('hidden');
+      document.getElementById('online-waiting').textContent = 'Aguardando oponente...';
+      document.getElementById('online-room-code').value = '';
+    }
+
+    function closeOnlineModal() {
+      document.getElementById('online-modal').classList.add('hidden');
+    }
+
+    function createOnlineRoom() {
+      if (!onlineWs || onlineWs.readyState !== WebSocket.OPEN) {
+        document.getElementById('online-status').textContent = 'Conectando ao servidor...';
+        return;
+      }
+      const name = document.getElementById('player-name-input').value || 'Jogador 1';
+      sendOnline({ type: 'join_room', room: '', name });
+    }
+
+    function joinOnlineRoom() {
+      if (!onlineWs || onlineWs.readyState !== WebSocket.OPEN) {
+        document.getElementById('online-status').textContent = 'Conectando ao servidor...';
+        return;
+      }
+      const code = document.getElementById('online-room-code').value.trim().toUpperCase();
+      const name = document.getElementById('player-name-input').value || 'Jogador 2';
+      if (!code) {
+        document.getElementById('online-status').textContent = 'Informe o código da sala.';
+        return;
+      }
+      sendOnline({ type: 'join_room', room: code, name });
+    }
+
+    function startOnlineGame(players) {
+      isOnlineGame = true;
+      opponentsCount = 1; // 1 vs 1 online
+
+      // Define a cor do jogador local com base no índice do player
+      const localColorKey = CLOCKWISE_COLORS[onlinePlayerIdx] || 'BLUE';
+      selectHumanColor(localColorKey);
+
+      // Inicia o jogo normalmente (o oponente é o outro humano, controlado via WS)
+      startGame();
+    }
+
+    function sendOnlineDiceRoll(value) {
+      sendOnline({
+        type: 'dice_roll',
+        from: onlinePlayerIdx,
+        value
+      });
+    }
+
+    function sendOnlineTokenMove(player, tokenIdx, steps) {
+      sendOnline({
+        type: 'token_move',
+        from: onlinePlayerIdx,
+        player,
+        tokenIdx,
+        steps
+      });
+    }
+
+    function handleRemoteDiceRoll(from, value) {
+      // O oponente rolou o dado: apenas registra o resultado localmente.
+      // Os tokens do oponente não são selecionáveis para o jogador local.
+      diceValue = value;
+      hasRolled = true;
+      document.getElementById('dice-instruction').textContent = `Oponente tirou ${value}!`;
+      logStatus(`${onlineOpponentName || 'Oponente'} tirou ${value} no dado!`);
+      updateTurnUI();
+    }
+
+    function handleRemoteTokenMove(from, player, tokenIdx, steps) {
+      // O oponente moveu uma peça: executa localmente sem animação de seleção
+      clearHighlights();
+      isAnimating = true;
+      const startingPosition = tokensState[player][tokenIdx];
+      if (startingPosition === -1 && steps === 6) {
+        tokensState[player][tokenIdx] = 0;
+        renderTokens();
+      } else {
+        tokensState[player][tokenIdx] += steps;
+      }
+      renderTokens();
+      checkCapture(player, tokensState[player][tokenIdx]);
+      finishMove();
+    }
+
     window.onload = function() {
       updatePlayerName(document.getElementById('player-name-input').value);
       updateModeUI();
@@ -2299,6 +2532,7 @@
       updateScoreboardUI();
       updateSoundSettingsUI();
       initBoard();
+      initWebSocket();
     };
   </script>
   <script src="/auth.js" defer></script>
