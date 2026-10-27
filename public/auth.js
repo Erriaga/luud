@@ -65,10 +65,7 @@ function openProfileModal() {
   }
 
   profileEmail.textContent = accountUser.email || '';
-  document.getElementById('profile-display-name').value = accountUser.displayName || '';
   document.getElementById('profile-player-name').value = accountUser.playerName || '';
-  document.getElementById('profile-avatar-url').value = accountUser.avatarUrl || '';
-  document.getElementById('profile-bio').value = accountUser.bio || '';
   setAvatarImage(profileAvatarPreview, accountUser.avatarUrl || accountUser.picture || DEFAULT_AVATAR);
   profileStatus.textContent = '';
   profileModal.classList.remove('hidden');
@@ -86,10 +83,7 @@ async function saveProfile(event) {
   profileStatus.className = 'text-xs text-slate-400 min-h-[18px]';
 
   const payload = {
-    displayName: document.getElementById('profile-display-name').value,
-    playerName: document.getElementById('profile-player-name').value,
-    avatarUrl: document.getElementById('profile-avatar-url').value,
-    bio: document.getElementById('profile-bio').value
+    playerName: document.getElementById('profile-player-name').value
   };
 
   try {
