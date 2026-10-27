@@ -564,9 +564,6 @@
       <h2 class="font-display text-2xl font-black text-slate-100">🌐 Sala Online</h2>
 
       <div class="space-y-3">
-        <button onclick="createOnlineRoom()" class="w-full py-3 bg-purple-600 hover:bg-purple-500 text-white font-bold shadow transition text-sm">
-          Criar Sala
-        </button>
         <div class="flex gap-2">
           <input id="online-room-code" type="text" maxlength="6" placeholder="Código da sala" class="flex-1 border border-slate-600 bg-slate-900 px-3 py-2.5 text-slate-100 outline-none focus:border-slate-300 text-center uppercase tracking-widest" autocomplete="off">
           <button onclick="joinOnlineRoom()" class="py-2.5 bg-slate-700 hover:bg-slate-600 text-white font-bold shadow transition text-sm px-4">
@@ -660,7 +657,7 @@
       </button>
       <div id="account-area" class="relative">
         <button type="button" id="account-button" onclick="handleAccountButtonClick(event)" title="Conta" class="flex items-center gap-2 pl-1.5 pr-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-xs font-bold transition text-slate-100 border border-slate-600">
-          <img id="account-avatar" src="/assets/avatar.svg" alt="Foto do perfil" class="w-7 h-7 rounded-none object-contain bg-slate-800 border border-slate-500">
+          <img id="account-avatar" src="/assets/avatar.svg" alt="Foto do perfil" class="w-7 h-7 rounded-full object-cover bg-slate-800 border border-slate-500">
           <span id="account-name" class="max-w-[90px] truncate">Entrar</span>
         </button>
         <div id="account-dropdown" class="hidden absolute right-0 mt-2 w-60 bg-slate-800 border border-slate-600 shadow-2xl overflow-hidden z-50">
@@ -730,11 +727,6 @@
           <p id="status-log" class="text-[11px] text-slate-500 font-medium text-center leading-tight min-h-[14px] max-w-[240px]"></p>
         </div>
 
-        <!-- Botão Rolar Dado -->
-        <button id="roll-btn" onclick="handleDiceClick()" class="font-brand px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm  shadow-lg transition active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
-          Rolar Dado 🎲
-        </button>
-
       </div>
     </div>
   </main>
@@ -752,6 +744,7 @@
       <button onclick="openSetupModal()" class="font-display w-full py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold  shadow transition">
         Jogar Novamente 🔄
       </button>
+      <p id="win-countdown" class="hidden font-brand text-xs sm:text-sm text-amber-400 tracking-wider min-h-[18px]"></p>
     </div>
   </div>
 
@@ -881,6 +874,17 @@
     let diceCurrentY = 0;
     let diceCurrentTransform = 'translateY(0px) rotateX(0deg) rotateY(0deg) scale(1)';
     let activeDiceAnimation = null;
+
+    /* Mapeamento exato e inequívoco das faces 3D do dado (compartilhado
+       entre a rolagem local e a rolagem espelhada do oponente) */
+    const DICE_ROTATIONS = {
+      1: { x: 0, y: 0 },
+      2: { x: 0, y: 90 },
+      3: { x: 90, y: 0 },
+      4: { x: -90, y: 0 },
+      5: { x: 0, y: -90 },
+      6: { x: 0, y: 180 }
+    };
     let activeTokenAnimation = null;
     let movementSession = 0;
 
@@ -1489,8 +1493,12 @@
       return isHumanTeamPlayer(playerA) === isHumanTeamPlayer(playerB);
     }
 
+    function getFirstName(value) {
+      return String(value ?? '').trim().split(/\s+/)[0] || '';
+    }
+
     function getPlayerDisplayName(player) {
-      if (isOnlineGame && player !== getHumanPlayerKey()) return onlineOpponentName || 'Oponente';
+      if (isOnlineGame && player !== getHumanPlayerKey()) return getFirstName(onlineOpponentName) || 'Oponente';
       if (playerTypes[player] === 'HUMAN') return playerName || 'Você';
       if (playerTypes[player] === 'ALLY') return playerName ? `Aliado de ${playerName}` : 'Aliado';
       return isTeamMode() ? 'CPU adversária' : 'CPU';
@@ -1535,10 +1543,24 @@
 
     function restartCurrentGame() {
       closePauseMenu();
+      // Reiniciar uma partida online em andamento abandona o oponente (W.O.)
+      if (isOnlineGame && !onlineMatchEnded) {
+        startAbandonFlow(true);
+        return;
+      }
       startGame();
     }
 
     function openSetupModal() {
+      // Sair de uma partida online em andamento (menu, configurações,
+      // reiniciar) conta como abandono: derrota por W.O.
+      if (isOnlineGame && !onlineMatchEnded) {
+        startAbandonFlow(true);
+        return;
+      }
+
+      clearAbandonCountdown();
+      document.getElementById('win-countdown').classList.add('hidden');
       gameAudio.stopMusic();
       gameAudio.playClick();
       stopTurnTimer();
@@ -1548,6 +1570,7 @@
 
       // Reseta o estado do jogo online (a sala anterior deixa de ser válida)
       isOnlineGame = false;
+      onlineMatchEnded = false;
       onlineRoomCode = null;
       onlinePlayerIdx = null;
       onlineOpponentName = null;
@@ -1585,7 +1608,8 @@
       remaining: TURN_TIMER_DURATION,
       endsAt: null,
       interval: null,
-      expired: false
+      expired: false,
+      mirrored: false // true quando cronometra o turno do oponente (espelho)
     };
 
     function isHumanTurn() {
@@ -1620,11 +1644,12 @@
       }
     }
 
-    function startTurnTimer() {
+    function startTurnTimer(mirrored = false) {
       clearTurnTimerInterval();
       turnTimer.remaining = turnTimer.duration;
       turnTimer.endsAt = Date.now() + turnTimer.duration * 1000;
       turnTimer.expired = false;
+      turnTimer.mirrored = Boolean(mirrored);
       renderTurnTimer();
       turnTimer.interval = setInterval(tickTurnTimer, 100);
     }
@@ -1634,6 +1659,7 @@
       turnTimer.endsAt = null;
       turnTimer.remaining = turnTimer.duration;
       turnTimer.expired = false;
+      turnTimer.mirrored = false;
       renderTurnTimer();
     }
 
@@ -1659,6 +1685,15 @@
       turnTimer.remaining = Math.max(0, (turnTimer.endsAt - Date.now()) / 1000);
 
       if (turnTimer.remaining <= 0) {
+        if (turnTimer.mirrored) {
+          // O tempo do oponente acabou neste cliente (espelho): apenas sinaliza
+          // visualmente e aguarda o pass_turn enviado pelo cliente dele.
+          clearTurnTimerInterval();
+          turnTimer.endsAt = null;
+          turnTimer.expired = true;
+          renderTurnTimer();
+          return;
+        }
         onTurnTimeout();
         return;
       }
@@ -1667,6 +1702,7 @@
     }
 
     function onTurnTimeout() {
+      if (turnTimer.mirrored) return; // o oponente cuida do próprio tempo
       if (turnTimer.expired || isPaused || !isHumanTurn()) return;
 
       if (isAnimating) {
@@ -1709,8 +1745,12 @@
       const root = document.getElementById('turn-timer');
       if (root) root.style.setProperty('--timer-color', color.hex);
 
-      if (playerTypes[player] === 'HUMAN' && !isPaused && (!isOnlineGame || player === getHumanPlayerKey())) {
-        startTurnTimer();
+      // No modo online, o relógio também roda (espelhado) na vez do oponente,
+      // para o jogador local acompanhar quanto tempo resta para a jogada dele.
+      const isHumanSide = playerTypes[player] === 'HUMAN';
+      const isLocalSide = isHumanSide && (!isOnlineGame || player === getHumanPlayerKey());
+      if (isHumanSide && !isPaused) {
+        startTurnTimer(isOnlineGame && !isLocalSide);
       } else {
         stopTurnTimer();
       }
@@ -1736,10 +1776,14 @@
     }
 
     function updateScoreboardUI() {
-      document.getElementById('score-player-name').innerText = playerName || (isTeamMode() ? 'Dupla' : 'Jogador');
-      document.getElementById('score-cpu-label').innerText = isOnlineGame
-        ? (onlineOpponentName || 'Oponente')
-        : (isTeamMode() ? 'CPUs' : 'CPU');
+      if (isOnlineGame) {
+        // Placar online: primeiro nome do jogador local x primeiro nome do oponente
+        document.getElementById('score-player-name').innerText = playerName || 'Você';
+        document.getElementById('score-cpu-label').innerText = getFirstName(onlineOpponentName) || 'Oponente';
+      } else {
+        document.getElementById('score-player-name').innerText = playerName || (isTeamMode() ? 'Dupla' : 'Jogador');
+        document.getElementById('score-cpu-label').innerText = isTeamMode() ? 'CPUs' : 'CPU';
+      }
       document.getElementById('score-human').innerText = getHumanTeamScore();
       document.getElementById('score-cpu').innerText = getCpuScore();
       document.getElementById('scoreboard').title = `Primeiro a marcar ${getWinningScore()} pontos vence`;
@@ -1764,8 +1808,12 @@
       text.innerText = `Turno: ${currentPlayerName}`;
       badge.className = `flex items-center justify-center gap-2 px-4 py-1.5 bg-slate-800 border max-w-full ${color.border}`;
 
-      const rollBtn = document.getElementById('roll-btn');
-      rollBtn.disabled = hasRolled || isAnimating || isAutomatedPlayer(player) || (isOnlineGame && player !== getHumanPlayerKey());
+      const instruction = document.getElementById('dice-instruction');
+      if (isOnlineGame && player !== getHumanPlayerKey()) {
+        instruction.textContent = `Vez de ${getPlayerDisplayName(player)}...`;
+      } else if (!hasRolled && !isAnimating) {
+        instruction.textContent = 'Toque para rolar';
+      }
 
       syncTurnTimerWithTurn();
     }
@@ -1895,7 +1943,7 @@
       evaluateMoves();
     }
 
-    function animateDiceRoll(dice, rotations) {
+    function animateDiceRoll(dice, rotations, onDone = completeDiceRoll) {
       const rot = rotations[diceValue];
       const extraSpins = 1080;
       const finalX = getForwardRotation(diceCurrentX, rot.x) + extraSpins;
@@ -1920,7 +1968,7 @@
           diceCurrentX = finalX;
           diceCurrentY = finalY;
           diceCurrentTransform = finalTransform;
-          completeDiceRoll();
+          onDone();
         }, 1500);
         return;
       }
@@ -1942,7 +1990,7 @@
         dice.style.transition = '';
         activeDiceAnimation = null;
         animation.cancel();
-        completeDiceRoll();
+        onDone();
       }, { once: true });
     }
 
@@ -1950,25 +1998,12 @@
       if (hasRolled || isAnimating || isPaused) return;
 
       isAnimating = true;
-      const dice = document.getElementById('dice');
-      const rollBtn = document.getElementById('roll-btn');
-      rollBtn.disabled = true;
       document.getElementById('dice-instruction').textContent = 'Girando o dado...';
       gameAudio.playDice();
 
       diceValue = Math.floor(Math.random() * 6) + 1;
 
-      /* Mapeamento exato e inequívoco das faces 3D do dado */
-      const rotations = {
-        1: { x: 0, y: 0 },
-        2: { x: 0, y: 90 },
-        3: { x: 90, y: 0 },
-        4: { x: -90, y: 0 },
-        5: { x: 0, y: -90 },
-        6: { x: 0, y: 180 }
-      };
-
-      animateDiceRoll(dice, rotations);
+      animateDiceRoll(document.getElementById('dice'), DICE_ROTATIONS);
     }
 
     function evaluateMoves() {
@@ -2097,13 +2132,14 @@
       }
     }
 
-    async function moveToken(player, tokenIdx, steps) {
+    async function moveToken(player, tokenIdx, steps, isRemote = false) {
       clearHighlights();
       isAnimating = true;
       const session = movementSession;
       const startingPosition = tokensState[player][tokenIdx];
 
-      if (isOnlineGame) {
+      // No modo remoto (movimento do oponente), não reenvia a mensagem
+      if (isOnlineGame && !isRemote) {
         sendOnlineTokenMove(player, tokenIdx, steps);
       }
 
@@ -2180,6 +2216,12 @@
         const humanWon = winningTeam === 'HUMAN';
         const winTitle = document.getElementById('win-title');
 
+        // A partida online terminou normalmente: desconexões seguintes
+        // não contam como abandono
+        if (isOnlineGame) onlineMatchEnded = true;
+        clearAbandonCountdown();
+        document.getElementById('win-countdown').classList.add('hidden');
+
         stopTurnTimer();
         winTitle.innerText = humanWon ? 'V I T Ó R I A' : 'D E R R O T A';
         winTitle.className = `win-title font-display font-black ${humanWon ? 'text-amber-400' : 'text-red-500'}`;
@@ -2225,7 +2267,14 @@
 
     function startGame() {
       const nameInput = document.getElementById('player-name-input');
-      updatePlayerName(nameInput ? nameInput.value : '');
+      let startName = nameInput ? nameInput.value : '';
+      if (isOnlineGame) {
+        // Usa o primeiro nome da conta Google como nome do jogador local
+        const account = typeof accountUser !== 'undefined' ? accountUser : null;
+        startName = getFirstName(account && (account.playerName || account.displayName)) || 'Você';
+      }
+      updatePlayerName(startName);
+      onlineMatchEnded = false;
       movementSession++;
 
       if (activeDiceAnimation) {
@@ -2419,6 +2468,8 @@
     let isOnlineGame = false;
     let onlineSendQueue = [];
     let onlineConnecting = false;
+    let onlineMatchEnded = false; // partida online encerrada (vitória normal ou W.O.)
+    let abandonCountdownInterval = null;
 
     const WS_URL = (window.location.protocol === 'https:' ? 'wss:' : 'ws:') +
       '//' + window.location.host + '/ws';
@@ -2534,8 +2585,14 @@
           break;
 
         case 'opponent_disconnected':
-          logStatus('O oponente saiu da sala.');
-          closeOnlineModal();
+          if (isOnlineGame && !onlineMatchEnded) {
+            // O oponente abandonou a partida em andamento: vitória por W.O.
+            startAbandonFlow(false);
+          } else if (!document.getElementById('online-modal').classList.contains('hidden')) {
+            // O oponente saiu enquanto aguardávamos na sala
+            logStatus('O oponente saiu da sala.');
+            closeOnlineModal();
+          }
           break;
 
         case 'dice_roll':
@@ -2552,7 +2609,7 @@
           if (!isOnlineGame) return;
           // O oponente passou a vez (sem movimentos, 3 seis ou tempo esgotado):
           // avança o turno aqui também para manter os dois clientes sincronizados
-          logStatus(`${onlineOpponentName || 'Oponente'} passou a vez.`);
+          logStatus(`${getFirstName(onlineOpponentName) || 'Oponente'} passou a vez.`);
           document.getElementById('dice-instruction').textContent = 'Toque para rolar';
           nextTurn();
           break;
@@ -2577,6 +2634,76 @@
 
     function closeOnlineModal() {
       document.getElementById('online-modal').classList.add('hidden');
+    }
+
+    /* -------------------------------------------------------------
+       ABANDONO DE PARTIDA ONLINE (W.O.)
+       Quem sai de uma partida em andamento perde por W.O.; o outro
+       jogador recebe a vitória por W.O. A tela final é única e volta
+       ao menu principal após contagem regressiva de 5 segundos.
+    ------------------------------------------------------------- */
+    function startAbandonFlow(localAbandoned) {
+      // Encerra a partida: nenhuma outra mensagem será exibida além desta
+      onlineMatchEnded = true;
+      isOnlineGame = false;
+
+      stopTurnTimer();
+      movementSession++;
+      if (activeDiceAnimation) { activeDiceAnimation.cancel(); activeDiceAnimation = null; }
+      if (activeTokenAnimation) { activeTokenAnimation.cancel(); activeTokenAnimation = null; }
+      isAnimating = false;
+      hasRolled = false;
+      clearHighlights();
+      isPaused = false;
+      document.getElementById('pause-modal').classList.add('hidden');
+      closeOnlineModal();
+
+      if (localAbandoned && onlineWs) {
+        // Fecha a conexão: o servidor avisará o oponente (vitória por W.O. para ele)
+        const ws = onlineWs;
+        onlineWs = null;
+        onlineSendQueue = [];
+        try { ws.close(); } catch (error) { /* conexão já encerrada */ }
+      }
+
+      const humanWon = !localAbandoned;
+      const winTitle = document.getElementById('win-title');
+      winTitle.innerText = humanWon ? 'V I T Ó R I A' : 'D E R R O T A';
+      winTitle.className = `win-title font-display font-black ${humanWon ? 'text-amber-400' : 'text-red-500'}`;
+      // Placar de W.O.: quem abandona leva o "O", quem fica leva o "W"
+      document.getElementById('win-score').innerText = humanWon ? 'W - O' : 'O - W';
+      document.getElementById('win-modal').classList.remove('hidden');
+
+      if (humanWon) gameAudio.playVictory();
+      else gameAudio.playDefeat();
+
+      startAbandonCountdown();
+    }
+
+    function startAbandonCountdown() {
+      clearAbandonCountdown();
+      const countdownEl = document.getElementById('win-countdown');
+      let seconds = 5;
+      countdownEl.classList.remove('hidden');
+      countdownEl.textContent = 'Voltando para o menu principal em 5...';
+
+      abandonCountdownInterval = setInterval(() => {
+        seconds--;
+        if (seconds <= 0) {
+          clearAbandonCountdown();
+          countdownEl.textContent = 'Voltando para o menu principal em 0...';
+          openSetupModal();
+        } else {
+          countdownEl.textContent = `Voltando para o menu principal em ${seconds}...`;
+        }
+      }, 1000);
+    }
+
+    function clearAbandonCountdown() {
+      if (abandonCountdownInterval) {
+        clearInterval(abandonCountdownInterval);
+        abandonCountdownInterval = null;
+      }
     }
 
     function createOnlineRoom() {
@@ -2659,29 +2786,32 @@
     }
 
     function handleRemoteDiceRoll(from, value) {
-      // O oponente rolou o dado: apenas registra o resultado localmente.
-      // Os tokens do oponente não são selecionáveis para o jogador local.
+      if (!isOnlineGame) return;
+
+      // Vez do oponente: mesma animação e o mesmo som do dado local
+      isAnimating = true;
+      document.getElementById('dice-instruction').textContent = 'Girando o dado...';
+      gameAudio.playDice();
       diceValue = value;
-      hasRolled = true;
-      document.getElementById('dice-instruction').textContent = `Oponente tirou ${value}!`;
-      logStatus(`${onlineOpponentName || 'Oponente'} tirou ${value} no dado!`);
-      updateTurnUI();
+
+      animateDiceRoll(document.getElementById('dice'), DICE_ROTATIONS, () => {
+        isAnimating = false;
+
+        // Se a vez já voltou ao jogador local (pass_turn pode ter chegado
+        // durante a animação), não marca o dado como rolado
+        if (isOnlineGame && getCurrentPlayer() !== getHumanPlayerKey()) {
+          hasRolled = true;
+          const opponentName = getFirstName(onlineOpponentName) || 'Oponente';
+          document.getElementById('dice-instruction').textContent = `${opponentName} tirou ${value}!`;
+          logStatus(`${opponentName} tirou ${value} no dado!`);
+        }
+      });
     }
 
     function handleRemoteTokenMove(from, player, tokenIdx, steps) {
-      // O oponente moveu uma peça: executa localmente sem animação de seleção
-      clearHighlights();
-      isAnimating = true;
-      const startingPosition = tokensState[player][tokenIdx];
-      if (startingPosition === -1 && steps === 6) {
-        tokensState[player][tokenIdx] = 0;
-        renderTokens();
-      } else {
-        tokensState[player][tokenIdx] += steps;
-      }
-      renderTokens();
-      checkCapture(player, tokensState[player][tokenIdx]);
-      finishMove();
+      // O oponente moveu uma peça: replica com as mesmas animações e sons
+      if (!isOnlineGame) return;
+      moveToken(player, tokenIdx, steps, true);
     }
 
     /* -------------------------------------------------------------
