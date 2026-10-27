@@ -547,7 +547,7 @@
       <div class="space-y-2 text-center">
         <p class="text-xs font-bold uppercase tracking-wider text-slate-400">ONLINE</p>
         <div class="grid grid-cols-3 gap-1">
-          <button type="button" onclick="openOnlineModal()" class="p-3 border-2 border-white bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
+          <button type="button" onclick="openOnlineModal()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
             <span class="font-bold text-sm text-slate-100">SINGLE PLAYER</span>
             <span class="text-xs text-slate-400">1 vs 1</span>
           </button>
@@ -2407,9 +2407,23 @@
 
     function initWebSocket() {
       try {
+        // Fecha conexão anterior se existir
+        if (onlineWs) {
+          onlineWs.close();
+          onlineWs = null;
+        }
+
         onlineWs = new WebSocket(WS_URL);
 
+        let connectTimeout = setTimeout(() => {
+          if (onlineWs && onlineWs.readyState === WebSocket.CONNECTING) {
+            onlineWs.close();
+            document.getElementById('online-status').textContent = 'Falha ao conectar ao servidor. Tente novamente.';
+          }
+        }, 8000);
+
         onlineWs.addEventListener('open', () => {
+          clearTimeout(connectTimeout);
           console.log('[WS] conectado');
           // Processa mensagens que ficaram na fila enquanto conectava
           while (onlineSendQueue.length > 0) {
@@ -2429,17 +2443,26 @@
         });
 
         onlineWs.addEventListener('close', () => {
+          clearTimeout(connectTimeout);
           if (isOnlineGame) {
             logStatus('Conexão com o oponente perdida.');
             onlineWs = null;
+          } else if (onlineSendQueue.length > 0) {
+            // Ainda há mensagens pendentes, tenta reconectar
+            setTimeout(() => {
+              if (onlineSendQueue.length > 0) initWebSocket();
+            }, 1000);
           }
         });
 
         onlineWs.addEventListener('error', () => {
-          console.error('[WS] erro');
+          clearTimeout(connectTimeout);
+          console.error('[WS] erro de conexão');
+          document.getElementById('online-status').textContent = 'Erro ao conectar ao servidor.';
         });
       } catch (error) {
         console.error('[WS] não foi possível conectar:', error);
+        document.getElementById('online-status').textContent = 'Erro ao conectar ao servidor.';
       }
     }
 
@@ -2450,16 +2473,17 @@
     }
 
     function sendOnline(payload) {
-      if (onlineWs && onlineWs.readyState === WebSocket.OPEN) {
-        onlineWs.send(JSON.stringify(payload));
-      } else {
+      // Se o WebSocket não está aberto, enfileira e tenta (re)conectar
+      if (!onlineWs || onlineWs.readyState !== WebSocket.OPEN) {
         onlineSendQueue.push(payload);
-        // Tenta conectar se ainda não houver WebSocket
-        if (!onlineWs || onlineWs.readyState === WebSocket.CLOSED) {
+        document.getElementById('online-status').textContent = 'Conectando ao servidor...';
+        // Sempre tenta (re)iniciar o WebSocket quando não está aberto
+        if (!onlineWs || onlineWs.readyState === WebSocket.CLOSED || onlineWs.readyState === WebSocket.CLOSING) {
           initWebSocket();
         }
-        document.getElementById('online-status').textContent = 'Conectando ao servidor...';
+        return;
       }
+      onlineWs.send(JSON.stringify(payload));
     }
 
     function handleOnlineMessage(data) {
