@@ -222,6 +222,13 @@
     .text-player-custom { color: var(--custom-player-text) !important; }
     .border-player-custom { border-color: var(--custom-player-color) !important; }
 
+    /* Acento de texto por slot: permite pintar cada base com cores
+       personalizadas distintas (inclusive a cor do oponente online) */
+    .text-red-player-custom { color: var(--red-player-text) !important; }
+    .text-green-player-custom { color: var(--green-player-text) !important; }
+    .text-yellow-player-custom { color: var(--yellow-player-text) !important; }
+    .text-blue-player-custom { color: var(--blue-player-text) !important; }
+
     /* Cores claras precisam de contornos pretos para destacar casas, bases e peças */
     body.custom-light-color .ludo-board {
       border-color: #000000;
@@ -423,6 +430,14 @@
       white-space: nowrap;
     }
 
+    /* Frase abaixo do título na tela final (ex.: "DESISTÊNCIA") */
+    .win-subtitle {
+      font-size: clamp(0.85rem, 7.5cqw, 1.75rem);
+      letter-spacing: 0.12em;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+
     .tokens-container .token {
       width: 54% !important;
       height: 54% !important;
@@ -589,30 +604,42 @@
 
   <!-- MENU DE PAUSA -->
   <div id="pause-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-    <div class="bg-slate-800 border border-slate-700  p-6 max-w-xs w-full text-center space-y-4 shadow-2xl">
-      <h2 class="font-display text-2xl font-black text-slate-100 flex items-center justify-center gap-2">
-        ⏸️ Jogo Pausado
-      </h2>
+    <div class="bg-slate-800 border border-slate-700 p-6 max-w-xs w-full text-center space-y-4 shadow-2xl">
+      <div class="space-y-1">
+        <h2 class="font-display text-2xl font-black text-slate-100">MENU</h2>
+        <p class="text-xs text-slate-400 font-medium text-center">Jogo pausado</p>
+      </div>
+
+      <div class="grid grid-cols-2 gap-2 pt-2">
+        <button type="button" onclick="toggleFullscreen()" class="p-3 bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center border border-slate-600">
+          <span class="font-bold text-sm text-slate-100">TELA CHEIA</span>
+          <span class="text-xs text-slate-400">F11</span>
+        </button>
+        <button type="button" onclick="toggleSoundSettings()" class="p-3 bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center border border-slate-600">
+          <span class="font-bold text-sm text-slate-100">AJUSTES DE SOM</span>
+          <span class="text-xs text-slate-400">Gerencie o volume</span>
+        </button>
+      </div>
 
       <div class="space-y-2 pt-2">
-        <button onclick="closePauseMenu()" class="w-full py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-bold text-sm">
-          ▶️ Voltar ao Jogo
+        <button onclick="closePauseMenu()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold shadow transition text-sm">
+          VOLTAR
         </button>
-        <button onclick="restartCurrentGame()" class="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold  shadow transition text-sm">
-          🔄 Reiniciar Partida
+        <button onclick="restartCurrentGame()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold shadow transition text-sm">
+          REINICIAR
         </button>
-        <button onclick="openSetupModal()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold  shadow transition text-sm">
-          ⚙️ Configurações
+        <button onclick="resignCurrentGame()" class="w-full py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold shadow transition text-sm">
+          DESISTIR
         </button>
       </div>
     </div>
   </div>
 
-  <!-- CONFIGURAÇÕES DE SOM -->
+  <!-- AJUSTES DE SOM -->
   <div id="sound-modal" class="hidden fixed inset-0 z-[60] bg-slate-950/75 backdrop-blur-sm flex items-start sm:items-center justify-center p-4">
     <div class="bg-slate-800 border-2 border-slate-600 p-5 max-w-sm w-full shadow-2xl space-y-5">
       <div class="flex items-center justify-between gap-3">
-        <h2 class="font-display text-xl font-black text-slate-100">🎵 Configurações de Som</h2>
+        <h2 class="font-display text-xl font-black text-slate-100">AJUSTES DE SOM</h2>
         <button type="button" onclick="closeSoundSettings()" class="w-9 h-9 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold border border-slate-500" aria-label="Fechar configurações de som">✕</button>
       </div>
 
@@ -642,16 +669,10 @@
   <!-- CABEÇALHO DO JOGO -->
   <header class="relative z-40 w-full max-w-4xl flex flex-wrap items-center justify-between gap-2 py-2.5 px-3 sm:px-4 bg-slate-800/90  backdrop-blur-md mb-2 border border-slate-700 shadow-md">
     <div class="flex items-center gap-2">
-      <img src="https://raw.githubusercontent.com/Erriaga/luud/refs/heads/main/luud.png" alt="LUUD" class="h-14 sm:h-20 w-auto select-none" draggable="false">
+      <img src="https://raw.githubusercontent.com/Erriaga/luud/refs/heads/main/luud.png" alt="LUUD" class="h-28 sm:h-40 w-auto select-none" draggable="false">
     </div>
 
     <div class="flex items-center gap-2">
-      <button onclick="toggleSoundSettings()" id="sound-button" title="Configurar Som" class="px-2.5 py-1.5 bg-slate-700 hover:bg-slate-600 text-sm font-bold transition text-slate-200 border border-slate-600 flex items-center gap-1">
-        <span id="sound-icon">🔊</span>
-      </button>
-      <button onclick="toggleFullscreen()" title="Alternar Tela Cheia" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-xs font-bold  transition text-slate-200 border border-slate-600 flex items-center gap-1">
-        <span>⛶</span> <span class="hidden sm:inline">Tela Cheia</span>
-      </button>
       <button onclick="openPauseMenu()" class="px-3.5 py-1.5 bg-slate-700 hover:bg-slate-600 text-xs font-bold  transition text-slate-200 border border-slate-600">
         ☰ Menu
       </button>
@@ -739,10 +760,13 @@
   <!-- TELA FINAL -->
   <div id="win-modal" class="hidden fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
     <div class="win-card bg-slate-800 border-2 border-slate-600 p-6 text-center max-w-sm w-full space-y-6 shadow-2xl">
-      <h2 id="win-title" class="win-title font-display font-black text-amber-400">V I T Ó R I A</h2>
+      <div class="space-y-1">
+        <h2 id="win-title" class="win-title font-display font-black text-amber-400">V I T Ó R I A</h2>
+        <p id="win-subtitle" class="win-subtitle hidden font-display font-black">DESISTÊNCIA</p>
+      </div>
       <div id="win-score" class="font-display text-5xl sm:text-7xl font-black text-slate-100 leading-none">0 - 0</div>
       <button onclick="openSetupModal()" class="font-display w-full py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold  shadow transition">
-        Jogar Novamente 🔄
+        CONTINUAR
       </button>
       <p id="win-countdown" class="hidden font-brand text-xs sm:text-sm text-amber-400 tracking-wider min-h-[18px]"></p>
     </div>
@@ -851,7 +875,8 @@
     const POSITIONS = ['BOTTOM_LEFT', 'TOP_LEFT', 'TOP_RIGHT', 'BOTTOM_RIGHT'];
     const DIAGONAL_PARTNER = { RED: 'YELLOW', YELLOW: 'RED', GREEN: 'BLUE', BLUE: 'GREEN' };
 
-    const CUSTOM_PLAYER_SLOT = 'BLUE';
+    // A cor personalizada é aplicada sobre o slot escolhido pelo jogador
+    // (ou pelo slot definido pelo servidor em partidas online).
     let selectedHumanColor = 'BLUE';
     let usingCustomColor = false;
     let customColorHex = '#8b5cf6';
@@ -1088,7 +1113,9 @@
       document.getElementById('effects-volume').value = effectsPercent;
       document.getElementById('music-volume-value').innerText = `${musicPercent}%`;
       document.getElementById('effects-volume-value').innerText = `${effectsPercent}%`;
-      document.getElementById('sound-icon').innerText = gameAudio.muted ? '🔇' : '🔊';
+      // O ícone de som só existe quando o botão está presente na interface
+      const soundIcon = document.getElementById('sound-icon');
+      if (soundIcon) soundIcon.innerText = gameAudio.muted ? '🔇' : '🔊';
       document.getElementById('sound-mute-button').innerText = gameAudio.muted ? 'Ativar Som' : 'Silenciar Som';
     }
 
@@ -1144,7 +1171,9 @@
     };
 
     function getHumanPlayerKey() {
-      return usingCustomColor ? CUSTOM_PLAYER_SLOT : selectedHumanColor;
+      // Slot de base do jogador humano. Em partidas online este slot é
+      // definido pelo servidor; a cor personalizada é pintada sobre ele.
+      return selectedHumanColor;
     }
 
     function getColorAssignments() {
@@ -1201,6 +1230,19 @@
             }
           });
         }
+
+        // No modo online, pinta o slot do oponente com a cor que ele escolheu
+        // (sincronizada via WebSocket), preservando a escolha de cada jogador.
+        if (isOnlineGame && onlineOpponentColor) {
+          const opponentSlot = activePlayers.find(player => player !== getHumanPlayerKey());
+          if (opponentSlot) {
+            assignments[opponentSlot] = {
+              hex: onlineOpponentColor.hex,
+              name: onlineOpponentColor.name,
+              custom: onlineOpponentColor.custom
+            };
+          }
+        }
       }
 
       return assignments;
@@ -1215,8 +1257,8 @@
 
       return {
         bg: `bg-${player.toLowerCase()}-ludo`,
-        text: assignment.custom ? 'text-player-custom' : (theme ? theme.text : 'text-slate-200'),
-        border: assignment.custom ? 'border-player-custom' : (theme ? theme.border : 'border-slate-500'),
+        text: assignment.custom ? `text-${player.toLowerCase()}-player-custom` : (theme ? theme.text : 'text-slate-200'),
+        border: assignment.custom ? `border-${player.toLowerCase()}-ludo` : (theme ? theme.border : 'border-slate-500'),
         name: assignment.name,
         hex: assignment.hex,
         custom: assignment.custom
@@ -1385,6 +1427,7 @@
         const pastel = lightColor ? '#e2e8f0' : mixHexWithWhite(assignment.hex, 0.68);
 
         root.style.setProperty(`--${player.toLowerCase()}-player-color`, assignment.hex);
+        root.style.setProperty(`--${player.toLowerCase()}-player-text`, getReadableAccent(assignment.hex));
         root.style.setProperty(`--${player.toLowerCase()}-player-border`, lightColor ? '#000000' : assignment.hex);
         root.style.setProperty(`--${player.toLowerCase()}-player-cell-border`, lightColor ? '#000000' : '#cbd5e1');
         const useDefaultPastel = !assignment.custom && assignment.hex === PLAYER_COLORS[player].hex;
@@ -1415,6 +1458,7 @@
       gameAudio.playClick();
       selectedHumanColor = color;
       usingCustomColor = false;
+      saveColorPreference();
       updateColorVariables();
       updateColorSelectionUI();
       document.getElementById('custom-color-menu').classList.add('hidden');
@@ -1463,13 +1507,56 @@
       customColorPreviewHex = normalized;
       customColorName = identifyColorName(normalized);
       customColorPreviewName = customColorName;
-      selectedHumanColor = 'CUSTOM';
       usingCustomColor = true;
       gameAudio.playClick();
       updateColorVariables();
       updateColorSelectionUI();
       previewCustomColor(normalized);
+      saveColorPreference();
       message.textContent = `Cor ${customColorName} (${normalized.toUpperCase()}) aplicada à sua equipe.`;
+    }
+
+    /* -------------------------------------------------------------
+       PREFERÊNCIA DE COR (armazenada no navegador)
+       Guarda a cor escolhida pelo jogador para que ela não se perca
+       ao iniciar partidas online ou ao recarregar a página.
+    ------------------------------------------------------------- */
+    const COLOR_PREFERENCE_KEY = 'luud_color_preference';
+
+    function saveColorPreference() {
+      try {
+        localStorage.setItem(COLOR_PREFERENCE_KEY, JSON.stringify({
+          selectedHumanColor,
+          usingCustomColor,
+          customColorHex
+        }));
+      } catch (error) {
+        /* Armazenamento indisponível: a escolha vale apenas nesta sessão */
+      }
+    }
+
+    function restoreColorPreference() {
+      let preference = null;
+      try {
+        const raw = localStorage.getItem(COLOR_PREFERENCE_KEY);
+        preference = raw ? JSON.parse(raw) : null;
+      } catch (error) {
+        return; /* Armazenamento indisponível ou dados corrompidos */
+      }
+      if (!preference || typeof preference !== 'object') return;
+
+      if (PLAYERS.includes(preference.selectedHumanColor)) {
+        selectedHumanColor = preference.selectedHumanColor;
+      }
+
+      const hex = normalizeHexColor(preference.customColorHex);
+      if (hex) {
+        customColorHex = hex;
+        customColorName = identifyColorName(hex);
+        previewCustomColor(hex);
+      }
+
+      usingCustomColor = Boolean(preference.usingCustomColor) && Boolean(hex);
     }
 
     function isTeamMode() {
@@ -1543,7 +1630,8 @@
 
     function restartCurrentGame() {
       closePauseMenu();
-      // Reiniciar uma partida online em andamento abandona o oponente (W.O.)
+      // Reiniciar uma partida online em andamento desiste da partida:
+      // o oponente recebe a vitória por desistência
       if (isOnlineGame && !onlineMatchEnded) {
         startAbandonFlow(true);
         return;
@@ -1552,8 +1640,8 @@
     }
 
     function openSetupModal() {
-      // Sair de uma partida online em andamento (menu, configurações,
-      // reiniciar) conta como abandono: derrota por W.O.
+      // Sair de uma partida online em andamento (menu, reiniciar)
+      // conta como desistência: derrota por desistência
       if (isOnlineGame && !onlineMatchEnded) {
         startAbandonFlow(true);
         return;
@@ -1561,6 +1649,7 @@
 
       clearAbandonCountdown();
       document.getElementById('win-countdown').classList.add('hidden');
+      document.getElementById('win-subtitle').classList.add('hidden');
       gameAudio.stopMusic();
       gameAudio.playClick();
       stopTurnTimer();
@@ -1574,6 +1663,20 @@
       onlineRoomCode = null;
       onlinePlayerIdx = null;
       onlineOpponentName = null;
+      onlineOpponentColor = null;
+
+      // Restaura a escolha de cor feita na tela inicial antes da partida
+      // online (o slot usado na partida era definido pelo servidor)
+      if (preOnlineColorState) {
+        selectedHumanColor = preOnlineColorState.selectedHumanColor;
+        usingCustomColor = preOnlineColorState.usingCustomColor;
+        customColorHex = preOnlineColorState.customColorHex;
+        customColorName = preOnlineColorState.customColorName;
+        preOnlineColorState = null;
+        if (usingCustomColor) previewCustomColor(customColorHex);
+        updateColorVariables();
+        updateColorSelectionUI();
+      }
 
       // Reseta o modo de jogo (nenhum pré-selecionado)
       opponentsCount = null;
@@ -2225,6 +2328,7 @@
         stopTurnTimer();
         winTitle.innerText = humanWon ? 'V I T Ó R I A' : 'D E R R O T A';
         winTitle.className = `win-title font-display font-black ${humanWon ? 'text-amber-400' : 'text-red-500'}`;
+        document.getElementById('win-subtitle').classList.add('hidden');
         document.getElementById('win-score').innerText = `${getHumanTeamScore()} - ${getCpuScore()}`;
         document.getElementById('win-modal').classList.remove('hidden');
 
@@ -2465,6 +2569,8 @@
     let onlineRoomCode = null;
     let onlinePlayerIdx = null;
     let onlineOpponentName = null;
+    let onlineOpponentColor = null; // cor escolhida pelo oponente (sincronizada via WS)
+    let preOnlineColorState = null; // escolha de cor da tela inicial, guardada durante a partida online
     let isOnlineGame = false;
     let onlineSendQueue = [];
     let onlineConnecting = false;
@@ -2584,9 +2690,24 @@
           startOnlineGame(data.players);
           break;
 
+        case 'color_info': {
+          // O oponente avisou a cor que ele escolheu: pinta o slot dele
+          if (!isOnlineGame) return;
+          const color = data.color || {};
+          const hex = normalizeHexColor(color.hex);
+          if (!hex) return;
+          onlineOpponentColor = {
+            hex,
+            name: String(color.name || 'Oponente').slice(0, 24),
+            custom: Boolean(color.custom)
+          };
+          updateColorVariables();
+          break;
+        }
+
         case 'opponent_disconnected':
           if (isOnlineGame && !onlineMatchEnded) {
-            // O oponente abandonou a partida em andamento: vitória por W.O.
+            // O oponente desistiu da partida em andamento: vitória por desistência
             startAbandonFlow(false);
           } else if (!document.getElementById('online-modal').classList.contains('hidden')) {
             // O oponente saiu enquanto aguardávamos na sala
@@ -2637,16 +2758,45 @@
     }
 
     /* -------------------------------------------------------------
-       ABANDONO DE PARTIDA ONLINE (W.O.)
-       Quem sai de uma partida em andamento perde por W.O.; o outro
-       jogador recebe a vitória por W.O. A tela final é única e volta
-       ao menu principal após contagem regressiva de 5 segundos.
+       DESISTÊNCIA / ABANDONO DE PARTIDA
+       Quem sai de uma partida em andamento (ou aperta DESISTIR) perde
+       por desistência; o outro jogador recebe a vitória por desistência.
+       A tela final informa "VITÓRIA POR" ou "DERROTA POR" na frase de
+       cima e "DESISTÊNCIA" logo abaixo, voltando ao menu principal
+       após contagem regressiva de 5 segundos.
     ------------------------------------------------------------- */
     function startAbandonFlow(localAbandoned) {
       // Encerra a partida: nenhuma outra mensagem será exibida além desta
       onlineMatchEnded = true;
       isOnlineGame = false;
 
+      if (localAbandoned && onlineWs) {
+        // Fecha a conexão: o servidor avisará o oponente (vitória por desistência para ele)
+        const ws = onlineWs;
+        onlineWs = null;
+        onlineSendQueue = [];
+        try { ws.close(); } catch (error) { /* conexão já encerrada */ }
+      }
+
+      // Quem desiste perde; quem recebe a desistência vence
+      showResignationScreen(!localAbandoned);
+    }
+
+    // Botão DESISTIR do menu: encerra a partida atual por desistência
+    function resignCurrentGame() {
+      gameAudio.playClick();
+
+      // Desistir de uma partida online encerra a conexão e dá a vitória ao oponente
+      if (isOnlineGame && !onlineMatchEnded) {
+        startAbandonFlow(true);
+        return;
+      }
+
+      // Desistir de uma partida local (vs CPU): derrota direta do jogador
+      showResignationScreen(false);
+    }
+
+    function showResignationScreen(humanWon) {
       stopTurnTimer();
       movementSession++;
       if (activeDiceAnimation) { activeDiceAnimation.cancel(); activeDiceAnimation = null; }
@@ -2658,19 +2808,13 @@
       document.getElementById('pause-modal').classList.add('hidden');
       closeOnlineModal();
 
-      if (localAbandoned && onlineWs) {
-        // Fecha a conexão: o servidor avisará o oponente (vitória por W.O. para ele)
-        const ws = onlineWs;
-        onlineWs = null;
-        onlineSendQueue = [];
-        try { ws.close(); } catch (error) { /* conexão já encerrada */ }
-      }
-
-      const humanWon = !localAbandoned;
       const winTitle = document.getElementById('win-title');
-      winTitle.innerText = humanWon ? 'V I T Ó R I A' : 'D E R R O T A';
+      const winSubtitle = document.getElementById('win-subtitle');
+      winTitle.innerText = humanWon ? 'VITÓRIA POR' : 'DERROTA POR';
       winTitle.className = `win-title font-display font-black ${humanWon ? 'text-amber-400' : 'text-red-500'}`;
-      // Placar de W.O.: quem abandona leva o "O", quem fica leva o "W"
+      winSubtitle.innerText = 'DESISTÊNCIA';
+      winSubtitle.className = `win-subtitle font-display font-black ${humanWon ? 'text-amber-400' : 'text-red-500'}`;
+      // Placar de desistência: quem desiste leva o "O", quem fica leva o "W"
       document.getElementById('win-score').innerText = humanWon ? 'W - O' : 'O - W';
       document.getElementById('win-modal').classList.remove('hidden');
 
@@ -2744,11 +2888,25 @@
       isOnlineGame = true;
       opponentsCount = 1; // 1 vs 1 online
 
-      // Define a cor do jogador local com base no índice do player.
+      // Define a cor base (slot) do jogador local com base no índice do player.
       // Os índices 0 e 1 recebem cores DIAGONAIS (AZUL e VERDE) para que
       // ambos os clientes usem as mesmas chaves de cor nas mensagens WS.
       const localColorKey = CLOCKWISE_COLORS[(onlinePlayerIdx * 2) % 4] || 'BLUE';
-      selectHumanColor(localColorKey);
+
+      // Guarda a escolha de cor feita na tela inicial para restaurá-la
+      // quando o jogador voltar ao menu (o slot online é definido pelo servidor).
+      preOnlineColorState = {
+        selectedHumanColor,
+        usingCustomColor,
+        customColorHex,
+        customColorName
+      };
+
+      // O jogador ocupa o slot definido pelo servidor, mas mantém a cor
+      // personalizada escolhida: ela é aplicada sobre o slot local.
+      selectedHumanColor = localColorKey;
+      updateColorVariables();
+      updateColorSelectionUI();
 
       // Guarda o nome do oponente (vindo do room_ready) para exibir no jogo
       const opponentEntry = Array.isArray(players) ? players.find(p => p.id !== onlinePlayerIdx) : null;
@@ -2758,6 +2916,22 @@
 
       // Inicia o jogo normalmente (o oponente é o outro humano, controlado via WS)
       startGame();
+
+      // Envia a cor escolhida para o oponente renderizar as peças locais
+      sendOnlineColorInfo();
+    }
+
+    function sendOnlineColorInfo() {
+      const localKey = getHumanPlayerKey();
+      sendOnline({
+        type: 'color_info',
+        from: onlinePlayerIdx,
+        color: {
+          custom: usingCustomColor,
+          hex: usingCustomColor ? customColorHex : PLAYER_COLORS[localKey].hex,
+          name: usingCustomColor ? customColorName : PLAYER_COLORS[localKey].name
+        }
+      });
     }
 
     function sendOnlineDiceRoll(value) {
@@ -2950,6 +3124,7 @@
       const nameInput = document.getElementById('player-name-input');
       updatePlayerName(nameInput ? nameInput.value : '');
       updateModeUI();
+      restoreColorPreference();
       updateColorVariables();
       updateColorSelectionUI();
       updateScoreboardUI();
