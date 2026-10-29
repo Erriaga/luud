@@ -26,7 +26,12 @@ const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7;
 /* -------------------------------------------------------------
    SALAS DE JOGO ONLINE (multiplayer entre computadores)
 ------------------------------------------------------------- */
-const rooms = new Map(); // roomCode -> { players: [ws, ws], names: [str, str], ready: [bool, bool] }
+// roomCode -> { players: [ws, ws], names: [str, str], userIds: [uid, uid], ready: [bool, bool] }
+const rooms = new Map();
+// Conexões ativas: ws -> { roomCode, playerIdx, userId, name }
+const connections = new Map();
+// Fila do Jogo Rápido: [{ ws, uid, name }]
+const matchmakingQueue = [];
 
 function generateRoomCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -35,19 +40,116 @@ function generateRoomCode() {
   return code;
 }
 
+function sendTo(ws, message) {
+  if (ws && ws.readyState === 1) {
+    ws.send(JSON.stringify(message));
+  }
+}
+
 function broadcastRoom(roomCode, message, excludeWs = null) {
   const room = rooms.get(roomCode);
   if (!room) return;
-  const payload = JSON.stringify(message);
   for (const ws of room.players) {
     if (ws && ws !== excludeWs && ws.readyState === 1) {
-      ws.send(payload);
+      ws.send(JSON.stringify(message));
     }
   }
 }
 
 function otherPlayerIndex(idx) {
   return idx === 0 ? 1 : 0;
+}
+
+// Remove a conexão da fila do Jogo Rápido (true se realmente estava lá)
+function removeFromQueue(ws) {
+  const index = matchmakingQueue.findIndex(entry => entry.ws === ws);
+  if (index === -1) return false;
+  matchmakingQueue.splice(index, 1);
+  return true;
+}
+
+// Retira a conexão da sala atual, avisando quem ficou nela e
+// removendo a sala quando fica vazia
+function detachFromRoom(ws, notifyOpponent = true) {
+  const conn = connections.get(ws);
+  if (!conn || !conn.roomCode) return;
+
+  const roomCode = conn.roomCode;
+  const playerIdx = conn.playerIdx;
+  conn.roomCode = null;
+  conn.playerIdx = null;
+
+  const room = rooms.get(roomCode);
+  if (!room || room.players[playerIdx] !== ws) return;
+
+  room.players[playerIdx] = null;
+  room.names[playerIdx] = null;
+  room.userIds[playerIdx] = null;
+  room.ready[playerIdx] = false;
+
+  if (notifyOpponent) {
+    const opponent = room.players[otherPlayerIndex(playerIdx)];
+    if (opponent && opponent.readyState === 1) {
+      sendTo(opponent, { type: 'opponent_disconnected' });
+    }
+  }
+
+  if (!room.players[0] && !room.players[1]) {
+    rooms.delete(roomCode);
+  }
+}
+
+// Pareia os dois primeiros jogadores de contas diferentes da fila,
+// cria a sala e inicia a partida para ambos
+function tryMatchmaking() {
+  while (matchmakingQueue.length >= 2) {
+    const first = matchmakingQueue[0];
+    const firstKey = first.uid || first.ws; // sem login, a própria conexão é a chave
+    let matchIndex = -1;
+    for (let i = 1; i < matchmakingQueue.length; i++) {
+      const candidate = matchmakingQueue[i];
+      if ((candidate.uid || candidate.ws) !== firstKey) {
+        matchIndex = i;
+        break;
+      }
+    }
+    if (matchIndex === -1) break;
+
+    const second = matchmakingQueue[matchIndex];
+    matchmakingQueue.splice(matchIndex, 1);
+    matchmakingQueue.shift();
+    startQuickMatchRoom(first, second);
+  }
+}
+
+function startQuickMatchRoom(a, b) {
+  let code;
+  do {
+    code = generateRoomCode();
+  } while (rooms.has(code));
+
+  const room = {
+    players: [a.ws, b.ws],
+    names: [a.name || 'Jogador 1', b.name || 'Jogador 2'],
+    userIds: [a.uid || null, b.uid || null],
+    ready: [true, true]
+  };
+  rooms.set(code, room);
+
+  const connA = connections.get(a.ws);
+  const connB = connections.get(b.ws);
+  if (connA) { connA.roomCode = code; connA.playerIdx = 0; }
+  if (connB) { connB.roomCode = code; connB.playerIdx = 1; }
+
+  const players = [
+    { id: 0, name: room.names[0] },
+    { id: 1, name: room.names[1] }
+  ];
+
+  sendTo(a.ws, { type: 'room_created', room: code, player: 0, name: room.names[0], quick: true });
+  sendTo(b.ws, { type: 'room_created', room: code, player: 1, name: room.names[1], quick: true });
+  sendTo(a.ws, { type: 'room_ready', players });
+  sendTo(b.ws, { type: 'room_ready', players });
 }
 
 const MIME_TYPES = {
@@ -461,8 +563,13 @@ async function main() {
   const wss = new WebSocketServer({ server, path: '/ws' });
 
   wss.on('connection', (ws) => {
-    let roomCode = null;
-    let playerIdx = null;
+    const conn = {
+      roomCode: null,
+      playerIdx: null,
+      userId: null,
+      name: null
+    };
+    connections.set(ws, conn);
 
     ws.on('message', (raw) => {
       let data;
@@ -472,30 +579,46 @@ async function main() {
         return;
       }
 
-      if (data.type === 'join_room') {
-        let { room: code, name } = data || {};
+      /* --- MATCHMAKING (Jogo Rápido) ------------------------------------ */
+      if (data.type === 'quick_match') {
+        const uid = data.uid || null;
+        const name = String(data.name || 'Jogador').slice(0, 24);
+        conn.userId = uid;
+        conn.name = name;
 
+        // A mesma conta não pode ficar na fila duas vezes
+        // (ex.: duas abas abertas com o mesmo perfil)
+        if (uid && matchmakingQueue.some(entry => entry.uid === uid)) {
+          sendTo(ws, { type: 'error', error: 'Esta conta já está na fila de partida.' });
+          return;
+        }
+
+        removeFromQueue(ws);
+        // Sai de qualquer sala anterior (o oponente que fica é notificado)
+        detachFromRoom(ws);
+
+        matchmakingQueue.push({ ws, uid, name });
+        sendTo(ws, { type: 'queued' });
+        tryMatchmaking();
+        return;
+      }
+
+      if (data.type === 'leave_queue') {
+        removeFromQueue(ws);
+        return;
+      }
+
+      /* --- SALA COM CÓDIGO (Convite) ------------------------------------ */
+      if (data.type === 'join_room') {
+        let { room: code, name, uid } = data || {};
+
+        removeFromQueue(ws);
         // Sai de qualquer sala anterior antes de entrar/criar outra,
         // avisando quem ficou nela e removendo salas vazias.
-        if (roomCode && playerIdx !== null && rooms.has(roomCode)) {
-          const previousRoom = rooms.get(roomCode);
-          if (previousRoom.players[playerIdx] === ws) {
-            previousRoom.players[playerIdx] = null;
-            previousRoom.names[playerIdx] = null;
-            previousRoom.ready[playerIdx] = false;
+        detachFromRoom(ws);
 
-            const remaining = previousRoom.players[otherPlayerIndex(playerIdx)];
-            if (remaining && remaining.readyState === 1) {
-              remaining.send(JSON.stringify({ type: 'opponent_disconnected' }));
-            }
-
-            if (!previousRoom.players[0] && !previousRoom.players[1]) {
-              rooms.delete(roomCode);
-            }
-          }
-        }
-        roomCode = null;
-        playerIdx = null;
+        const cleanName = String(name || '').slice(0, 24);
+        conn.name = cleanName || `Jogador`;
 
         // Se não houver código, gera um novo (criar sala)
         if (!code || String(code).trim() === '') {
@@ -507,45 +630,59 @@ async function main() {
 
           const room = {
             players: [ws, null],
-            names: [name || 'Jogador 1', null],
+            names: [cleanName || 'Jogador 1', null],
+            userIds: [uid || null, null],
             ready: [false, false]
           };
           rooms.set(code, room);
-          roomCode = code;
-          playerIdx = 0;
-          ws.send(JSON.stringify({
+          conn.roomCode = code;
+          conn.playerIdx = 0;
+          conn.userId = uid || null;
+          sendTo(ws, {
             type: 'room_created',
             room: code,
-            player: playerIdx,
+            player: 0,
             name: room.names[0]
-          }));
+          });
           return;
         }
 
-        let room = rooms.get(code);
+        code = String(code).trim().toUpperCase();
+        const room = rooms.get(code);
         if (!room) {
-          ws.send(JSON.stringify({ type: 'error', error: 'Sala não encontrada.' }));
+          sendTo(ws, { type: 'error', error: 'Sala não encontrada.' });
           return;
         }
 
         if (room.players[0] && room.players[1]) {
-          ws.send(JSON.stringify({ type: 'error', error: 'Sala cheia.' }));
+          sendTo(ws, { type: 'error', error: 'Sala cheia.' });
           return;
         }
 
-        roomCode = code;
-        playerIdx = room.players[0] ? 1 : 0;
+        // A mesma conta Google não pode entrar numa partida em que
+        // ela própria já é um dos jogadores (nem por convite)
+        if (uid && (room.userIds[0] === uid || room.userIds[1] === uid)) {
+          sendTo(ws, { type: 'error', error: 'Esta conta já está nesta partida.' });
+          return;
+        }
+
+        const playerIdx = room.players[0] ? 1 : 0;
         room.players[playerIdx] = ws;
-        room.names[playerIdx] = name || `Jogador ${playerIdx + 1}`;
+        room.names[playerIdx] = cleanName || `Jogador ${playerIdx + 1}`;
+        room.userIds[playerIdx] = uid || null;
         room.ready[playerIdx] = true;
 
-        ws.send(JSON.stringify({
+        conn.roomCode = code;
+        conn.playerIdx = playerIdx;
+        conn.userId = uid || null;
+
+        sendTo(ws, {
           type: 'room_joined',
           room: code,
           player: playerIdx,
           name: room.names[playerIdx],
           opponent: room.names[otherPlayerIndex(playerIdx)]
-        }));
+        });
 
         // Notifica ambos que a sala está pronta quando tiver 2 jogadores
         if (room.players[0] && room.players[1]) {
@@ -561,47 +698,31 @@ async function main() {
         return;
       }
 
-      if (!roomCode || playerIdx === null) return;
+      if (conn.roomCode === null || conn.playerIdx === null) return;
 
       // Relay de mensagens de jogo para o oponente
-      const room = rooms.get(roomCode);
+      const room = rooms.get(conn.roomCode);
       if (!room) return;
 
       const forward = {
         type: data.type,
-        from: playerIdx,
-        to: otherPlayerIndex(playerIdx),
+        from: conn.playerIdx,
+        to: otherPlayerIndex(conn.playerIdx),
         ...data
       };
 
-      const target = room.players[otherPlayerIndex(playerIdx)];
-      if (target && target.readyState === 1) {
-        target.send(JSON.stringify(forward));
-      }
+      const target = room.players[otherPlayerIndex(conn.playerIdx)];
+      sendTo(target, forward);
 
       // Eco de confirmação para o remetente (opcional)
-      ws.send(JSON.stringify({ type: 'ack', original: data.type }));
+      sendTo(ws, { type: 'ack', original: data.type });
     });
 
     ws.on('close', () => {
-      if (!roomCode) return;
-      const room = rooms.get(roomCode);
-      if (!room) return;
-
-      // Notifica o oponente da desconexão
-      const target = room.players[otherPlayerIndex(playerIdx)];
-      if (target && target.readyState === 1) {
-        target.send(JSON.stringify({ type: 'opponent_disconnected' }));
-      }
-
-      room.players[playerIdx] = null;
-      room.names[playerIdx] = null;
-      room.ready[playerIdx] = false;
-
-      // Remove a sala se ficou vazia
-      if (!room.players[0] && !room.players[1]) {
-        rooms.delete(roomCode);
-      }
+      // Sai da fila e da sala; quem ficou é notificado
+      removeFromQueue(ws);
+      detachFromRoom(ws);
+      connections.delete(ws);
     });
 
     ws.on('error', () => {});
