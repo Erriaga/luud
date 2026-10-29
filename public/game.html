@@ -480,9 +480,10 @@
   <div id="setup-screen" class="fixed inset-0 bg-slate-950/95 z-50 flex items-center justify-center overflow-y-auto p-4">
     <div class="bg-slate-800 border border-slate-700 p-4 sm:p-6 max-w-md w-full shadow-2xl text-center space-y-5 sm:space-y-6 my-auto">
       <div class="flex flex-col items-center gap-1">
-        <img src="https://raw.githubusercontent.com/Erriaga/luud/refs/heads/main/luud.png" alt="LUUD" class="w-64 sm:w-80 h-auto select-none" draggable="false">
+        <img src="/assets/luud.svg" onerror="this.onerror=null;this.src='/assets/luud.png'" alt="LUUD" class="w-64 sm:w-80 h-auto select-none" draggable="false">
       </div>
 
+      <div id="setup-main-view" class="space-y-5 sm:space-y-6 w-full">
       <!-- Login Google na tela inicial -->
       <div class="space-y-1 w-full mb-0">
         <div id="google-button-setup" class="google-button"></div>
@@ -556,7 +557,7 @@
       <div class="space-y-2 text-center">
         <p class="text-xs font-bold uppercase tracking-wider text-slate-400">ONLINE</p>
         <div class="grid grid-cols-3 gap-1">
-          <button type="button" id="online-single-btn" onclick="createOnlineRoom()" class="p-3 border-2 border-transparent bg-slate-700 text-slate-500 transition flex flex-col items-center opacity-70 cursor-not-allowed disabled:opacity-70 disabled:cursor-not-allowed">
+          <button type="button" id="online-single-btn" onclick="showOnlineModes()" class="p-3 border-2 border-transparent bg-slate-700 text-slate-500 transition flex flex-col items-center opacity-70 cursor-not-allowed disabled:opacity-70 disabled:cursor-not-allowed">
             <span class="font-bold text-sm text-slate-100">SINGLE PLAYER</span>
             <span class="text-xs text-slate-400">FAZER LOGIN</span>
           </button>
@@ -570,15 +571,34 @@
           </button>
         </div>
       </div>
+      </div>
+
+      <!-- VISÃO DE MODOS ONLINE (Jogo Rápido / Convite) -->
+      <div id="online-modes-view" class="hidden space-y-5 sm:space-y-6 w-full">
+        <p class="text-xs font-bold uppercase tracking-wider text-slate-400">ONLINE</p>
+        <div class="grid grid-cols-2 gap-3">
+          <button type="button" id="quick-match-btn" onclick="startQuickMatch()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
+            <span class="font-bold text-sm text-slate-100">JOGO RÁPIDO</span>
+            <span class="text-xs text-slate-400">Partida aleatória</span>
+          </button>
+          <button type="button" id="invite-btn" onclick="openInviteModal()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
+            <span class="font-bold text-sm text-slate-100">CONVITE</span>
+            <span class="text-xs text-slate-400">Chame um amigo</span>
+          </button>
+        </div>
+        <button type="button" onclick="hideOnlineModes()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
+          VOLTAR
+        </button>
+      </div>
     </div>
   </div>
 
   <!-- MODAL DE SALA ONLINE -->
   <div id="online-modal" class="hidden fixed inset-0 bg-slate-950/90 z-50 flex items-center justify-center p-4">
     <div class="bg-slate-800 border border-slate-700 p-6 sm:p-8 max-w-md w-full text-center space-y-5 shadow-2xl">
-      <h2 class="font-display text-2xl font-black text-slate-100">🌐 Sala Online</h2>
+      <h2 id="online-modal-title" class="font-display text-2xl font-black text-slate-100">Convite</h2>
 
-      <div class="space-y-3">
+      <div id="online-join-section" class="space-y-3">
         <div class="flex gap-2">
           <input id="online-room-code" type="text" maxlength="6" placeholder="Código da sala" class="flex-1 border border-slate-600 bg-slate-900 px-3 py-2.5 text-slate-100 outline-none focus:border-slate-300 text-center uppercase tracking-widest" autocomplete="off">
           <button onclick="joinOnlineRoom()" class="py-2.5 bg-slate-700 hover:bg-slate-600 text-white font-bold shadow transition text-sm px-4">
@@ -589,8 +609,13 @@
 
       <div id="online-room-created" class="hidden space-y-2">
         <p class="text-xs text-slate-400 uppercase tracking-wider">Seu código da sala:</p>
-        <div id="online-room-code-display" class="font-mono text-xl text-amber-400"></div>
-        <p class="text-xs text-slate-500">Envie este código para o seu amigo.</p>
+        <div class="flex items-center justify-center gap-2">
+          <div id="online-room-code-display" class="font-mono text-xl text-amber-400"></div>
+          <button type="button" onclick="copyRoomCode()" title="Copiar o código para a área de transferência" class="px-3 py-2 bg-slate-700 hover:bg-slate-600 border border-slate-600 text-slate-200 font-bold transition text-xs flex items-center gap-1.5">
+            <span aria-hidden="true">📋</span> Copiar
+          </button>
+        </div>
+        <p id="online-code-hint" class="text-xs text-slate-500">Envie este código para o seu amigo.</p>
         <p id="online-waiting" class="text-sm text-slate-300">Aguardando oponente...</p>
       </div>
 
@@ -669,15 +694,15 @@
   <!-- CABEÇALHO DO JOGO -->
   <header class="relative z-40 w-full max-w-4xl flex flex-wrap items-center justify-between gap-2 py-2.5 px-3 sm:px-4 bg-slate-800/90  backdrop-blur-md mb-2 border border-slate-700 shadow-md">
     <div class="flex items-center gap-2">
-      <img src="https://raw.githubusercontent.com/Erriaga/luud/refs/heads/main/luud.png" alt="LUUD" class="h-28 sm:h-40 w-auto select-none" draggable="false">
+      <img src="/assets/luud.svg" onerror="this.onerror=null;this.src='/assets/luud.png'" alt="LUUD" class="h-28 sm:h-40 w-auto select-none" draggable="false">
     </div>
 
     <div class="flex items-center gap-2">
-      <button onclick="openPauseMenu()" class="px-3.5 py-1.5 bg-slate-700 hover:bg-slate-600 text-xs font-bold  transition text-slate-200 border border-slate-600">
+      <button onclick="openPauseMenu()" class="flex h-10 items-center px-3.5 bg-slate-700 hover:bg-slate-600 text-xs font-bold  transition text-slate-200 border border-slate-600">
         ☰ Menu
       </button>
       <div id="account-area" class="relative">
-        <button type="button" id="account-button" onclick="handleAccountButtonClick(event)" title="Conta" class="flex items-center gap-2 pl-1.5 pr-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-xs font-bold transition text-slate-100 border border-slate-600">
+        <button type="button" id="account-button" onclick="handleAccountButtonClick(event)" title="Conta" class="flex h-10 items-center gap-2 pl-1.5 pr-3 bg-slate-700 hover:bg-slate-600 text-xs font-bold transition text-slate-100 border border-slate-600">
           <img id="account-avatar" src="/assets/avatar.svg" alt="Foto do perfil" class="w-7 h-7 rounded-full object-cover bg-slate-800 border border-slate-500">
           <span id="account-name" class="max-w-[90px] truncate">Entrar</span>
         </button>
@@ -912,6 +937,89 @@
     };
     let activeTokenAnimation = null;
     let movementSession = 0;
+
+    /* -------------------------------------------------------------
+       JOGO EM SEGUNDO PLANO (Web Worker como relógio do jogo)
+       Em abas ocultas o navegador limita drasticamente os timers da
+       página (até 1x por minuto). O worker não sofre essa limitação:
+       enquanto a aba está em segundo plano, ele dispara os callbacks
+       agendados do jogo (turnos da CPU, passagens de vez e o relógio
+       do turno), mantendo a partida acontecendo.
+    ------------------------------------------------------------- */
+    let gameEpoch = 0; // invalida callbacks agendados de partidas antigas
+    let scheduledCallbacks = []; // fila usada apenas enquanto a aba está oculta
+    let backgroundClockWorker = null;
+
+    function getBackgroundClock() {
+      if (backgroundClockWorker) return backgroundClockWorker;
+
+      try {
+        const source =
+          "let timer=null;" +
+          "onmessage=e=>{if(e.data==='start'){if(!timer)timer=setInterval(()=>postMessage('tick'),200);}" +
+          "else if(e.data==='stop'){if(timer){clearInterval(timer);timer=null;}}};";
+        backgroundClockWorker = new Worker(URL.createObjectURL(new Blob([source], { type: 'application/javascript' })));
+        backgroundClockWorker.onmessage = (event) => {
+          if (event.data === 'tick') runBackgroundTick();
+        };
+      } catch (error) {
+        backgroundClockWorker = null; // sem worker: o jogo segue apenas com a aba visível
+      }
+
+      return backgroundClockWorker;
+    }
+
+    function startBackgroundClock() {
+      const worker = getBackgroundClock();
+      if (worker) worker.postMessage('start');
+    }
+
+    function stopBackgroundClock() {
+      scheduledCallbacks = [];
+      if (backgroundClockWorker) backgroundClockWorker.postMessage('stop');
+    }
+
+    function invalidateScheduledCallbacks() {
+      gameEpoch++;
+      scheduledCallbacks = [];
+    }
+
+    function runBackgroundTick() {
+      // Roda primeiro o que ficou pendente enquanto a aba esteve oculta
+      if (scheduledCallbacks.length > 0) {
+        const now = Date.now();
+        const due = [];
+        scheduledCallbacks = scheduledCallbacks.filter(entry => {
+          if (entry.due <= now) { due.push(entry); return false; }
+          return true;
+        });
+        due.forEach(entry => entry.fn());
+      }
+
+      // Relógio do turno (o setInterval da página é limitado em abas ocultas)
+      if (document.hidden && turnTimer.endsAt) {
+        tickTurnTimer();
+      }
+    }
+
+    // Agenda callbacks do jogo: com a aba oculta usa o worker, caso
+    // contrário segue o setTimeout normal da página. Callbacks de
+    // partidas encerradas são descartados automaticamente.
+    function schedule(callback, delay) {
+      const epoch = gameEpoch;
+      const run = () => { if (epoch === gameEpoch) callback(); };
+
+      if (document.hidden && getBackgroundClock()) {
+        scheduledCallbacks.push({ fn: run, due: Date.now() + delay });
+        return;
+      }
+
+      setTimeout(run, delay);
+    }
+
+    function waitScheduled(delay) {
+      return new Promise(resolve => schedule(resolve, delay));
+    }
 
     /* -------------------------------------------------------------
        MOTOR DE ÁUDIO (Web Audio API, sem arquivos externos)
@@ -1653,6 +1761,9 @@
       gameAudio.stopMusic();
       gameAudio.playClick();
       stopTurnTimer();
+      // Voltando ao menu: encerra o relógio em segundo plano
+      stopBackgroundClock();
+      invalidateScheduledCallbacks();
       document.getElementById('pause-modal').classList.add('hidden');
       document.getElementById('win-modal').classList.add('hidden');
       document.getElementById('setup-screen').classList.remove('hidden');
@@ -1688,6 +1799,8 @@
 
       // Atualiza o estado do botão Single Player Online baseado na sessão atual
       updateOnlineSingleButton();
+      // Garante que a visão de modos online (Jogo Rápido/Convite) volte ao menu
+      resetOnlineModesUI();
     }
 
     function getCurrentPlayer() {
@@ -1830,7 +1943,7 @@
       isAnimating = false;
       clearHighlights();
 
-      setTimeout(() => {
+      schedule(() => {
         turnTimer.expired = false;
         if (isPaused) {
           renderTurnTimer();
@@ -2033,7 +2146,7 @@
           consecutiveSixes = 0;
           // No modo online, o turno também precisa avançar no oponente
           if (isOnlineGame) sendOnlinePassTurn();
-          setTimeout(nextTurn, 1200);
+          schedule(nextTurn, 1200);
           return;
         }
       } else {
@@ -2065,14 +2178,14 @@
         { transform: finalTransform, offset: 1 }
       ];
 
-      if (typeof dice.animate !== 'function') {
+      // Sem suporte a Web Animations ou com a aba em segundo plano:
+      // aplica a face final do dado diretamente e segue o fluxo da partida
+      if (typeof dice.animate !== 'function' || document.hidden) {
         dice.style.transform = finalTransform;
-        setTimeout(() => {
-          diceCurrentX = finalX;
-          diceCurrentY = finalY;
-          diceCurrentTransform = finalTransform;
-          onDone();
-        }, 1500);
+        diceCurrentX = finalX;
+        diceCurrentY = finalY;
+        diceCurrentTransform = finalTransform;
+        schedule(onDone, document.hidden ? 250 : 1500);
         return;
       }
 
@@ -2118,9 +2231,9 @@
         logStatus(`Nenhum movimento possível para ${getPlayerColor(player).name}.`);
         // No modo online, avisa o oponente para também avançar o turno
         if (isOnlineGame && player === getHumanPlayerKey()) sendOnlinePassTurn();
-        setTimeout(nextTurn, 1200);
+        schedule(nextTurn, 1200);
       } else if (isAutomatedPlayer(player)) {
-        setTimeout(() => makeCPUMove(validTokens), 800);
+        schedule(() => makeCPUMove(validTokens), 800);
       } else if (isOnlineGame && player !== getHumanPlayerKey()) {
         // Turno do oponente remoto: aguardar o movimento chegar via WebSocket
         return;
@@ -2204,17 +2317,9 @@
         }
       ];
 
-      if (typeof token.animate !== 'function') {
-        token.style.transition = `transform ${duration}ms cubic-bezier(0.2, 0.78, 0.24, 1)`;
-        token.style.transform = `translate(${deltaX}px, ${deltaY}px) scale(0.92)`;
-        requestAnimationFrame(() => {
-          token.style.transform = 'translate(0px, 0px) scale(1)';
-        });
-        await wait(duration);
-        token.style.transition = '';
-        token.style.transform = '';
-        return;
-      }
+      // Sem Web Animations ou com a aba em segundo plano: pula a animação,
+      // já posicionando a peça na casa final do movimento.
+      if (typeof token.animate !== 'function' || document.hidden) return;
 
       const animation = token.animate(keyframes, {
         duration,
@@ -2337,6 +2442,9 @@
         } else {
           gameAudio.playDefeat();
         }
+        // Fim da partida: encerra o relógio em segundo plano
+        stopBackgroundClock();
+        invalidateScheduledCallbacks();
         return;
       }
 
@@ -2463,12 +2571,17 @@
       const greeting = playerName ? `Boa sorte, ${playerName}! ` : '';
       logStatus(`${greeting}Partida iniciada! Sua cor (${getPlayerColor(humanPlayerKey).name}) está no Canto Inferior Esquerdo.`);
       checkCPUTurn();
+
+      // Ativa o relógio em segundo plano (Web Worker) e invalida callbacks
+      // agendados de partidas anteriores
+      invalidateScheduledCallbacks();
+      startBackgroundClock();
     }
 
     function checkCPUTurn() {
       const player = getCurrentPlayer();
       if (isAutomatedPlayer(player) && !hasRolled && !isPaused) {
-        setTimeout(() => {
+        schedule(() => {
           if (!isPaused) rollDice();
         }, 600);
       }
@@ -2575,6 +2688,7 @@
     let onlineSendQueue = [];
     let onlineConnecting = false;
     let onlineMatchEnded = false; // partida online encerrada (vitória normal ou W.O.)
+    let onlineQueued = false; // jogador aguardando na fila do Jogo Rápido
     let abandonCountdownInterval = null;
 
     const WS_URL = (window.location.protocol === 'https:' ? 'wss:' : 'ws:') +
@@ -2674,7 +2788,16 @@
           onlinePlayerIdx = data.player;
           document.getElementById('online-room-code-display').textContent = data.room;
           document.getElementById('online-room-created').classList.remove('hidden');
-          document.getElementById('online-status').textContent = 'Sala criada. Aguardando oponente...';
+          if (data.quick) {
+            // Sala criada pelo matchmaking (Jogo Rápido): oponente já encontrado
+            document.getElementById('online-code-hint').classList.add('hidden');
+            document.getElementById('online-waiting').textContent = 'Preparando a partida...';
+            document.getElementById('online-status').textContent = 'Oponente encontrado! Preparando a partida...';
+          } else {
+            document.getElementById('online-code-hint').classList.remove('hidden');
+            document.getElementById('online-waiting').textContent = 'Aguardando oponente...';
+            document.getElementById('online-status').textContent = 'Sala criada. Aguardando oponente...';
+          }
           break;
 
         case 'room_joined':
@@ -2686,6 +2809,7 @@
           break;
 
         case 'room_ready':
+          onlineQueued = false;
           closeOnlineModal();
           startOnlineGame(data.players);
           break;
@@ -2745,16 +2869,125 @@
       }
     }
 
-    function openOnlineModal() {
+    function openOnlineModal(title) {
+      document.getElementById('online-modal-title').textContent = title || 'Convite';
       document.getElementById('online-modal').classList.remove('hidden');
       document.getElementById('online-status').textContent = '';
       document.getElementById('online-room-created').classList.add('hidden');
       document.getElementById('online-waiting').textContent = 'Aguardando oponente...';
+      document.getElementById('online-code-hint').textContent = 'Envie este código para o seu amigo.';
+      document.getElementById('online-code-hint').classList.remove('hidden');
       document.getElementById('online-room-code').value = '';
+      document.getElementById('online-join-section').classList.remove('hidden');
     }
 
     function closeOnlineModal() {
+      if (onlineQueued) {
+        // Sai da fila do Jogo Rápido ao fechar o modal
+        sendOnline({ type: 'leave_queue' });
+        onlineQueued = false;
+      }
       document.getElementById('online-modal').classList.add('hidden');
+    }
+
+    /* -------------------------------------------------------------
+       MODOS ONLINE (tela inicial): Jogo Rápido e Convite
+       O botão Single Player online abre esta visão com três botões:
+       JOGO RÁPIDO (fila de matchmaking), CONVITE (sala com código)
+       e VOLTAR (menu principal).
+    ------------------------------------------------------------- */
+    function showOnlineModes() {
+      const mainView = document.getElementById('setup-main-view');
+      const modesView = document.getElementById('online-modes-view');
+      if (!mainView || !modesView) return;
+      mainView.classList.add('hidden');
+      modesView.classList.remove('hidden');
+    }
+
+    function hideOnlineModes() {
+      // Volta ao menu principal da tela inicial
+      resetOnlineModesUI();
+      gameAudio.playClick();
+    }
+
+    function resetOnlineModesUI() {
+      const mainView = document.getElementById('setup-main-view');
+      const modesView = document.getElementById('online-modes-view');
+      if (mainView) mainView.classList.remove('hidden');
+      if (modesView) modesView.classList.add('hidden');
+    }
+
+    // Identificador único da conta Google (usado para impedir que a mesma
+    // conta participe da mesma partida nos dois lados)
+    function getAccountUid() {
+      if (typeof accountUser === 'undefined' || !accountUser) return null;
+      return accountUser.id || accountUser.googleSub || accountUser.email || accountUser.playerName || null;
+    }
+
+    function startQuickMatch() {
+      gameAudio.playClick();
+
+      if (typeof accountUser === 'undefined' || !accountUser) return;
+
+      onlineQueued = true;
+      openOnlineModal('Jogo Rápido');
+      // Na fila de matchmaking não existe código para digitar: esconde a entrada
+      document.getElementById('online-join-section').classList.add('hidden');
+      document.getElementById('online-status').textContent = 'Procurando um oponente...';
+
+      sendOnline({
+        type: 'quick_match',
+        uid: getAccountUid(),
+        name: accountUser.playerName || accountUser.displayName || 'Jogador'
+      });
+    }
+
+    // CONVITE: abre o modal de sala com código para o amigo entrar
+    function openInviteModal() {
+      gameAudio.playClick();
+      createOnlineRoom();
+    }
+
+    // Copia o código da sala para a área de transferência
+    function copyRoomCode() {
+      const codeEl = document.getElementById('online-room-code-display');
+      const statusEl = document.getElementById('online-status');
+      const code = codeEl ? codeEl.textContent.trim() : '';
+      if (!code) return;
+
+      const done = () => {
+        if (statusEl) {
+          statusEl.textContent = 'Código copiado para a área de transferência!';
+          statusEl.style.color = '#4ade80';
+          setTimeout(function restoreStatus() {
+            statusEl.textContent = 'Sala criada. Aguardando oponente...';
+            statusEl.style.color = '';
+          }, 2500);
+        }
+      };
+
+      // clipboard API exige a página focada; sem foco vai direto ao fallback
+      if (document.hasFocus() && navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(code).then(done).catch(() => fallbackCopy());
+      } else {
+        fallbackCopy();
+      }
+
+      function fallbackCopy() {
+        const textarea = document.createElement('textarea');
+        textarea.value = code;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        try {
+          document.execCommand('copy');
+          done();
+        } catch (error) {
+          if (statusEl) statusEl.textContent = 'Não foi possível copiar. Copie o código manualmente.';
+        }
+        document.body.removeChild(textarea);
+      }
     }
 
     /* -------------------------------------------------------------
@@ -2798,6 +3031,10 @@
 
     function showResignationScreen(humanWon) {
       stopTurnTimer();
+      // Partida encerrada por desistência: desliga o relógio em segundo plano
+      // e descarta callbacks ainda pendentes da partida antiga
+      stopBackgroundClock();
+      invalidateScheduledCallbacks();
       movementSession++;
       if (activeDiceAnimation) { activeDiceAnimation.cancel(); activeDiceAnimation = null; }
       if (activeTokenAnimation) { activeTokenAnimation.cancel(); activeTokenAnimation = null; }
@@ -2814,8 +3051,8 @@
       winTitle.className = `win-title font-display font-black ${humanWon ? 'text-amber-400' : 'text-red-500'}`;
       winSubtitle.innerText = 'DESISTÊNCIA';
       winSubtitle.className = `win-subtitle font-display font-black ${humanWon ? 'text-amber-400' : 'text-red-500'}`;
-      // Placar de desistência: quem desiste leva o "O", quem fica leva o "W"
-      document.getElementById('win-score').innerText = humanWon ? 'W - O' : 'O - W';
+      // Placar por desistência: o vencedor recebe "4 - 0" e quem desiste recebe "0 - 4"
+      document.getElementById('win-score').innerText = humanWon ? '4 - 0' : '0 - 4';
       document.getElementById('win-modal').classList.remove('hidden');
 
       if (humanWon) gameAudio.playVictory();
@@ -2870,18 +3107,22 @@
       }
 
       const name = accountUser.playerName || accountUser.displayName || 'Jogador 1';
-      sendOnline({ type: 'join_room', room: '', name });
+      sendOnline({ type: 'join_room', room: '', name, uid: getAccountUid() });
     }
 
     function joinOnlineRoom() {
+      if (typeof accountUser === 'undefined' || !accountUser) {
+        document.getElementById('online-status').textContent = 'Você precisa fazer login com o Google para jogar online.';
+        return;
+      }
+
       const code = document.getElementById('online-room-code').value.trim().toUpperCase();
-      const nameInput = document.getElementById('player-name-input');
-      const name = (nameInput ? nameInput.value : '') || accountUser?.playerName || accountUser?.displayName || 'Jogador 2';
+      const name = accountUser.playerName || accountUser.displayName || 'Jogador 2';
       if (!code) {
         document.getElementById('online-status').textContent = 'Informe o código da sala.';
         return;
       }
-      sendOnline({ type: 'join_room', room: code, name });
+      sendOnline({ type: 'join_room', room: code, name, uid: getAccountUid() });
     }
 
     function startOnlineGame(players) {
