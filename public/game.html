@@ -633,8 +633,8 @@
 
   <!-- AVISO GIGANTE DE PARTIDA ENCONTRADA (matchmaking) -->
   <div id="match-found-overlay" class="hidden fixed inset-0 bg-slate-950/95 z-[60] flex-col items-center justify-center gap-6 text-center px-4">
-    <h2 class="font-display font-black text-amber-400 w-full leading-none tracking-tight text-[9vw] drop-shadow-[0_4px_12px_rgba(0,0,0,0.8)]">PARTIDA ENCONTRADA</h2>
-    <p id="match-found-countdown" class="font-brand text-xs sm:text-sm text-amber-400 tracking-wider min-h-[18px]">Começando o jogo em 5...</p>
+    <h2 class="font-display font-black text-white w-full leading-none tracking-tight text-[9vw] drop-shadow-[0_4px_12px_rgba(0,0,0,0.8)]">PARTIDA ENCONTRADA</h2>
+    <p id="match-found-countdown" class="font-brand text-xs sm:text-sm text-white tracking-wider min-h-[18px]">Começando o jogo em 5...</p>
   </div>
 
   <!-- MENU DE PAUSA -->
@@ -2939,14 +2939,18 @@
 
       let seconds = 0;
       const update = () => {
-        const mm = String(Math.floor(seconds / 60)).padStart(2, '0');
+        // Formato M:SS (um algarismo para minutos, dois para segundos)
+        const m = String(Math.floor(seconds / 60));
         const ss = String(seconds % 60).padStart(2, '0');
-        timerEl.textContent = `${mm}:${ss}`;
+        timerEl.textContent = `${m}:${ss}`;
       };
 
       wrap.classList.remove('hidden');
       update();
-      quickMatchTimerInterval = setInterval(update, 1000);
+      quickMatchTimerInterval = setInterval(() => {
+        seconds++;
+        update();
+      }, 1000);
     }
 
     function stopQuickMatchTimer() {
