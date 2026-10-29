@@ -15,6 +15,7 @@ const PUBLIC_DIR = path.join(ROOT, 'public');
 const DATA_DIR = path.join(ROOT, 'data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
+const MATCHES_FILE = path.join(DATA_DIR, 'matches.json');
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -195,6 +196,10 @@ async function ensureDataFiles() {
 
   if (!fss.existsSync(SESSIONS_FILE)) {
     await fs.writeFile(SESSIONS_FILE, JSON.stringify({}, null, 2), 'utf8');
+  }
+
+  if (!fss.existsSync(MATCHES_FILE)) {
+    await fs.writeFile(MATCHES_FILE, JSON.stringify({}, null, 2), 'utf8');
   }
 }
 
@@ -460,6 +465,68 @@ async function handleAuthConfig(request, response) {
   });
 }
 
+/* -------------------------------------------------------------
+   HISTÓRICO DE PARTIDAS
+   Cada jogador registra a partida em que participou (fim normal,
+   vitória/derrota por desistência ou W.O.), com sua própria visão
+   do resultado; o servidor guarda por usuário.
+------------------------------------------------------------- */
+const MATCH_RECORD_LIMIT = 100;
+const MATCH_MODES = new Set(['quick', 'invite', 'local']);
+
+function sanitizeMatchRecord(body) {
+  const mode = MATCH_MODES.has(body.mode) ? body.mode : 'local';
+  const result = body.result === 'win' ? 'win' : 'loss';
+  const toScore = (value) => {
+    const num = Math.floor(Number(value));
+    return Number.isFinite(num) && num >= 0 ? num : 0;
+  };
+  const opponentName = String(body.opponentName || '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 40) || 'Oponente';
+  return {
+    id: crypto.randomUUID(),
+    finishedAt: new Date().toISOString(),
+    mode,
+    result,
+    playerScore: toScore(body.playerScore),
+    opponentScore: toScore(body.opponentScore),
+    opponentName
+  };
+}
+
+async function createMatchRecord(request, response) {
+  const user = await getSessionUser(request);
+  if (!user) {
+    sendJson(response, 401, { error: 'Sessão expirada.' });
+    return;
+  }
+
+  try {
+    const body = await readJsonBody(request);
+    const record = sanitizeMatchRecord(body);
+
+    const matches = await readJsonFile(MATCHES_FILE);
+    const history = matches[user.id] || [];
+    history.unshift(record);
+    matches[user.id] = history.slice(0, MATCH_RECORD_LIMIT);
+    await writeJsonFile(MATCHES_FILE, matches);
+
+    sendJson(response, 201, { ok: true, record });
+  } catch (error) {
+    sendJson(response, 400, { error: error.message });
+  }
+}
+
+async function listMatchRecords(request, response) {
+  const user = await getSessionUser(request);
+  if (!user) {
+    sendJson(response, 401, { error: 'Sessão expirada.' });
+    return;
+  }
+
+  const matches = await readJsonFile(MATCHES_FILE);
+  sendJson(response, 200, { matches: (matches[user.id] || []).slice(0, 50) });
+}
+
 function isSafePublicPath(urlPath) {
   const decodedPath = decodeURIComponent(urlPath.split('?')[0]);
   const relativePath = path.normalize(decodedPath).replace(/^(\.\.[/\\])+/, '');
@@ -521,6 +588,16 @@ async function handleRequest(request, response) {
 
     if (request.method === 'GET' && urlPath === '/api/session') {
       await handleSession(request, response);
+      return;
+    }
+
+    if (request.method === 'GET' && urlPath === '/api/matches') {
+      await listMatchRecords(request, response);
+      return;
+    }
+
+    if (request.method === 'POST' && urlPath === '/api/matches') {
+      await createMatchRecord(request, response);
       return;
     }
 
