@@ -722,7 +722,7 @@
   </div>
 
   <!-- CABEÇALHO DO JOGO -->
-  <header id="game-header" class="relative z-[80] w-full max-w-4xl flex flex-wrap items-center justify-between gap-2 py-2.5 px-3 sm:px-4 bg-slate-800/90  backdrop-blur-md mb-2 border border-slate-700 shadow-md">
+  <header id="game-header" class="relative z-40 w-full max-w-4xl flex flex-wrap items-center justify-between gap-2 py-2.5 px-3 sm:px-4 bg-slate-800/90  backdrop-blur-md mb-2 border border-slate-700 shadow-md">
     <div class="flex items-center gap-2">
       <img src="/assets/luud.svg" onerror="this.onerror=null;this.src='/assets/luud.png'" alt="LUUD" class="h-28 sm:h-40 w-auto select-none" draggable="false">
     </div>
@@ -731,23 +731,26 @@
       <button id="pause-menu-button" onclick="openPauseMenu()" class="flex h-10 items-center px-3.5 bg-slate-700 hover:bg-slate-600 text-xs font-bold  transition text-slate-200 border border-slate-600">
         ☰ Menu
       </button>
-      <div id="account-area" class="relative">
-        <button type="button" id="account-button" onclick="handleAccountButtonClick(event)" title="Conta" class="flex h-10 items-center gap-2 pl-1.5 pr-3 bg-slate-700 hover:bg-slate-600 text-xs font-bold transition text-slate-100 border border-slate-600">
-          <img id="account-avatar" src="/assets/avatar.svg" alt="Foto do perfil" class="w-7 h-7 rounded-full object-cover bg-slate-800 border border-slate-500">
-          <span id="account-name" class="max-w-[90px] truncate">Entrar</span>
-        </button>
-        <div id="account-dropdown" class="hidden absolute right-0 mt-2 w-60 bg-slate-800 border border-slate-600 shadow-2xl overflow-hidden z-50">
-          <div class="px-4 py-3 border-b border-slate-700">
-            <p id="dropdown-account-name" class="text-sm font-bold text-slate-100 truncate">Conta</p>
-            <p id="dropdown-account-email" class="text-xs text-slate-400 truncate">Não conectado</p>
-          </div>
-          <button type="button" onclick="openProfileModal()" class="w-full px-4 py-3 text-left text-sm text-slate-100 hover:bg-slate-700 transition">Perfil</button>
-          <button type="button" onclick="openHistoryModal()" class="w-full px-4 py-3 text-left text-sm text-slate-100 hover:bg-slate-700 transition">Histórico</button>
-          <button type="button" onclick="logoutAccount()" class="w-full px-4 py-3 text-left text-sm text-red-300 hover:bg-slate-700 transition">Sair</button>
-        </div>
-      </div>
+      <div id="account-area-holder" class="flex items-center"></div>
     </div>
   </header>
+
+  <!-- Botão de conta (na partida fica no cabeçalho; na tela inicial flutua no canto) -->
+  <div id="account-area" class="relative">
+    <button type="button" id="account-button" onclick="handleAccountButtonClick(event)" title="Conta" class="flex h-10 items-center gap-2 pl-1.5 pr-3 bg-slate-700 hover:bg-slate-600 text-xs font-bold transition text-slate-100 border border-slate-600">
+      <img id="account-avatar" src="/assets/avatar.svg" alt="Foto do perfil" class="w-7 h-7 rounded-full object-cover bg-slate-800 border border-slate-500">
+      <span id="account-name" class="max-w-[90px] truncate">Entrar</span>
+    </button>
+    <div id="account-dropdown" class="hidden absolute right-0 mt-2 w-60 bg-slate-800 border border-slate-600 shadow-2xl overflow-hidden z-50">
+      <div class="px-4 py-3 border-b border-slate-700">
+        <p id="dropdown-account-name" class="text-sm font-bold text-slate-100 truncate">Conta</p>
+        <p id="dropdown-account-email" class="text-xs text-slate-400 truncate">Não conectado</p>
+      </div>
+      <button type="button" onclick="openProfileModal()" class="w-full px-4 py-3 text-left text-sm text-slate-100 hover:bg-slate-700 transition">Perfil</button>
+      <button type="button" onclick="openHistoryModal()" class="w-full px-4 py-3 text-left text-sm text-slate-100 hover:bg-slate-700 transition">Histórico</button>
+      <button type="button" onclick="logoutAccount()" class="w-full px-4 py-3 text-left text-sm text-red-300 hover:bg-slate-700 transition">Sair</button>
+    </div>
+  </div>
 
   <!-- ÁREA DO TABULEIRO E CONTROLES -->
   <main class="flex flex-col lg:flex-row items-center justify-center gap-4 sm:gap-6 w-full max-w-5xl my-auto">
@@ -1793,6 +1796,27 @@
       startGame();
     }
 
+    // Posiciona o botão de conta conforme a tela:
+    // - tela inicial: flutua sozinho no canto superior direito (sem o
+    //   cabeçalho por cima do menu, evitando telas sobrepostas);
+    // - durante a partida: volta para a posição no cabeçalho.
+    function layoutAccountArea() {
+      const area = document.getElementById('account-area');
+      const setup = document.getElementById('setup-screen');
+      if (!area || !setup) return;
+
+      if (!setup.classList.contains('hidden')) {
+        area.classList.add('absolute', 'top-3', 'right-3', 'sm:top-4', 'sm:right-4', 'z-[85]');
+        area.classList.remove('relative');
+        setup.appendChild(area);
+      } else {
+        area.classList.add('relative');
+        area.classList.remove('absolute', 'top-3', 'right-3', 'sm:top-4', 'sm:right-4', 'z-[85]');
+        const holder = document.getElementById('account-area-holder');
+        if (holder && area.parentElement !== holder) holder.appendChild(area);
+      }
+    }
+
     // Esconde/mostra o botão ☰ Menu do cabeçalho.
     // Escondido na tela inicial (sem partida em andamento) para que o
     // cabeçalho sirva apenas de acesso à conta nessa tela.
@@ -1910,6 +1934,7 @@
       document.getElementById('pause-modal').classList.add('hidden');
       document.getElementById('win-modal').classList.add('hidden');
       document.getElementById('setup-screen').classList.remove('hidden');
+      layoutAccountArea();
 
       // Reseta o estado do jogo online (a sala anterior deixa de ser válida)
       isOnlineGame = false;
@@ -2733,6 +2758,7 @@
       startBackgroundClock();
       // O botão Menu volta a ficar disponível durante a partida
       setMenuButtonVisible(true);
+      layoutAccountArea();
     }
 
     function checkCPUTurn() {
@@ -3669,6 +3695,8 @@
       initGoogleLoginSetup();
       // Tela inicial: sem partida em andamento, o Menu fica oculto
       setMenuButtonVisible(false);
+      // Botão de conta flutuando no canto da tela inicial
+      layoutAccountArea();
 
       // Se já estiver logado, habilita o botão Single Player Online.
       // (a sessão também é reavaliada pelo auth.js após carregar /api/session)
