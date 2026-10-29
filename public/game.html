@@ -621,10 +621,20 @@
 
       <p id="online-status" class="text-xs text-slate-400 min-h-[16px]"></p>
 
+      <div id="quick-match-timer-wrap" class="hidden space-y-1">
+        <p id="quick-match-timer" class="font-mono text-xl text-amber-400 tracking-widest">00:00</p>
+      </div>
+
       <button onclick="closeOnlineModal()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
         Voltar
       </button>
     </div>
+  </div>
+
+  <!-- AVISO GIGANTE DE PARTIDA ENCONTRADA (matchmaking) -->
+  <div id="match-found-overlay" class="hidden fixed inset-0 bg-slate-950/95 z-[60] flex-col items-center justify-center gap-6 text-center px-4">
+    <h2 class="font-display font-black text-amber-400 w-full leading-none tracking-tight text-[9vw] drop-shadow-[0_4px_12px_rgba(0,0,0,0.8)]">PARTIDA ENCONTRADA</h2>
+    <p id="match-found-countdown" class="font-brand text-xs sm:text-sm text-amber-400 tracking-wider min-h-[18px]">Começando o jogo em 5...</p>
   </div>
 
   <!-- MENU DE PAUSA -->
@@ -2689,6 +2699,9 @@
     let onlineConnecting = false;
     let onlineMatchEnded = false; // partida online encerrada (vitória normal ou W.O.)
     let onlineQueued = false; // jogador aguardando na fila do Jogo Rápido
+    let quickMatchTimerInterval = null; // cronômetro da fila do Jogo Rápido
+    let matchFoundInterval = null; // contagem regressiva do aviso "PARTIDA ENCONTRADA"
+    let pendingQuickStart = null; // jogadores da partida encontrada, aguardando o aviso terminar
     let abandonCountdownInterval = null;
 
     const WS_URL = (window.location.protocol === 'https:' ? 'wss:' : 'ws:') +
@@ -2789,7 +2802,11 @@
           document.getElementById('online-room-code-display').textContent = data.room;
           document.getElementById('online-room-created').classList.remove('hidden');
           if (data.quick) {
-            // Sala criada pelo matchmaking (Jogo Rápido): oponente já encontrado
+            // Sala criada pelo matchmaking (Jogo Rápido): oponente já encontrado.
+            // Para o cronômetro da fila e mostra o aviso gigante com contagem
+            stopQuickMatchTimer();
+            pendingQuickStart = null;
+            showMatchFoundNotice();
             document.getElementById('online-code-hint').classList.add('hidden');
             document.getElementById('online-waiting').textContent = 'Preparando a partida...';
             document.getElementById('online-status').textContent = 'Oponente encontrado! Preparando a partida...';
@@ -2809,6 +2826,12 @@
           break;
 
         case 'room_ready':
+          // Durante o aviso "PARTIDA ENCONTRADA", guarda os jogadores e
+          // começa o jogo quando a contagem regressiva chegar ao fim
+          if (matchFoundInterval) {
+            pendingQuickStart = data.players;
+            return;
+          }
           onlineQueued = false;
           closeOnlineModal();
           startOnlineGame(data.players);
@@ -2837,6 +2860,12 @@
             // O oponente saiu enquanto aguardávamos na sala
             logStatus('O oponente saiu da sala.');
             closeOnlineModal();
+          }
+          // Cancela o aviso se o oponente sumiu antes de começar a partida
+          if (matchFoundInterval) {
+            clearMatchFoundInterval();
+            hideMatchFoundNotice();
+            pendingQuickStart = null;
           }
           break;
 
@@ -2887,7 +2916,103 @@
         sendOnline({ type: 'leave_queue' });
         onlineQueued = false;
       }
+      stopQuickMatchTimer();
+      if (matchFoundInterval) {
+        // Fechando o modal durante o aviso: cancela a contagem
+        // e descarta a partida pendente (a sala ficou indisponível)
+        clearMatchFoundInterval();
+        hideMatchFoundNotice();
+        pendingQuickStart = null;
+      }
       document.getElementById('online-modal').classList.add('hidden');
+    }
+
+    /* -------------------------------------------------------------
+       CRONÔMETRO DA FILA (Jogo Rápido)
+       Conta o tempo de espera na fila, no estilo do código da sala
+    ------------------------------------------------------------- */
+    function startQuickMatchTimer() {
+      stopQuickMatchTimer();
+      const wrap = document.getElementById('quick-match-timer-wrap');
+      const timerEl = document.getElementById('quick-match-timer');
+      if (!wrap || !timerEl) return;
+
+      let seconds = 0;
+      const update = () => {
+        const mm = String(Math.floor(seconds / 60)).padStart(2, '0');
+        const ss = String(seconds % 60).padStart(2, '0');
+        timerEl.textContent = `${mm}:${ss}`;
+      };
+
+      wrap.classList.remove('hidden');
+      update();
+      quickMatchTimerInterval = setInterval(update, 1000);
+    }
+
+    function stopQuickMatchTimer() {
+      if (quickMatchTimerInterval) {
+        clearInterval(quickMatchTimerInterval);
+        quickMatchTimerInterval = null;
+      }
+      const wrap = document.getElementById('quick-match-timer-wrap');
+      if (wrap) wrap.classList.add('hidden');
+    }
+
+    /* -------------------------------------------------------------
+       AVISO GIGANTE "PARTIDA ENCONTRADA"
+       Cobre a página com a notícia e conta 5 segundos antes de
+       começar a partida (o jogo só inicia no fim da contagem)
+    ------------------------------------------------------------- */
+    function showMatchFoundNotice() {
+      const overlay = document.getElementById('match-found-overlay');
+      const countdownEl = document.getElementById('match-found-countdown');
+      if (!overlay) return;
+
+      clearMatchFoundInterval();
+      overlay.classList.remove('hidden');
+      overlay.classList.add('flex');
+
+      let seconds = 5;
+      const update = () => {
+        if (countdownEl) countdownEl.textContent = `Começando o jogo em ${seconds}...`;
+      };
+      update();
+
+      matchFoundInterval = setInterval(() => {
+        seconds--;
+        if (seconds <= 0) {
+          clearMatchFoundInterval();
+          hideMatchFoundNotice();
+          startPendingQuickGame();
+        } else {
+          update();
+        }
+      }, 1000);
+    }
+
+    function clearMatchFoundInterval() {
+      if (matchFoundInterval) {
+        clearInterval(matchFoundInterval);
+        matchFoundInterval = null;
+      }
+    }
+
+    function hideMatchFoundNotice() {
+      const overlay = document.getElementById('match-found-overlay');
+      if (overlay) {
+        overlay.classList.add('hidden');
+        overlay.classList.remove('flex');
+      }
+    }
+
+    function startPendingQuickGame() {
+      const players = pendingQuickStart;
+      pendingQuickStart = null;
+      onlineQueued = false;
+      closeOnlineModal();
+      if (players) {
+        startOnlineGame(players);
+      }
     }
 
     /* -------------------------------------------------------------
@@ -2934,6 +3059,8 @@
       // Na fila de matchmaking não existe código para digitar: esconde a entrada
       document.getElementById('online-join-section').classList.add('hidden');
       document.getElementById('online-status').textContent = 'Procurando um oponente...';
+      // Cronômetro de espera na fila
+      startQuickMatchTimer();
 
       sendOnline({
         type: 'quick_match',
