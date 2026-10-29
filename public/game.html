@@ -632,7 +632,7 @@
   </div>
 
   <!-- AVISO GIGANTE DE PARTIDA ENCONTRADA (matchmaking) -->
-  <div id="match-found-overlay" class="hidden fixed inset-0 bg-slate-950/95 z-[60] flex-col items-center justify-center gap-6 text-center px-4">
+  <div id="match-found-overlay" class="hidden fixed inset-0 bg-slate-950/95 z-[100] flex-col items-center justify-center gap-6 text-center px-4">
     <h2 class="font-display font-black text-white w-full leading-none tracking-tight text-[9vw] drop-shadow-[0_4px_12px_rgba(0,0,0,0.8)]">PARTIDA ENCONTRADA</h2>
     <p id="match-found-countdown" class="font-brand text-xs sm:text-sm text-white tracking-wider min-h-[18px]">Começando o jogo em 5...</p>
   </div>
@@ -642,7 +642,7 @@
     <div class="bg-slate-800 border border-slate-700 p-6 max-w-xs w-full text-center space-y-4 shadow-2xl">
       <div class="space-y-1">
         <h2 class="font-display text-2xl font-black text-slate-100">MENU</h2>
-        <p class="text-xs text-slate-400 font-medium text-center">Jogo pausado</p>
+        <p id="pause-subtitle" class="text-xs text-slate-400 font-medium text-center">Jogo pausado</p>
       </div>
 
       <div class="grid grid-cols-2 gap-2 pt-2">
@@ -671,7 +671,7 @@
   </div>
 
   <!-- AJUSTES DE SOM -->
-  <div id="sound-modal" class="hidden fixed inset-0 z-[60] bg-slate-950/75 backdrop-blur-sm flex items-start sm:items-center justify-center p-4">
+  <div id="sound-modal" class="hidden fixed inset-0 z-[100] bg-slate-950/75 backdrop-blur-sm flex items-start sm:items-center justify-center p-4">
     <div class="bg-slate-800 border-2 border-slate-600 p-5 max-w-sm w-full shadow-2xl space-y-5">
       <div class="flex items-center justify-between gap-3">
         <h2 class="font-display text-xl font-black text-slate-100">AJUSTES DE SOM</h2>
@@ -701,14 +701,34 @@
     </div>
   </div>
 
+  <!-- HISTÓRICO DE PARTIDAS -->
+  <div id="history-modal" class="hidden fixed inset-0 z-[90] bg-slate-950/90 flex items-center justify-center p-4">
+    <div class="bg-slate-900 border-2 border-slate-600 w-full max-w-xl shadow-2xl max-h-[85vh] overflow-y-auto">
+      <div class="px-5 py-4 border-b-2 border-slate-700 flex items-center justify-between gap-3">
+        <h2 class="font-display text-xl sm:text-2xl font-black text-slate-100">HISTÓRICO DE PARTIDAS</h2>
+        <button type="button" onclick="closeHistoryModal()" class="w-9 h-9 bg-slate-700 hover:bg-slate-600 text-slate-200 text-lg leading-none" aria-label="Fechar histórico">✕</button>
+      </div>
+
+      <div id="history-list" class="p-4 space-y-2">
+        <p class="text-sm text-slate-400 text-center py-6">Carregando...</p>
+      </div>
+
+      <div class="px-5 pb-5">
+        <button onclick="closeHistoryModal()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold text-sm border border-slate-600">
+          FECHAR
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- CABEÇALHO DO JOGO -->
-  <header class="relative z-40 w-full max-w-4xl flex flex-wrap items-center justify-between gap-2 py-2.5 px-3 sm:px-4 bg-slate-800/90  backdrop-blur-md mb-2 border border-slate-700 shadow-md">
+  <header id="game-header" class="relative z-[80] w-full max-w-4xl flex flex-wrap items-center justify-between gap-2 py-2.5 px-3 sm:px-4 bg-slate-800/90  backdrop-blur-md mb-2 border border-slate-700 shadow-md">
     <div class="flex items-center gap-2">
       <img src="/assets/luud.svg" onerror="this.onerror=null;this.src='/assets/luud.png'" alt="LUUD" class="h-28 sm:h-40 w-auto select-none" draggable="false">
     </div>
 
     <div class="flex items-center gap-2">
-      <button onclick="openPauseMenu()" class="flex h-10 items-center px-3.5 bg-slate-700 hover:bg-slate-600 text-xs font-bold  transition text-slate-200 border border-slate-600">
+      <button id="pause-menu-button" onclick="openPauseMenu()" class="flex h-10 items-center px-3.5 bg-slate-700 hover:bg-slate-600 text-xs font-bold  transition text-slate-200 border border-slate-600">
         ☰ Menu
       </button>
       <div id="account-area" class="relative">
@@ -722,6 +742,7 @@
             <p id="dropdown-account-email" class="text-xs text-slate-400 truncate">Não conectado</p>
           </div>
           <button type="button" onclick="openProfileModal()" class="w-full px-4 py-3 text-left text-sm text-slate-100 hover:bg-slate-700 transition">Perfil</button>
+          <button type="button" onclick="openHistoryModal()" class="w-full px-4 py-3 text-left text-sm text-slate-100 hover:bg-slate-700 transition">Histórico</button>
           <button type="button" onclick="logoutAccount()" class="w-full px-4 py-3 text-left text-sm text-red-300 hover:bg-slate-700 transition">Sair</button>
         </div>
       </div>
@@ -808,7 +829,7 @@
   </div>
 
   <!-- MODAL DE PERFIL DA CONTA -->
-  <div id="account-profile-modal" class="hidden fixed inset-0 z-[70] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+  <div id="account-profile-modal" class="hidden fixed inset-0 z-[100] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="bg-slate-800 border border-slate-600 shadow-2xl w-full max-w-lg p-6 space-y-5">
       <div class="flex items-center justify-between gap-3">
         <h2 class="font-display text-2xl font-black text-slate-100">Perfil</h2>
@@ -1729,20 +1750,35 @@
 
     function openPauseMenu() {
       gameAudio.playClick();
-      isPaused = true;
-      pauseTurnTimer();
-      if (activeDiceAnimation) activeDiceAnimation.pause();
-      if (activeTokenAnimation) activeTokenAnimation.pause();
+
+      // No modo online não existe pausa: a partida segue rodando (inclusive
+      // o relógio do turno, mesmo com a aba em segundo plano)
+      const onlinePlaying = isOnlineGame && !onlineMatchEnded;
+      const subtitle = document.getElementById('pause-subtitle');
+      if (subtitle) subtitle.classList.toggle('hidden', onlinePlaying);
+
+      if (!onlinePlaying) {
+        isPaused = true;
+        pauseTurnTimer();
+        if (activeDiceAnimation) activeDiceAnimation.pause();
+        if (activeTokenAnimation) activeTokenAnimation.pause();
+      }
+
       document.getElementById('pause-modal').classList.remove('hidden');
     }
 
     function closePauseMenu() {
       gameAudio.playClick();
+      const onlinePlaying = isOnlineGame && !onlineMatchEnded;
+      document.getElementById('pause-modal').classList.add('hidden');
+
+      // No modo online nada foi pausado; apenas fecha o menu
+      if (onlinePlaying) return;
+
       isPaused = false;
       resumeTurnTimer();
       if (activeDiceAnimation) activeDiceAnimation.play();
       if (activeTokenAnimation) activeTokenAnimation.play();
-      document.getElementById('pause-modal').classList.add('hidden');
       checkCPUTurn();
     }
 
@@ -1755,6 +1791,102 @@
         return;
       }
       startGame();
+    }
+
+    // Esconde/mostra o botão ☰ Menu do cabeçalho.
+    // Escondido na tela inicial (sem partida em andamento) para que o
+    // cabeçalho sirva apenas de acesso à conta nessa tela.
+    function setMenuButtonVisible(visible) {
+      const btn = document.getElementById('pause-menu-button');
+      if (btn) btn.classList.toggle('hidden', !visible);
+    }
+
+    /* -------------------------------------------------------------
+       HISTÓRICO DE PARTIDAS
+       Toda partida finalizada é registrada na conta do jogador
+       (fim normal, desistência ou W.O.) via /api/matches, e pode
+       ser consultada no menu da conta ou pelo botão Histórico.
+    ------------------------------------------------------------- */
+    const MATCH_MODE_LABELS = {
+      quick: 'Jogo Rápido',
+      invite: 'Convite',
+      local: 'Local vs CPU'
+    };
+
+    function escapeHtmlText(text) {
+      return String(text).replace(/[&<>"']/g, ch => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      })[ch]);
+    }
+
+    function postMatchRecord(mode, result, playerScore, opponentScore, opponentName) {
+      if (typeof accountUser === 'undefined' || !accountUser) return;
+
+      try {
+        fetch('/api/matches', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode, result, playerScore, opponentScore, opponentName })
+        }).catch(() => { /* histórico é o melhor esforço */ });
+      } catch (error) { /* ignora falhas de rede aqui */ }
+    }
+
+    function openHistoryModal() {
+      gameAudio.playClick();
+      if (typeof hideAccountDropdown === 'function') hideAccountDropdown();
+
+      const modal = document.getElementById('history-modal');
+      const list = document.getElementById('history-list');
+      if (!modal || !list) return;
+
+      modal.classList.remove('hidden');
+      list.innerHTML = '<p class="text-sm text-slate-400 text-center py-6">Carregando...</p>';
+
+      fetch('/api/matches')
+        .then(response => {
+          if (!response.ok) throw new Error('Falha ao carregar o histórico.');
+          return response.json();
+        })
+        .then(data => renderHistoryList(Array.isArray(data.matches) ? data.matches : []))
+        .catch(() => {
+          list.innerHTML = '<p class="text-sm text-red-400 text-center py-6">Não foi possível carregar o histórico. Tente novamente.</p>';
+        });
+    }
+
+    function closeHistoryModal() {
+      gameAudio.playClick();
+      const modal = document.getElementById('history-modal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function renderHistoryList(records) {
+      const list = document.getElementById('history-list');
+      if (!list) return;
+
+      if (records.length === 0) {
+        list.innerHTML = '<p class="text-sm text-slate-400 text-center py-6">Nenhuma partida registrada ainda.</p>';
+        return;
+      }
+
+      list.innerHTML = records.map(record => {
+        const win = record.result === 'win';
+        const when = new Date(record.finishedAt);
+        const whenLabel = when.toLocaleDateString('pt-BR') + ' às ' +
+          when.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        const modeLabel = MATCH_MODE_LABELS[record.mode] || record.mode;
+        const resultColor = win ? 'text-emerald-400' : 'text-red-400';
+        const borderColor = win ? 'border-emerald-700' : 'border-red-700';
+
+        return `
+          <div class="bg-slate-800 border-2 ${borderColor} p-3 flex items-center justify-between gap-3">
+            <div class="min-w-0 text-left">
+              <p class="font-brand font-black text-sm ${resultColor}">${win ? 'VITÓRIA' : 'DERROTA'}</p>
+              <p class="text-xs text-slate-300 truncate">${escapeHtmlText(modeLabel)} · vs ${escapeHtmlText(record.opponentName)}</p>
+              <p class="text-[11px] text-slate-500">${whenLabel}</p>
+            </div>
+            <p class="font-mono text-lg text-slate-100 whitespace-nowrap">${record.playerScore} - ${record.opponentScore}</p>
+          </div>`;
+      }).join('');
     }
 
     function openSetupModal() {
@@ -1774,6 +1906,7 @@
       // Voltando ao menu: encerra o relógio em segundo plano
       stopBackgroundClock();
       invalidateScheduledCallbacks();
+      setMenuButtonVisible(false);
       document.getElementById('pause-modal').classList.add('hidden');
       document.getElementById('win-modal').classList.add('hidden');
       document.getElementById('setup-screen').classList.remove('hidden');
@@ -1781,6 +1914,7 @@
       // Reseta o estado do jogo online (a sala anterior deixa de ser válida)
       isOnlineGame = false;
       onlineMatchEnded = false;
+      onlineMatchType = 'local';
       onlineRoomCode = null;
       onlinePlayerIdx = null;
       onlineOpponentName = null;
@@ -2452,9 +2586,20 @@
         } else {
           gameAudio.playDefeat();
         }
+
+        // Registra o resultado no histórico da conta
+        postMatchRecord(
+          isOnlineGame ? onlineMatchType : 'local',
+          humanWon ? 'win' : 'loss',
+          getHumanTeamScore(),
+          getCpuScore(),
+          isOnlineGame ? (onlineOpponentName || 'Oponente') : 'CPU'
+        );
+
         // Fim da partida: encerra o relógio em segundo plano
         stopBackgroundClock();
         invalidateScheduledCallbacks();
+        setMenuButtonVisible(false);
         return;
       }
 
@@ -2586,6 +2731,8 @@
       // agendados de partidas anteriores
       invalidateScheduledCallbacks();
       startBackgroundClock();
+      // O botão Menu volta a ficar disponível durante a partida
+      setMenuButtonVisible(true);
     }
 
     function checkCPUTurn() {
@@ -2699,6 +2846,7 @@
     let onlineConnecting = false;
     let onlineMatchEnded = false; // partida online encerrada (vitória normal ou W.O.)
     let onlineQueued = false; // jogador aguardando na fila do Jogo Rápido
+    let onlineMatchType = 'local'; // 'quick' | 'invite' | 'local' (para o histórico)
     let quickMatchTimerInterval = null; // cronômetro da fila do Jogo Rápido
     let matchFoundInterval = null; // contagem regressiva do aviso "PARTIDA ENCONTRADA"
     let pendingQuickStart = null; // jogadores da partida encontrada, aguardando o aviso terminar
@@ -2804,6 +2952,7 @@
           if (data.quick) {
             // Sala criada pelo matchmaking (Jogo Rápido): oponente já encontrado.
             // Para o cronômetro da fila e mostra o aviso gigante com contagem
+            onlineMatchType = 'quick';
             stopQuickMatchTimer();
             pendingQuickStart = null;
             showMatchFoundNotice();
@@ -2821,6 +2970,7 @@
           onlineRoomCode = data.room;
           onlinePlayerIdx = data.player;
           onlineOpponentName = data.opponent;
+          onlineMatchType = 'invite';
           document.getElementById('online-status').textContent =
             `Você entrou como ${data.name}. Oponente: ${data.opponent}. Aguardando início...`;
           break;
@@ -3132,6 +3282,10 @@
     function startAbandonFlow(localAbandoned) {
       // Encerra a partida: nenhuma outra mensagem será exibida além desta
       onlineMatchEnded = true;
+
+      // Guarda o modo e o oponente para o histórico antes de trocar o modo
+      const matchMode = onlineMatchType;
+      const opponentName = onlineOpponentName;
       isOnlineGame = false;
 
       if (localAbandoned && onlineWs) {
@@ -3143,7 +3297,7 @@
       }
 
       // Quem desiste perde; quem recebe a desistência vence
-      showResignationScreen(!localAbandoned);
+      showResignationScreen(!localAbandoned, matchMode, opponentName);
     }
 
     // Botão DESISTIR do menu: encerra a partida atual por desistência
@@ -3157,15 +3311,18 @@
       }
 
       // Desistir de uma partida local (vs CPU): derrota direta do jogador
-      showResignationScreen(false);
+      showResignationScreen(false, 'local', 'CPU');
     }
 
-    function showResignationScreen(humanWon) {
+    function showResignationScreen(humanWon, matchMode, opponentName) {
+      matchMode = matchMode || 'local';
+      opponentName = opponentName || 'Oponente';
       stopTurnTimer();
       // Partida encerrada por desistência: desliga o relógio em segundo plano
       // e descarta callbacks ainda pendentes da partida antiga
       stopBackgroundClock();
       invalidateScheduledCallbacks();
+      setMenuButtonVisible(false);
       movementSession++;
       if (activeDiceAnimation) { activeDiceAnimation.cancel(); activeDiceAnimation = null; }
       if (activeTokenAnimation) { activeTokenAnimation.cancel(); activeTokenAnimation = null; }
@@ -3185,6 +3342,9 @@
       // Placar por desistência: o vencedor recebe "4 - 0" e quem desiste recebe "0 - 4"
       document.getElementById('win-score').innerText = humanWon ? '4 - 0' : '0 - 4';
       document.getElementById('win-modal').classList.remove('hidden');
+
+      // Registra o resultado por desistência no histórico da conta
+      postMatchRecord(matchMode, humanWon ? 'win' : 'loss', humanWon ? 4 : 0, humanWon ? 0 : 4, opponentName);
 
       if (humanWon) gameAudio.playVictory();
       else gameAudio.playDefeat();
@@ -3226,6 +3386,9 @@
         document.getElementById('online-status').textContent = 'Você precisa fazer login com o Google para jogar online.';
         return;
       }
+
+      // Partida online via convite (para o histórico)
+      onlineMatchType = 'invite';
 
       // Se este jogador já criou uma sala, apenas exibe o código existente
       // (evita criar salas duplicadas ao clicar várias vezes no botão)
@@ -3504,6 +3667,8 @@
       initBoard();
       initWebSocket();
       initGoogleLoginSetup();
+      // Tela inicial: sem partida em andamento, o Menu fica oculto
+      setMenuButtonVisible(false);
 
       // Se já estiver logado, habilita o botão Single Player Online.
       // (a sessão também é reavaliada pelo auth.js após carregar /api/session)
