@@ -72,3 +72,67 @@ Os logins seguintes entram na mesma conta.
 - `data/users.json` — contas criadas.
 - `data/sessions.json` — sessões ativas.
 - `.env.example` — exemplo de configuração.
+
+## Deploy no Render
+
+1. No Render, use:
+   - **Build Command:** `yarn install`
+   - **Start Command:** `node server.js`
+2. Em **Environment**, cadastre:
+   - `GOOGLE_CLIENT_ID` — o Client ID do Google;
+   - `NODE_ENV` — `production`.
+3. O Render injeta automaticamente a variável `PORT`.
+4. O servidor precisa escutar em `0.0.0.0`, não em `127.0.0.1`.
+
+Este projeto já está configurado para usar:
+
+```js
+server.listen(PORT, '0.0.0.0');
+```
+
+Se você quiser um health check, use:
+
+```text
+/healthz
+```
+
+Exemplo:
+
+```text
+https://seu-app.onrender.com/healthz
+```
+
+### Origem autorizada no Google Cloud
+
+Depois que o Render gerar o endereço final do app, adicione essa origem no Google Cloud Console:
+
+```text
+https://seu-app.onrender.com
+```
+
+Não use barra no final.
+
+### Mantendo o banco de dados permanente (sobrevive a deploys)
+
+O Render usa sistema de arquivos efêmero: os arquivos `data/users.json`,
+`data/sessions.json` e `data/matches.json` são apagados a cada novo deploy.
+
+Para que contas, sessões, histórico de partidas e a nova lista de amizades
+sobrevivam aos deploys, crie um **Persistent Disk** no Render:
+
+1. No painel do Render, acesse seu serviço > **Disks** > **Add Disk**:
+   - **Name:** `luud-data` (ou outro nome de sua escolha);
+   - **Mount Path:** `/var/data`;
+   - **Size:** o que desejar (ex.: 1 GB).
+2. Em **Environment**, cadastre a variável:
+   - `DATA_DIR=/var/data`
+3. Faça um novo deploy.
+
+O servidor grava tudo em `DATA_DIR` (por padrão `data/` dentro do projeto, usado
+em desenvolvimento local). Com o disco montado em `/var/data`, contas, sessões,
+histórico e amizades permanecem salvos mesmo após deploys via GitHub.
+
+> Se `DATA_DIR` não estiver definido em produção, o servidor exibe um aviso no
+> log e os dados serão perdidos a cada deploy.
+
+
