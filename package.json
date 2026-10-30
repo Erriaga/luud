@@ -12,7 +12,7 @@
   },
   "private": true,
   "dependencies": {
-    "ws": "^8.18.0",
+    "ws": "8.14.2",
     "pg": "^8.11.0"
   }
 }
