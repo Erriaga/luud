@@ -117,22 +117,51 @@ Não use barra no final.
 O Render usa sistema de arquivos efêmero: os arquivos `data/users.json`,
 `data/sessions.json` e `data/matches.json` são apagados a cada novo deploy.
 
-Para que contas, sessões, histórico de partidas e a nova lista de amizades
-sobrevivam aos deploys, crie um **Persistent Disk** no Render:
+Você tem duas opções para manter os dados permanentes:
+
+#### Opção A: Banco de dados externo gratuito (recomendado — não precisa de plano pago)
+
+O servidor agora suporta **PostgreSQL externo** via variável `DATABASE_URL`.
+Quando definida, contas, sessões, histórico e amizades são gravados no banco
+externo em vez de arquivos locais, sobrevivendo a deploys sem precisar de
+Persistent Disk pago.
+
+Provedores PostgreSQL com plano gratuito:
+
+| Serviço | Free tier | Link |
+|---------|-----------|------|
+| **Supabase** | 500 MB | https://supabase.com/ |
+| **Neon** | 3 GB | https://neon.tech/ |
+| **Render PostgreSQL** | (teste gratuito) | https://render.com/ |
+| **ElephantSQL** | 20 MB | https://elephantsql.com/ |
+
+**Como configurar no Render:**
+
+1. Crie um banco PostgreSQL em um dos provedores acima.
+2. Copie a string de conexão (exemplo: `postgres://user:pass@host:port/db?sslmode=require`).
+3. No painel do Render, acesse seu serviço > **Environment** e cadastre:
+   - `DATABASE_URL` = a string de conexão completa
+   - `NODE_ENV` = `production`
+   - `GOOGLE_CLIENT_ID` = seu Client ID do Google
+4. Faça um novo deploy. O servidor detecta `DATABASE_URL` e usa o banco externo
+   automaticamente.
+
+> Não é necessário criar Persistent Disk quando usa `DATABASE_URL`.
+
+#### Opção B: Persistent Disk (plano pago do Render)
+
+Se preferir continuar usando arquivos JSON locais, crie um **Persistent Disk**
+no Render (requer plano pago):
 
 1. No painel do Render, acesse seu serviço > **Disks** > **Add Disk**:
-   - **Name:** `luud-data` (ou outro nome de sua escolha);
+   - **Name:** `luud-data`;
    - **Mount Path:** `/var/data`;
-   - **Size:** o que desejar (ex.: 1 GB).
-2. Em **Environment**, cadastre a variável:
+   - **Size:** 1 GB (ou mais).
+2. Em **Environment**, cadastre:
    - `DATA_DIR=/var/data`
 3. Faça um novo deploy.
 
-O servidor grava tudo em `DATA_DIR` (por padrão `data/` dentro do projeto, usado
-em desenvolvimento local). Com o disco montado em `/var/data`, contas, sessões,
-histórico e amizades permanecem salvos mesmo após deploys via GitHub.
-
-> Se `DATA_DIR` não estiver definido em produção, o servidor exibe um aviso no
-> log e os dados serão perdidos a cada deploy.
+> Se nem `DATABASE_URL` nem `DATA_DIR` estiverem definidos em produção, o
+> servidor exibe um aviso no log e os dados serão perdidos a cada deploy.
 
 
