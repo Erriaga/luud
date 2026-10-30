@@ -750,7 +750,10 @@
         <p id="dropdown-account-email" class="text-xs text-slate-400 truncate">Não conectado</p>
       </div>
       <button type="button" onclick="openProfileModal()" class="w-full px-4 py-3 text-left text-sm text-slate-100 hover:bg-slate-700 transition">Perfil</button>
-      <button type="button" onclick="openFriendsModal()" class="w-full px-4 py-3 text-left text-sm text-slate-100 hover:bg-slate-700 transition">Amigos</button>
+      <button type="button" onclick="openFriendsModal()" class="w-full px-4 py-3 text-left text-sm text-slate-100 hover:bg-slate-700 transition flex items-center justify-between group">
+        <span>Amigos</span>
+        <span id="friends-badge" class="hidden w-5 h-5 bg-red-500 text-white text-[10px] rounded-full flex items-center justify-center font-bold group-hover:opacity-100 transition-opacity">1</span>
+      </button>
       <button type="button" onclick="openHistoryModal()" class="w-full px-4 py-3 text-left text-sm text-slate-100 hover:bg-slate-700 transition">Histórico de partidas</button>
       <button type="button" onclick="logoutAccount()" class="w-full px-4 py-3 text-left text-sm text-red-300 hover:bg-slate-700 transition">Sair</button>
     </div>
@@ -2014,6 +2017,17 @@
        sobrenome, Conta Google e opções de amizade.
     ------------------------------------------------------------- */
 
+    function updateFriendsBadge() {
+      const badge = document.getElementById('friends-badge');
+      if (!badge) return;
+      if (pendingFriendRequestsCount > 0) {
+        badge.textContent = String(pendingFriendRequestsCount);
+        badge.classList.remove('hidden');
+      } else {
+        badge.classList.add('hidden');
+      }
+    }
+
     function positionOpponentMenu() {
       const menu = document.getElementById('opponent-menu');
       const anchor = document.getElementById('scoreboard');
@@ -2301,7 +2315,9 @@
         return;
       }
 
-      document.getElementById('friends-count').textContent = data.friends.length;
+      // Sincroniza o contador de notificações com as solicitações recebidas do servidor
+      pendingFriendRequestsCount = Array.isArray(data.friendRequestsReceived) ? data.friendRequestsReceived.length : 0;
+      updateFriendsBadge();
       document.getElementById('friends-list-title').textContent = `Lista de amigos (${data.friends.length})`;
 
       const list = document.getElementById('friends-list');
@@ -2380,7 +2396,7 @@
         let action = '';
         let statusText = '';
         if (rel === 'none') {
-          action = `<button type="button" data-friend-action="add" data-friend-id="${escapeHtmlText(acc.id)}" data-friend-name="${safeName}" class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3 py-1.5 rounded transition">+ Adicionar amigo</button>`;
+          action = `<button type="button" data-friend-action="add" data-friend-id="${escapeHtmlText(acc.id)}" data-friend-name="${safeName}" onclick="handleAddFriendButton(this, '${escapeHtmlText(acc.id)}')" class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3 py-1.5 rounded transition">+ Adicionar amigo</button>`;
           statusText = '';
         } else if (rel === 'friend') {
           action = `<button type="button" disabled class="text-xs font-bold px-3 py-1.5 rounded bg-slate-700/50 text-slate-500">Já é seu amigo</button>`;
@@ -2407,6 +2423,21 @@
       } catch (error) {
         status.textContent = 'Erro ao buscar a conta.';
         result.innerHTML = '';
+      }
+    }
+
+    async function handleAddFriendButton(btn, targetId) {
+      // Feedback imediato: troca o botão para "Solicitação enviada"
+      btn.textContent = 'Solicitação enviada';
+      btn.disabled = true;
+      btn.className = 'text-xs font-bold px-3 py-1.5 rounded bg-slate-700/50 text-slate-500';
+      try {
+        await executeFriendAction('request', targetId);
+      } catch (error) {
+        // Em caso de falha, restaura o botão para tentar novamente
+        btn.textContent = '+ Adicionar amigo';
+        btn.disabled = false;
+        btn.className = 'bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3 py-1.5 rounded transition';
       }
     }
 
@@ -3403,6 +3434,7 @@
     let onlineOpponentProfile = null; // perfil completo do oponente (id, e-mail, foto)
     let opponentMenuOpen = false; // menu do oponente aberto no placar
     let friendConfirmTarget = null; // { id, name } aguardando confirmação de remoção
+    let pendingFriendRequestsCount = 0; // solicitações de amizade recebidas não lidas
 
     const WS_URL = (window.location.protocol === 'https:' ? 'wss:' : 'ws:') +
       '//' + window.location.host + '/ws';
@@ -3439,6 +3471,11 @@
           while (onlineSendQueue.length > 0) {
             const msg = onlineSendQueue.shift();
             sendOnlineRaw(msg);
+          }
+          // Identifica o usuário logado para receber notificações em tempo real
+          // (solicitações de amizade, etc.) mesmo sem estar numa sala de jogo.
+          if (typeof accountUser !== 'undefined' && accountUser) {
+            sendOnline({ type: 'identify', uid: accountUser.id });
           }
         };
 
@@ -3601,6 +3638,21 @@
 
         case 'ack':
           // confirmação de entrega, não requer ação
+          break;
+
+        case 'friend_request_received':
+          // Alguém enviou uma solicitação de amizade para esta conta.
+          pendingFriendRequestsCount = (pendingFriendRequestsCount || 0) + 1;
+          updateFriendsBadge();
+          const fromName = (data.from && (data.from.playerName || data.from.name || data.from.displayName)) || 'Alguém';
+          logStatus(`Nova solicitação de amizade de ${escapeHtmlText(fromName)}`);
+          break;
+
+        case 'friend_request_accepted':
+          // Sua solicitação foi aceita: atualiza a lista se a modal estiver aberta
+          if (!document.getElementById('friends-modal').classList.contains('hidden')) {
+            renderFriends();
+          }
           break;
 
         case 'error':
@@ -4199,6 +4251,15 @@
           const data = await serverResponse.json();
           // Atualiza a UI da conta no header (se existir) e o nome do jogador
           if (typeof updateAccountUI === 'function') updateAccountUI(data.user);
+
+          // Identifica esta conexão WebSocket para receber notificações em tempo real
+          // (solicitações de amizade, etc.) mesmo sem estar numa sala de jogo.
+          if (onlineWs && onlineWs.readyState === WebSocket.OPEN) {
+            onlineWs.send(JSON.stringify({ type: 'identify', uid: data.user.id }));
+          } else if (onlineWs && onlineWs.readyState === WebSocket.CONNECTING) {
+            onlineSendQueue.push({ type: 'identify', uid: data.user.id });
+          }
+
           const nameInput = document.getElementById('player-name-input');
           if (nameInput && !nameInput.value) {
             nameInput.value = data.user.playerName || data.user.displayName || '';
