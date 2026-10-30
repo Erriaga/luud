@@ -1,0 +1,4417 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LUUD - O seu jogo de Ludo!</title>
+  <!-- Ícone da aba da página: o próprio logo da marca -->
+  <link rel="icon" href="/assets/luud.svg" type="image/svg+xml">
+  <link rel="icon" href="/assets/luud.png" type="image/png">
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Anton (display), Oswald (interface) e Fredoka (texto do jogo) -->
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Fredoka:wght@400;600;700&family=Oswald:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Google Identity Services (login Conta Google) -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+
+  <style>
+    :root {
+      --red-player-color: #ef233c;
+      --red-player-border: #ef233c;
+      --red-player-cell-border: #cbd5e1;
+      --red-player-pastel: #fca5a5;
+      --green-player-color: #00a86b;
+      --green-player-border: #00a86b;
+      --green-player-cell-border: #cbd5e1;
+      --green-player-pastel: #86efac;
+      --yellow-player-color: #ffcc00;
+      --yellow-player-border: #ffcc00;
+      --yellow-player-cell-border: #cbd5e1;
+      --yellow-player-pastel: #fde047;
+      --blue-player-color: #0096ff;
+      --blue-player-border: #0096ff;
+      --blue-player-cell-border: #cbd5e1;
+      --blue-player-pastel: #93c5fd;
+      --custom-player-color: #8b5cf6;
+      --custom-player-text: #c4b5fd;
+    }
+
+    body {
+      font-family: 'Fredoka', sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    /* Identidade da marca: mesma linguagem do logo (letras angulares e condensadas) */
+    .font-display {
+      font-family: 'Anton', 'Arial Narrow', Impact, sans-serif !important;
+      letter-spacing: 0.04em;
+    }
+
+    .font-brand {
+      font-family: 'Oswald', 'Arial Narrow', sans-serif !important;
+      letter-spacing: 0.05em;
+    }
+
+    /* Interface (botões e etiquetas) na tipografia condensada da marca */
+    button,
+    label {
+      font-family: 'Oswald', 'Arial Narrow', sans-serif !important;
+      letter-spacing: 0.05em;
+    }
+
+    /* Relógio do turno (30 segundos) */
+    .turn-timer {
+      position: relative;
+      width: 62px;
+      height: 62px;
+      flex-shrink: 0;
+      --timer-color: #fbbf24;
+    }
+
+    .turn-timer svg {
+      width: 100%;
+      height: 100%;
+      transform: rotate(-90deg);
+      display: block;
+    }
+
+    .timer-track {
+      fill: none;
+      stroke: rgba(148, 163, 184, 0.22);
+      stroke-width: 9;
+    }
+
+    .timer-progress {
+      fill: none;
+      stroke: var(--timer-color);
+      stroke-width: 9;
+      stroke-linecap: round;
+      stroke-dasharray: 276.46;
+      stroke-dashoffset: 0;
+      transition: stroke-dashoffset 0.15s linear, stroke 0.3s ease;
+    }
+
+    .timer-face {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1px;
+      pointer-events: none;
+    }
+
+    .timer-value {
+      font-family: 'Anton', 'Arial Narrow', sans-serif;
+      font-size: 1.4rem;
+      line-height: 1;
+      color: #e2e8f0;
+    }
+
+    .timer-unit {
+      font-family: 'Oswald', sans-serif;
+      font-size: 0.6rem;
+      font-weight: 600;
+      color: #64748b;
+      text-transform: uppercase;
+      align-self: flex-end;
+      padding-bottom: 3px;
+    }
+
+    .turn-timer.is-idle {
+      opacity: 0.4;
+    }
+
+    .turn-timer.is-warning .timer-progress {
+      stroke: #f97316;
+    }
+
+    .turn-timer.is-danger .timer-progress {
+      stroke: #ef233c;
+    }
+
+    .turn-timer.is-danger .timer-value {
+      color: #fca5a5;
+    }
+
+    .turn-timer.is-expired {
+      animation: timer-pulse 0.7s ease-in-out infinite;
+    }
+
+    @keyframes timer-pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+    }
+
+    /* Botão Google na tela inicial */
+    .google-button {
+      min-height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 0;
+    }
+
+    .google-button iframe,
+    .google-button [role="button"],
+    .google-button [role="button"] div,
+    .google-button > div,
+    .google-button > div > div {
+      border: 0 !important;
+      outline: none !important;
+      box-shadow: none !important;
+    }
+
+    .google-button > div,
+    .google-button > div > div {
+      background: transparent !important;
+    }
+
+    .status {
+      margin-top: 18px;
+      min-height: 24px;
+      color: #f87171;
+      font-size: 14px;
+    }
+
+    input,
+    textarea {
+      user-select: text;
+      -webkit-user-select: text;
+    }
+
+    /* Tabuleiro Ludo Responsivo em Grid 15x15 */
+    .ludo-board {
+      display: grid;
+      grid-template-columns: repeat(15, 1fr);
+      grid-template-rows: repeat(15, 1fr);
+      width: 100%;
+      max-width: min(92vw, 720px);
+      aspect-ratio: 1 / 1;
+      border: 6px solid #0f172a;
+      box-shadow: 0 20px 30px -5px rgba(0,0,0,0.6), 0 10px 15px -5px rgba(0,0,0,0.4);
+      border-radius: 0;
+      overflow: hidden;
+      position: relative;
+      background-color: #ffffff;
+      margin: auto;
+    }
+
+    .cell {
+      border: 1px solid #cbd5e1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      font-weight: bold;
+      background-color: #ffffff;
+      overflow: visible;
+    }
+
+    /* Cores fiéis à imagem de referência */
+    .bg-red-ludo { background-color: var(--red-player-color) !important; border-color: var(--red-player-cell-border); }
+    .bg-green-ludo { background-color: var(--green-player-color) !important; border-color: var(--green-player-cell-border); }
+    .bg-yellow-ludo { background-color: var(--yellow-player-color) !important; border-color: var(--yellow-player-cell-border); }
+    .bg-blue-ludo { background-color: var(--blue-player-color) !important; border-color: var(--blue-player-cell-border); }
+
+    .border-red-ludo { border-color: var(--red-player-border); }
+    .border-green-ludo { border-color: var(--green-player-border); }
+    .border-yellow-ludo { border-color: var(--yellow-player-border); }
+    .border-blue-ludo { border-color: var(--blue-player-border); }
+
+    /* Cor personalizada do jogador humano */
+    .bg-player-custom { background-color: var(--custom-player-color) !important; }
+    .text-player-custom { color: var(--custom-player-text) !important; }
+    .border-player-custom { border-color: var(--custom-player-color) !important; }
+
+    /* Acento de texto por slot: permite pintar cada base com cores
+       personalizadas distintas (inclusive a cor do oponente online) */
+    .text-red-player-custom { color: var(--red-player-text) !important; }
+    .text-green-player-custom { color: var(--green-player-text) !important; }
+    .text-yellow-player-custom { color: var(--yellow-player-text) !important; }
+    .text-blue-player-custom { color: var(--blue-player-text) !important; }
+
+    /* Cores claras precisam de contornos pretos para destacar casas, bases e peças */
+    body.custom-light-color .ludo-board {
+      border-color: #000000;
+    }
+
+    body.custom-light-color #custom-color-swatch {
+      border-color: #000000;
+    }
+
+    input[type="color"] {
+      border-radius: 0;
+    }
+
+    input[type="color"]::-webkit-color-swatch-wrapper {
+      padding: 0;
+      border-radius: 0;
+    }
+
+    input[type="color"]::-webkit-color-swatch {
+      border: 0;
+      border-radius: 0;
+    }
+
+    input[type="range"] {
+      appearance: none;
+      -webkit-appearance: none;
+      border-radius: 0;
+      background: #475569;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 18px;
+      height: 18px;
+      background: #fbbf24;
+      border: 2px solid #0f172a;
+      border-radius: 0;
+      cursor: pointer;
+    }
+
+    input[type="range"]::-moz-range-thumb {
+      width: 16px;
+      height: 16px;
+      background: #fbbf24;
+      border: 2px solid #0f172a;
+      border-radius: 0;
+      cursor: pointer;
+    }
+
+    /* Peças Perfeitamente Circulares */
+    .token {
+      width: 75%;
+      height: 75%;
+      aspect-ratio: 1 / 1;
+      border-radius: 50%;
+      border: 3px solid #0f172a;
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.85), 0 4px 8px rgba(0, 0, 0, 0.48);
+      transition: transform 0.2s ease-in-out;
+      cursor: pointer;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .token.human-piece {
+      border-color: #ffffff;
+      outline: 2px solid rgba(255, 255, 255, 0.92);
+      outline-offset: 1px;
+      box-shadow: 0 0 0 2px #0f172a, 0 4px 9px rgba(0, 0, 0, 0.52);
+    }
+
+    .token.cpu-piece {
+      border-color: #0f172a;
+      outline: 2px solid rgba(15, 23, 42, 0.92);
+      outline-offset: 1px;
+      box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9), 0 4px 8px rgba(0, 0, 0, 0.46);
+    }
+
+    .token.selectable {
+      animation: pulse-ring 1.2s infinite;
+      transform: scale(1.22);
+      z-index: 20;
+    }
+
+    .token-center {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #f8fafc;
+      border: 1px solid rgba(15, 23, 42, 0.55);
+    }
+
+    .token.human-piece .token-center {
+      background: #0f172a;
+    }
+
+    @keyframes pulse-ring {
+      0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.9), 0 0 0 0 rgba(0,0,0,0.6); }
+      70% { box-shadow: 0 0 0 10px rgba(255, 255, 255, 0), 0 0 12px 2px rgba(0,0,0,0.7); }
+      100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0), 0 0 0 0 rgba(0,0,0,0.6); }
+    }
+
+    /* Dado 3D Interativo com Mapeamento Exato */
+    .dice-container {
+      perspective: 600px;
+      width: 76px;
+      height: 76px;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .dice {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      transform-style: preserve-3d;
+      transition: transform 1.5s cubic-bezier(0.18, 0.72, 0.16, 1);
+      will-change: transform;
+      cursor: pointer;
+    }
+
+    .dice-face {
+      position: absolute;
+      width: 76px;
+      height: 76px;
+      background: #ffffff;
+      border: 2px solid #94a3b8;
+      border-radius: 0;
+      display: grid;
+      grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+      padding: 6px;
+      box-shadow: inset 0 0 8px rgba(0,0,0,0.15);
+    }
+
+    .dot {
+      background-color: #0f172a;
+      border-radius: 50%;
+      align-self: center;
+      justify-self: center;
+      width: 13px;
+      height: 13px;
+    }
+
+    /* Posições exatas das faces 3D do dado */
+    .face-1 { transform: rotateY(0deg) translateZ(38px); }
+    .face-2 { transform: rotateY(-90deg) translateZ(38px); }
+    .face-3 { transform: rotateX(-90deg) translateZ(38px); }
+    .face-4 { transform: rotateX(90deg) translateZ(38px); }
+    .face-5 { transform: rotateY(90deg) translateZ(38px); }
+    .face-6 { transform: rotateY(180deg) translateZ(38px); }
+
+    /* Triângulos do Centro perfeitamente ajustados */
+    .center-triangle-red { clip-path: polygon(0 0, 100% 50%, 0 100%); }
+    .center-triangle-green { clip-path: polygon(0 0, 100% 0, 50% 100%); }
+    .center-triangle-yellow { clip-path: polygon(100% 0, 100% 100%, 0 50%); }
+    .center-triangle-blue { clip-path: polygon(0 100%, 50% 0, 100% 100%); }
+
+    /* Container de Múltiplas Peças garantidamente Circulares */
+    .tokens-container {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      padding: 1px;
+      gap: 1px;
+      position: absolute;
+      inset: 0;
+      z-index: 10;
+    }
+
+    .cell-bg-icon {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    /* Cartão da tela de vitória: permite medir o título em cqw (largura do cartão) */
+    .win-card {
+      container-type: inline-size;
+    }
+
+    /* Título "VITÓRIA"/"DERROTA" sempre em uma única linha */
+    .win-title {
+      font-size: 1.5rem;
+      font-size: clamp(1rem, 11cqw, 2.5rem);
+      letter-spacing: 0.1em;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+
+    /* Frase abaixo do título na tela final (ex.: "DESISTÊNCIA") */
+    .win-subtitle {
+      font-size: clamp(0.85rem, 7.5cqw, 1.75rem);
+      letter-spacing: 0.12em;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+
+    .tokens-container .token {
+      width: 54% !important;
+      height: 54% !important;
+      max-width: 54% !important;
+      max-height: 54% !important;
+      aspect-ratio: 1 / 1 !important;
+    }
+
+    @media (max-width: 640px) {
+      body {
+        padding: 4px !important;
+      }
+
+      .ludo-board {
+        max-width: 96vw;
+        border-width: 4px;
+      }
+
+      .tokens-container .token {
+        width: 64% !important;
+        height: 64% !important;
+        max-width: 64% !important;
+        max-height: 64% !important;
+      }
+
+      .token {
+        border-width: 3px;
+      }
+
+      button {
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+      }
+    }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col items-center justify-between p-2 sm:p-4">
+
+  <!-- TELA INICIAL DE CONFIGURAÇÃO -->
+  <div id="setup-screen" class="fixed inset-0 bg-slate-950/95 z-50 flex items-center justify-center overflow-y-auto p-4">
+    <div class="bg-slate-800 border border-slate-700 p-4 sm:p-6 max-w-md w-full shadow-2xl text-center space-y-5 sm:space-y-6 my-auto">
+      <div class="flex flex-col items-center gap-1">
+        <img src="/assets/luud.svg" onerror="this.onerror=null;this.src='/assets/luud.png'" alt="LUUD" class="w-64 sm:w-80 h-auto select-none" draggable="false">
+      </div>
+
+      <div id="setup-main-view" class="space-y-5 sm:space-y-6 w-full">
+      <!-- Login Google na tela inicial -->
+      <div class="space-y-1 w-full mb-0">
+        <div id="google-button-setup" class="google-button"></div>
+        <div id="login-status-setup" class="status" role="status"></div>
+      </div>
+
+      <!-- Escolha da Cor do Jogador Humano -->
+      <div class="space-y-2 text-center">
+        <label class="text-xs font-bold uppercase tracking-wider text-slate-300">SUA COR</label>
+        <div class="grid grid-cols-4 gap-2">
+          <button type="button" onclick="selectHumanColor('RED')" id="color-btn-RED" class="color-select-btn p-3 border-2 border-transparent flex flex-col items-center justify-center bg-red-500/20 hover:bg-red-500/30 transition">
+            <div class="w-6 h-6 bg-red-500 mb-1 border border-white"></div>
+            <span class="text-xs font-bold text-red-400">Vermelho</span>
+          </button>
+          <button type="button" onclick="selectHumanColor('GREEN')" id="color-btn-GREEN" class="color-select-btn p-3 border-2 border-transparent flex flex-col items-center justify-center bg-green-500/20 hover:bg-green-500/30 transition">
+            <div class="w-6 h-6 bg-green-500 mb-1 border border-white"></div>
+            <span class="text-xs font-bold text-green-400">Verde</span>
+          </button>
+          <button type="button" onclick="selectHumanColor('YELLOW')" id="color-btn-YELLOW" class="color-select-btn p-3 border-2 border-transparent flex flex-col items-center justify-center bg-yellow-500/20 hover:bg-yellow-500/30 transition">
+            <div class="w-6 h-6 bg-yellow-500 mb-1 border border-white"></div>
+            <span class="text-xs font-bold text-yellow-400">Amarelo</span>
+          </button>
+          <button type="button" onclick="selectHumanColor('BLUE')" id="color-btn-BLUE" class="color-select-btn p-3 border-2 border-white flex flex-col items-center justify-center bg-blue-500/20 hover:bg-blue-500/30 transition">
+            <div class="w-6 h-6 bg-blue-500 mb-1 border border-white"></div>
+            <span class="text-xs font-bold text-blue-400">Azul</span>
+          </button>
+        </div>
+
+        <!-- Seleção de cor personalizada -->
+        <div class="mt-3">
+          <button type="button" onclick="toggleCustomColorMenu()" id="color-btn-CUSTOM" class="color-select-btn w-full p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex items-center justify-center gap-2">
+            <span id="custom-color-swatch" class="w-6 h-6 border border-white" style="background-color: #8b5cf6"></span>
+            <span id="custom-color-label" class="text-xs font-bold text-slate-200">Violeta</span>
+            <span id="custom-color-hex-label" class="text-[11px] font-mono text-slate-400">#8B5CF6</span>
+          </button>
+
+          <div id="custom-color-menu" class="hidden mt-3 border border-slate-600 bg-slate-900 p-3 space-y-3">
+            <div>
+              <label for="custom-color-picker" class="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">Escolha Qualquer Cor</label>
+              <input id="custom-color-picker" type="color" value="#8b5cf6" oninput="previewCustomColor(this.value)" onchange="applyCustomColor()" class="h-10 w-16 border border-slate-500 bg-slate-950 p-1 cursor-pointer" aria-label="Seletor de cor personalizada">
+            </div>
+            <div>
+              <label for="custom-color-hex" class="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">Código Hexadecimal</label>
+              <input id="custom-color-hex" type="text" value="#8B5CF6" maxlength="7" oninput="previewCustomColor(this.value)" onchange="applyCustomColor()" class="w-full border border-slate-500 bg-slate-950 px-3 py-2 font-mono text-sm uppercase text-slate-100 outline-none focus:border-slate-300" spellcheck="false">
+            </div>
+            <p id="custom-color-message" class="text-xs text-slate-400">Use o seletor visual ou digite um código como #8B5CF6.</p>
+            <div class="grid grid-cols-2 gap-2">
+              <button type="button" onclick="applyCustomColor()" class="py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm transition">Usar Esta Cor</button>
+              <button type="button" onclick="toggleCustomColorMenu()" class="py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold text-sm transition">Fechar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Escolha do Número de Oponentes (CPU) -->
+      <div class="space-y-2 text-center">
+        <label class="text-xs font-bold uppercase tracking-wider text-slate-300">MODO DE JOGO</label>
+        <p class="text-xs font-bold uppercase tracking-wider text-slate-400">vs CPU</p>
+        <div class="grid grid-cols-2 gap-3">
+          <button type="button" onclick="selectOpponentsMode(1); startGame()" id="mode-btn-1" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
+            <span class="font-bold text-sm text-slate-100">SINGLE PLAYER</span>
+            <span class="text-xs text-slate-400">1 vs 1</span>
+          </button>
+          <button type="button" onclick="selectOpponentsMode(3); startGame()" id="mode-btn-3" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
+            <span class="font-bold text-sm text-slate-100">MULTIPLAYER</span>
+            <span class="text-xs text-slate-400">2 vs 2</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="space-y-2 text-center">
+        <p class="text-xs font-bold uppercase tracking-wider text-slate-400">ONLINE</p>
+        <div class="grid grid-cols-3 gap-1">
+          <button type="button" id="online-single-btn" onclick="showOnlineModes()" class="p-3 border-2 border-transparent bg-slate-700 text-slate-500 transition flex flex-col items-center opacity-70 cursor-not-allowed disabled:opacity-70 disabled:cursor-not-allowed">
+            <span class="font-bold text-sm text-slate-100">SINGLE PLAYER</span>
+            <span class="text-xs text-slate-400">FAZER LOGIN</span>
+          </button>
+          <button type="button" disabled class="p-3 border-2 border-transparent bg-slate-700 text-slate-500 transition flex flex-col items-center opacity-70 cursor-not-allowed">
+            <span class="font-bold text-sm text-slate-100">MULTIPLAYER</span>
+            <span class="text-xs text-slate-400">EM BREVE</span>
+          </button>
+          <button type="button" disabled class="p-3 border-2 border-transparent bg-yellow-500 text-slate-900 transition flex flex-col items-center opacity-90 cursor-not-allowed">
+            <span class="font-bold text-sm text-slate-900">CLASSIFICATÓRIA</span>
+            <span class="text-xs text-slate-400">EM BREVE</span>
+          </button>
+        </div>
+      </div>
+      </div>
+
+      <!-- VISÃO DE MODOS ONLINE (Jogo Rápido / Convite) -->
+      <div id="online-modes-view" class="hidden space-y-5 sm:space-y-6 w-full">
+        <p class="text-xs font-bold uppercase tracking-wider text-slate-400">ONLINE</p>
+        <div class="grid grid-cols-2 gap-3">
+          <button type="button" id="quick-match-btn" onclick="startQuickMatch()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
+            <span class="font-bold text-sm text-slate-100">JOGO RÁPIDO</span>
+            <span class="text-xs text-slate-400">Partida aleatória</span>
+          </button>
+          <button type="button" id="invite-btn" onclick="openInviteModal()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
+            <span class="font-bold text-sm text-slate-100">CONVITE</span>
+            <span class="text-xs text-slate-400">Chame um amigo</span>
+          </button>
+        </div>
+        <button type="button" onclick="hideOnlineModes()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
+          VOLTAR
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DE SALA ONLINE -->
+  <div id="online-modal" class="hidden fixed inset-0 bg-slate-950/90 z-50 flex items-center justify-center p-4">
+    <div class="bg-slate-800 border border-slate-700 p-6 sm:p-8 max-w-md w-full text-center space-y-5 shadow-2xl">
+      <h2 id="online-modal-title" class="font-display text-2xl font-black text-slate-100">Convite</h2>
+
+      <div id="online-join-section" class="space-y-3">
+        <div class="flex gap-2">
+          <input id="online-room-code" type="text" maxlength="6" placeholder="Código da sala" class="flex-1 border border-slate-600 bg-slate-900 px-3 py-2.5 text-slate-100 outline-none focus:border-slate-300 text-center uppercase tracking-widest" autocomplete="off">
+          <button onclick="joinOnlineRoom()" class="py-2.5 bg-slate-700 hover:bg-slate-600 text-white font-bold shadow transition text-sm px-4">
+            Entrar
+          </button>
+        </div>
+      </div>
+
+      <div id="online-room-created" class="hidden space-y-2">
+        <p class="text-xs text-slate-400 uppercase tracking-wider">Seu código da sala:</p>
+        <div class="flex items-center justify-center gap-2">
+          <div id="online-room-code-display" class="font-mono text-xl text-amber-400"></div>
+          <button type="button" onclick="copyRoomCode()" title="Copiar o código para a área de transferência" class="px-3 py-2 bg-slate-700 hover:bg-slate-600 border border-slate-600 text-slate-200 font-bold transition text-xs flex items-center gap-1.5">
+            <span aria-hidden="true">📋</span> Copiar
+          </button>
+        </div>
+        <p id="online-code-hint" class="text-xs text-slate-500">Envie este código para o seu amigo.</p>
+        <p id="online-waiting" class="text-sm text-slate-300">Aguardando oponente...</p>
+      </div>
+
+      <p id="online-status" class="text-xs text-slate-400 min-h-[16px]"></p>
+
+      <div id="quick-match-timer-wrap" class="hidden space-y-1">
+        <p id="quick-match-timer" class="font-mono text-xl text-amber-400 tracking-widest">00:00</p>
+      </div>
+
+      <button onclick="closeOnlineModal()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
+        Voltar
+      </button>
+    </div>
+  </div>
+
+  <!-- AVISO GIGANTE DE PARTIDA ENCONTRADA (matchmaking) -->
+  <div id="match-found-overlay" class="hidden fixed inset-0 bg-slate-950/95 z-[100] flex-col items-center justify-center gap-6 text-center px-4">
+    <h2 class="font-display font-black text-white w-full leading-none tracking-tight text-[9vw] drop-shadow-[0_4px_12px_rgba(0,0,0,0.8)]">PARTIDA ENCONTRADA</h2>
+    <p id="match-found-countdown" class="font-brand text-xs sm:text-sm text-white tracking-wider min-h-[18px]">Começando o jogo em 5...</p>
+  </div>
+
+  <!-- MENU DE PAUSA -->
+  <div id="pause-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-slate-800 border border-slate-700 p-6 max-w-xs w-full text-center space-y-4 shadow-2xl">
+      <div class="space-y-1">
+        <h2 class="font-display text-2xl font-black text-slate-100">MENU</h2>
+        <p id="pause-subtitle" class="text-xs text-slate-400 font-medium text-center">Jogo pausado</p>
+      </div>
+
+      <div class="grid grid-cols-2 gap-2 pt-2">
+        <button type="button" onclick="toggleFullscreen()" class="p-3 bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center border border-slate-600">
+          <span class="font-bold text-sm text-slate-100">TELA CHEIA</span>
+          <span class="text-xs text-slate-400">F11</span>
+        </button>
+        <button type="button" onclick="toggleSoundSettings()" class="p-3 bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center border border-slate-600">
+          <span class="font-bold text-sm text-slate-100">AJUSTES DE SOM</span>
+          <span class="text-xs text-slate-400">Gerencie o volume</span>
+        </button>
+      </div>
+
+      <div class="space-y-2 pt-2">
+        <button onclick="closePauseMenu()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold shadow transition text-sm">
+          VOLTAR
+        </button>
+        <button onclick="restartCurrentGame()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold shadow transition text-sm">
+          REINICIAR
+        </button>
+        <button onclick="resignCurrentGame()" class="w-full py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold shadow transition text-sm">
+          DESISTIR
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- AJUSTES DE SOM -->
+  <div id="sound-modal" class="hidden fixed inset-0 z-[100] bg-slate-950/75 backdrop-blur-sm flex items-start sm:items-center justify-center p-4">
+    <div class="bg-slate-800 border-2 border-slate-600 p-5 max-w-sm w-full shadow-2xl space-y-5">
+      <div class="flex items-center justify-between gap-3">
+        <h2 class="font-display text-xl font-black text-slate-100">AJUSTES DE SOM</h2>
+        <button type="button" onclick="closeSoundSettings()" class="w-9 h-9 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold border border-slate-500" aria-label="Fechar configurações de som">✕</button>
+      </div>
+
+      <div class="space-y-2">
+        <div class="flex items-center justify-between text-sm text-slate-200">
+          <label for="music-volume">Volume da Música</label>
+          <output id="music-volume-value" for="music-volume" class="font-mono text-amber-300">35%</output>
+        </div>
+        <input id="music-volume" type="range" min="0" max="100" value="35" oninput="setMusicVolume(this.value)" class="w-full h-2 bg-slate-600 border border-slate-500 cursor-pointer">
+      </div>
+
+      <div class="space-y-2">
+        <div class="flex items-center justify-between text-sm text-slate-200">
+          <label for="effects-volume">Volume dos Efeitos</label>
+          <output id="effects-volume-value" for="effects-volume" class="font-mono text-amber-300">70%</output>
+        </div>
+        <input id="effects-volume" type="range" min="0" max="100" value="70" oninput="setEffectsVolume(this.value)" class="w-full h-2 bg-slate-600 border border-slate-500 cursor-pointer">
+      </div>
+
+      <div class="grid grid-cols-2 gap-2">
+        <button type="button" onclick="toggleSoundMute()" id="sound-mute-button" class="py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold text-sm border border-slate-500">Silenciar Som</button>
+        <button type="button" onclick="playSoundTest()" class="py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-bold text-sm">Testar Efeito</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- HISTÓRICO DE PARTIDAS -->
+  <div id="history-modal" class="hidden fixed inset-0 z-[90] bg-slate-950/90 flex items-center justify-center p-4">
+    <div class="bg-slate-900 border-2 border-slate-600 w-full max-w-xl shadow-2xl max-h-[85vh] overflow-y-auto">
+      <div class="px-5 py-4 border-b-2 border-slate-700 flex items-center justify-between gap-3">
+        <h2 class="font-display text-xl sm:text-2xl font-black text-slate-100">HISTÓRICO DE PARTIDAS</h2>
+        <button type="button" onclick="closeHistoryModal()" class="w-9 h-9 bg-slate-700 hover:bg-slate-600 text-slate-200 text-lg leading-none" aria-label="Fechar histórico">✕</button>
+      </div>
+
+      <div id="history-list" class="p-4 space-y-2">
+        <p class="text-sm text-slate-400 text-center py-6">Carregando...</p>
+      </div>
+
+      <div class="px-5 pb-5">
+        <button onclick="closeHistoryModal()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold text-sm border border-slate-600">
+          FECHAR
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CABEÇALHO DO JOGO -->
+  <header id="game-header" class="relative z-40 w-full max-w-4xl flex flex-wrap items-center justify-between gap-2 py-2.5 px-3 sm:px-4 bg-slate-800/90  backdrop-blur-md mb-2 border border-slate-700 shadow-md">
+    <div class="flex items-center gap-2">
+      <img src="/assets/luud.svg" onerror="this.onerror=null;this.src='/assets/luud.png'" alt="LUUD" class="h-28 sm:h-40 w-auto select-none" draggable="false">
+    </div>
+
+    <div class="flex items-center gap-2">
+      <button id="pause-menu-button" onclick="openPauseMenu()" class="flex h-10 items-center px-3.5 bg-slate-700 hover:bg-slate-600 text-xs font-bold  transition text-slate-200 border border-slate-600">
+        ☰ Menu
+      </button>
+      <div id="account-area-holder" class="flex items-center"></div>
+    </div>
+  </header>
+
+  <!-- Botão de conta (na partida fica no cabeçalho; na tela inicial flutua no canto) -->
+  <div id="account-area" class="relative">
+    <button type="button" id="account-button" onclick="handleAccountButtonClick(event)" title="Conta" class="flex h-10 items-center gap-2 pl-1.5 pr-3 bg-slate-700 hover:bg-slate-600 text-xs font-bold transition text-slate-100 border border-slate-600">
+      <img id="account-avatar" src="/assets/avatar.svg" alt="Foto do perfil" class="w-7 h-7 rounded-full object-cover bg-slate-800 border border-slate-500">
+      <span id="account-name" class="max-w-[90px] truncate">Entrar</span>
+    </button>
+    <div id="account-dropdown" class="hidden absolute right-0 mt-2 w-60 bg-slate-800 border border-slate-600 shadow-2xl overflow-hidden z-50">
+      <div class="px-4 py-3 border-b border-slate-700">
+        <p id="dropdown-account-name" class="text-sm font-bold text-slate-100 truncate">Conta</p>
+        <p id="dropdown-account-email" class="text-xs text-slate-400 truncate">Não conectado</p>
+      </div>
+      <button type="button" onclick="openProfileModal()" class="w-full px-4 py-3 text-left text-sm text-slate-100 hover:bg-slate-700 transition">Perfil</button>
+      <button type="button" onclick="openFriendsModal()" class="w-full px-4 py-3 text-left text-sm text-slate-100 hover:bg-slate-700 transition flex items-center justify-between group">
+        <span>Amigos</span>
+        <span id="friends-badge" class="hidden w-5 h-5 bg-red-500 text-white text-[10px] rounded-full flex items-center justify-center font-bold group-hover:opacity-100 transition-opacity">1</span>
+      </button>
+      <button type="button" onclick="openHistoryModal()" class="w-full px-4 py-3 text-left text-sm text-slate-100 hover:bg-slate-700 transition">Histórico de partidas</button>
+      <button type="button" onclick="logoutAccount()" class="w-full px-4 py-3 text-left text-sm text-red-300 hover:bg-slate-700 transition">Sair</button>
+    </div>
+  </div>
+
+  <!-- ÁREA DO TABULEIRO E CONTROLES -->
+  <main class="flex flex-col lg:flex-row items-center justify-center gap-4 sm:gap-6 w-full max-w-5xl my-auto">
+    
+    <!-- Tabuleiro Ludo (Aumentado) -->
+    <div id="ludo-board" class="ludo-board">
+      <!-- Células geradas via JS -->
+    </div>
+
+    <!-- Coluna do Relógio, Placar e Controles -->
+    <div class="flex flex-col items-center gap-3 w-full max-w-md lg:w-56">
+
+      <!-- Relógio do turno (30 segundos) -->
+      <div id="turn-timer" class="turn-timer is-idle" role="timer" aria-label="Tempo restante para jogar">
+        <svg viewBox="0 0 100 100" aria-hidden="true" focusable="false">
+          <circle class="timer-track" cx="50" cy="50" r="44"></circle>
+          <circle id="timer-progress" class="timer-progress" cx="50" cy="50" r="44"></circle>
+        </svg>
+        <div class="timer-face">
+          <span id="timer-value" class="timer-value">30</span>
+        </div>
+      </div>
+
+      <!-- Placar da partida (fica acima e fora da caixa de turno e dado) -->
+      <div id="scoreboard" class="w-full flex items-center justify-center gap-2 px-3 py-1.5 bg-slate-800 border border-slate-600 transition-all duration-300 text-slate-100 font-bold text-xs sm:text-sm whitespace-nowrap">
+        <span id="score-player-name" class="max-w-[38vw] lg:max-w-[140px] truncate">Jogador</span>
+        <span id="score-human">0</span>
+        <span class="text-slate-500">-</span>
+        <span id="score-cpu">0</span>
+        <span id="score-cpu-label">CPU</span>
+      </div>
+
+      <!-- Painel de Controles e Dado -->
+      <div class="flex flex-row lg:flex-col items-center justify-around lg:justify-center gap-4 bg-slate-800/90 p-4 sm:p-5  border border-slate-700 w-full shadow-lg">
+
+        <!-- Dado 3D e indicador de turno -->
+        <div class="flex flex-col items-center gap-3 w-full">
+          <div id="turn-badge" class="flex items-center justify-center gap-2 px-4 py-1.5 bg-red-500/20 border border-red-500/50 transition-all duration-300 max-w-full">
+            <div id="turn-color-dot" class="w-3.5 h-3.5 bg-red-500 shrink-0"></div>
+            <span id="turn-text" class="font-bold text-sm text-red-400 truncate">Turno: Jogador</span>
+          </div>
+
+          <div class="dice-container" onclick="handleDiceClick()">
+            <div id="dice" class="dice">
+              <div class="dice-face face-1"><div></div><div></div><div></div><div></div><div class="dot"></div><div></div><div></div><div></div><div></div></div>
+              <div class="dice-face face-2"><div class="dot"></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div class="dot"></div></div>
+              <div class="dice-face face-3"><div class="dot"></div><div></div><div></div><div></div><div class="dot"></div><div></div><div></div><div></div><div class="dot"></div></div>
+              <div class="dice-face face-4"><div class="dot"></div><div></div><div class="dot"></div><div></div><div></div><div></div><div class="dot"></div><div></div><div class="dot"></div></div>
+              <div class="dice-face face-5"><div class="dot"></div><div></div><div class="dot"></div><div></div><div class="dot"></div><div></div><div class="dot"></div><div></div><div class="dot"></div></div>
+              <div class="dice-face face-6"><div class="dot"></div><div class="dot"></div><div class="dot"></div><div></div><div></div><div></div><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+            </div>
+          </div>
+          <span id="dice-instruction" class="text-xs text-slate-400 font-medium text-center">Toque para rolar</span>
+          <p id="status-log" class="text-[11px] text-slate-500 font-medium text-center leading-tight min-h-[14px] max-w-[240px]"></p>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <!-- RODAPÉ -->
+  <footer class="w-full max-w-5xl mt-4 mb-1 flex items-center justify-center gap-2 text-center">
+    <p class="font-brand text-xs sm:text-sm text-slate-500 tracking-widest">© 2026 LUUD Studios™</p>
+  </footer>
+
+  <!-- MENU DO OPONENTE (partida online) -->
+  <div id="opponent-menu" class="hidden fixed z-[60] w-[260px]">
+    <div class="bg-slate-800 border border-slate-600 shadow-2xl p-4">
+      <div class="flex items-center gap-3 mb-3">
+        <img id="opp-menu-avatar" src="/assets/avatar.svg" alt="Foto do oponente" class="w-12 h-12 rounded-full object-cover bg-slate-700 border border-slate-500">
+        <div class="min-w-0">
+          <p class="text-xs text-slate-500 uppercase tracking-wider">Nome</p>
+          <p id="opp-menu-name" class="text-sm font-bold text-slate-100">Nome</p>
+          <p class="text-xs text-slate-500 uppercase tracking-wider">Sobrenome</p>
+          <p id="opp-menu-surname" class="text-sm text-slate-200">Sobrenome</p>
+          <p class="text-xs text-slate-500 uppercase tracking-wider mt-1">Conta Google</p>
+          <p id="opp-menu-email" class="text-sm text-slate-300 truncate">email@gmail.com</p>
+        </div>
+      </div>
+      <div id="opp-menu-actions" class="space-y-2"></div>
+    </div>
+  </div>
+
+  <!-- AMIGOS -->
+  <div id="friends-modal" class="hidden fixed inset-0 z-[100] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6">
+    <div class="bg-slate-800 border border-slate-600 shadow-2xl w-full max-w-2xl p-6 space-y-5 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between gap-3">
+        <h2 class="font-display text-xl font-black text-slate-100">Amigos</h2>
+        <button type="button" onclick="closeFriendsModal()" class="w-9 h-9 bg-slate-700 hover:bg-slate-600 text-slate-200 text-lg leading-none">✕</button>
+      </div>
+
+      <div class="flex gap-2">
+        <input id="friends-search" type="text" placeholder="Busque por Gmail ou nome no jogo" class="flex-1 border border-slate-600 bg-slate-900 px-3 py-2.5 text-slate-100 outline-none focus:border-slate-300">
+        <button type="button" onclick="handleFriendSearch()" class="py-2.5 px-4 bg-blue-600 hover:bg-blue-500 text-white font-bold transition">Adicionar</button>
+      </div>
+      <p id="friends-search-status" class="text-xs text-slate-400 min-h-[16px]"></p>
+      <div id="friends-search-result" class="mt-3"></div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
+        <div>
+          <h3 id="friends-list-title" class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-3">Lista de amigos (0)</h3>
+          <div id="friends-list" class="space-y-2">
+            <p class="text-xs text-slate-500 text-center py-4">Nenhum amigo ainda.</p>
+          </div>
+        </div>
+        <div>
+          <h3 id="friends-sent-title" class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-3">Solicitações enviadas (0)</h3>
+          <div id="friends-sent" class="space-y-2">
+            <p class="text-xs text-slate-500 text-center py-4">Nenhuma solicitação enviada aguardando resposta.</p>
+          </div>
+        </div>
+        <div>
+          <h3 id="friends-received-title" class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-3">Convites pendentes (0)</h3>
+          <div id="friends-received" class="space-y-2">
+            <p class="text-xs text-slate-500 text-center py-4">Nenhum convite pendente.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PERFIL DO AMIGO -->
+  <div id="friend-profile-modal" class="hidden fixed inset-0 z-[100] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-800 border border-slate-600 shadow-2xl w-full max-w-lg p-6 space-y-5">
+      <div class="flex items-center justify-between gap-3">
+        <h2 class="font-display text-xl font-black text-slate-100">Perfil do amigo</h2>
+        <button type="button" onclick="closeFriendProfileModal()" class="w-9 h-9 bg-slate-700 hover:bg-slate-600 text-slate-200 text-lg leading-none">✕</button>
+      </div>
+
+      <div class="flex items-center gap-4">
+        <img id="friend-profile-avatar" src="/assets/avatar.svg" alt="Foto do perfil" class="w-20 h-20 rounded-full object-cover bg-slate-700 border-2 border-slate-500">
+        <div class="min-w-0">
+          <p id="friend-profile-name" class="text-sm font-bold text-slate-100 truncate">Nome no jogo</p>
+          <p id="friend-profile-email" class="text-xs text-slate-400 truncate">conta@example.com</p>
+          <p class="text-xs text-slate-500">Conta Google conectada</p>
+        </div>
+      </div>
+
+      <p class="text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">Histórico de partidas</p>
+      <div id="friend-profile-matches" class="space-y-2">
+        <p class="text-sm text-slate-400 text-center py-6">Carregando partidas...</p>
+      </div>
+
+      <div class="px-5 pb-5">
+        <button onclick="closeFriendProfileModal()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold text-sm border border-slate-600">
+          FECHAR
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONFIRMAÇÃO DE REMOVER AMIGO -->
+  <div id="friend-confirm-modal" class="hidden fixed inset-0 z-[110] bg-black/80 flex items-center justify-center p-4">
+    <div class="bg-slate-800 border border-slate-600 shadow-2xl p-6 max-w-md w-full text-center">
+      <p class="text-sm text-slate-100 mb-5">Deseja realmente remover <span id="friend-confirm-name" class="font-bold">Nome</span> da sua lista de amigos?</p>
+      <div class="flex gap-3 justify-center">
+        <button type="button" onclick="confirmRemoveFriendYes()" class="px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-bold">SIM</button>
+        <button type="button" onclick="confirmRemoveFriendNo()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold">NÃO</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TELA FINAL -->
+  <div id="win-modal" class="hidden fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
+    <div class="win-card bg-slate-800 border-2 border-slate-600 p-6 text-center max-w-sm w-full space-y-6 shadow-2xl">
+      <div class="space-y-1">
+        <h2 id="win-title" class="win-title font-display font-black text-amber-400">V I T Ó R I A</h2>
+        <p id="win-subtitle" class="win-subtitle hidden font-display font-black">DESISTÊNCIA</p>
+      </div>
+      <div id="win-score" class="font-display text-5xl sm:text-7xl font-black text-slate-100 leading-none">0 - 0</div>
+      <button onclick="openSetupModal()" class="font-display w-full py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold  shadow transition">
+        CONTINUAR
+      </button>
+      <p id="win-countdown" class="hidden font-brand text-xs sm:text-sm text-amber-400 tracking-wider min-h-[18px]"></p>
+    </div>
+  </div>
+
+  <!-- MODAL DE PERFIL DA CONTA -->
+  <div id="account-profile-modal" class="hidden fixed inset-0 z-[100] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-800 border border-slate-600 shadow-2xl w-full max-w-lg p-6 space-y-5">
+      <div class="flex items-center justify-between gap-3">
+        <h2 class="font-display text-2xl font-black text-slate-100">Perfil</h2>
+        <button type="button" onclick="closeProfileModal()" class="w-9 h-9 bg-slate-700 hover:bg-slate-600 text-slate-200 text-lg leading-none">✕</button>
+      </div>
+
+      <div class="flex items-center gap-4">
+        <img id="profile-avatar-preview" src="/assets/avatar.svg" alt="Foto do perfil" class="w-20 h-20 rounded-full object-cover bg-slate-700 border-2 border-slate-500">
+        <div class="min-w-0">
+          <p id="profile-account-email" class="text-sm text-slate-300 truncate">conta@example.com</p>
+          <p class="text-xs text-slate-500">Conta Google conectada</p>
+        </div>
+      </div>
+
+      <form id="profile-form" onsubmit="saveProfile(event)" class="space-y-4">
+        <div>
+          <label for="profile-player-name" class="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">Nome no jogo</label>
+          <input id="profile-player-name" type="text" maxlength="24" class="w-full bg-slate-900 border border-slate-600  px-3 py-2.5 text-slate-100 outline-none focus:border-slate-300">
+        </div>
+
+        <p id="profile-status" class="text-xs text-slate-400 min-h-[18px]"></p>
+        <div class="flex flex-col sm:flex-row gap-3 pt-2">
+          <button type="submit" class="flex-1 py-3  bg-blue-600 hover:bg-blue-500 text-white font-bold transition">Salvar</button>
+          <button type="button" onclick="closeProfileModal()" class="flex-1 py-3  bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    /* -------------------------------------------------------------
+       ESTILO DAS ESTRELAS E SETAS COM SVG EMBUTIDO
+    ------------------------------------------------------------- */
+    const SVG_STAR = (color) => `<svg class="w-4 h-4" viewBox="0 0 24 24" fill="${color}"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>`;
+    const SVG_ARROW_RIGHT = `<svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>`;
+    const SVG_ARROW_DOWN = `<svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path d="M12 5v14M5 12l7 7 7-7"/></svg>`;
+    const SVG_ARROW_LEFT = `<svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>`;
+    const SVG_ARROW_UP = `<svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path d="M12 19V5M19 12l-7-7-7 7"/></svg>`;
+
+    const PLAYERS = ['RED', 'GREEN', 'YELLOW', 'BLUE'];
+    const PLAYER_COLORS = {
+      RED: { bg: 'bg-red-ludo', text: 'text-red-400', border: 'border-red-500', name: 'Vermelho', hex: '#ef233c' },
+      GREEN: { bg: 'bg-green-ludo', text: 'text-green-400', border: 'border-green-500', name: 'Verde', hex: '#00a86b' },
+      YELLOW: { bg: 'bg-yellow-ludo', text: 'text-yellow-400', border: 'border-yellow-500', name: 'Amarelo', hex: '#ffcc00' },
+      BLUE: { bg: 'bg-blue-ludo', text: 'text-blue-400', border: 'border-blue-500', name: 'Azul', hex: '#0096ff' }
+    };
+
+    const MAIN_PATH = [
+      [6,1], [6,2], [6,3], [6,4], [6,5],
+      [5,6], [4,6], [3,6], [2,6], [1,6], [0,6],
+      [0,7],
+      [0,8], [1,8], [2,8], [3,8], [4,8], [5,8],
+      [6,9], [6,10], [6,11], [6,12], [6,13], [6,14],
+      [7,14],
+      [8,14], [8,13], [8,12], [8,11], [8,10], [8,9],
+      [9,8], [10,8], [11,8], [12,8], [13,8], [14,8],
+      [14,7],
+      [14,6], [13,6], [12,6], [11,6], [10,6], [9,6],
+      [8,5], [8,4], [8,3], [8,2], [8,1], [8,0],
+      [7,0],
+      [6,0]
+    ];
+
+    const TRACK_LENGTH = 52;
+    // A casa com a seta é a última casa do percurso e antecede a fila final.
+    const LAST_TRACK_POSITION = 50;
+    const FIRST_HOME_POSITION = 51;
+    const FINAL_POSITION = 56;
+
+    const START_INDEX = { RED: 0, GREEN: 13, YELLOW: 26, BLUE: 39 };
+
+    const HOME_PATHS = {
+      RED: [[7,1], [7,2], [7,3], [7,4], [7,5], [7,6]],
+      GREEN: [[1,7], [2,7], [3,7], [4,7], [5,7], [6,7]],
+      YELLOW: [[7,13], [7,12], [7,11], [7,10], [7,9], [7,8]],
+      BLUE: [[13,7], [12,7], [11,7], [10,7], [9,7], [8,7]]
+    };
+
+    const YARD_POSITIONS = {
+      RED: [[2,2], [2,3], [3,2], [3,3]],
+      GREEN: [[2,11], [2,12], [3,11], [3,12]],
+      YELLOW: [[11,11], [11,12], [12,11], [12,12]],
+      BLUE: [[11,2], [11,3], [12,2], [12,3]]
+    };
+
+    const STAR_CELLS = [
+      { r: 6, c: 1, color: 'var(--red-player-color)' },
+      { r: 2, c: 6, color: '#64748b' },
+      { r: 1, c: 8, color: 'var(--green-player-color)' },
+      { r: 6, c: 12, color: '#64748b' },
+      { r: 8, c: 13, color: 'var(--yellow-player-color)' },
+      { r: 12, c: 8, color: '#64748b' },
+      { r: 13, c: 6, color: 'var(--blue-player-color)' },
+      { r: 8, c: 2, color: '#64748b' }
+    ];
+
+    // Ordem no sentido horário mantida estritamente
+    const CLOCKWISE_COLORS = ['BLUE', 'RED', 'GREEN', 'YELLOW'];
+    const POSITIONS = ['BOTTOM_LEFT', 'TOP_LEFT', 'TOP_RIGHT', 'BOTTOM_RIGHT'];
+    const DIAGONAL_PARTNER = { RED: 'YELLOW', YELLOW: 'RED', GREEN: 'BLUE', BLUE: 'GREEN' };
+
+    // A cor personalizada é aplicada sobre o slot escolhido pelo jogador
+    // (ou pelo slot definido pelo servidor em partidas online).
+    let selectedHumanColor = 'BLUE';
+    let usingCustomColor = false;
+    let customColorHex = '#8b5cf6';
+    let customColorPreviewHex = '#8b5cf6';
+    let customColorName = 'Violeta';
+    let customColorPreviewName = 'Violeta';
+    let playerName = '';
+    let opponentsCount = null;
+    let boardRotationIndex = 0; // Rotacao do tabuleiro para alinhar a cor humana no canto inferior esquerdo
+
+    let playerTypes = { RED: 'CPU', GREEN: 'CPU', YELLOW: 'CPU', BLUE: 'HUMAN' };
+    let activePlayers = ['BLUE', 'RED', 'GREEN', 'YELLOW'];
+    let currentTurnIndex = 0;
+    let diceValue = 0;
+    let hasRolled = false;
+    let consecutiveSixes = 0;
+    let isAnimating = false;
+    let isPaused = false;
+    let diceCurrentX = 0;
+    let diceCurrentY = 0;
+    let diceCurrentTransform = 'translateY(0px) rotateX(0deg) rotateY(0deg) scale(1)';
+    let activeDiceAnimation = null;
+
+    /* Mapeamento exato e inequívoco das faces 3D do dado (compartilhado
+       entre a rolagem local e a rolagem espelhada do oponente) */
+    const DICE_ROTATIONS = {
+      1: { x: 0, y: 0 },
+      2: { x: 0, y: 90 },
+      3: { x: 90, y: 0 },
+      4: { x: -90, y: 0 },
+      5: { x: 0, y: -90 },
+      6: { x: 0, y: 180 }
+    };
+    let activeTokenAnimation = null;
+    let movementSession = 0;
+
+    /* -------------------------------------------------------------
+       JOGO EM SEGUNDO PLANO (Web Worker como relógio do jogo)
+       Em abas ocultas o navegador limita drasticamente os timers da
+       página (até 1x por minuto). O worker não sofre essa limitação:
+       enquanto a aba está em segundo plano, ele dispara os callbacks
+       agendados do jogo (turnos da CPU, passagens de vez e o relógio
+       do turno), mantendo a partida acontecendo.
+    ------------------------------------------------------------- */
+    let gameEpoch = 0; // invalida callbacks agendados de partidas antigas
+    let scheduledCallbacks = []; // fila usada apenas enquanto a aba está oculta
+    let backgroundClockWorker = null;
+
+    function getBackgroundClock() {
+      if (backgroundClockWorker) return backgroundClockWorker;
+
+      try {
+        const source =
+          "let timer=null;" +
+          "onmessage=e=>{if(e.data==='start'){if(!timer)timer=setInterval(()=>postMessage('tick'),200);}" +
+          "else if(e.data==='stop'){if(timer){clearInterval(timer);timer=null;}}};";
+        backgroundClockWorker = new Worker(URL.createObjectURL(new Blob([source], { type: 'application/javascript' })));
+        backgroundClockWorker.onmessage = (event) => {
+          if (event.data === 'tick') runBackgroundTick();
+        };
+      } catch (error) {
+        backgroundClockWorker = null; // sem worker: o jogo segue apenas com a aba visível
+      }
+
+      return backgroundClockWorker;
+    }
+
+    function startBackgroundClock() {
+      const worker = getBackgroundClock();
+      if (worker) worker.postMessage('start');
+    }
+
+    function stopBackgroundClock() {
+      scheduledCallbacks = [];
+      if (backgroundClockWorker) backgroundClockWorker.postMessage('stop');
+    }
+
+    function invalidateScheduledCallbacks() {
+      gameEpoch++;
+      scheduledCallbacks = [];
+    }
+
+    function runBackgroundTick() {
+      // Roda primeiro o que ficou pendente enquanto a aba esteve oculta
+      if (scheduledCallbacks.length > 0) {
+        const now = Date.now();
+        const due = [];
+        scheduledCallbacks = scheduledCallbacks.filter(entry => {
+          if (entry.due <= now) { due.push(entry); return false; }
+          return true;
+        });
+        due.forEach(entry => entry.fn());
+      }
+
+      // Relógio do turno (o setInterval da página é limitado em abas ocultas)
+      if (document.hidden && turnTimer.endsAt) {
+        tickTurnTimer();
+      }
+    }
+
+    // Agenda callbacks do jogo: com a aba oculta usa o worker, caso
+    // contrário segue o setTimeout normal da página. Callbacks de
+    // partidas encerradas são descartados automaticamente.
+    function schedule(callback, delay) {
+      const epoch = gameEpoch;
+      const run = () => { if (epoch === gameEpoch) callback(); };
+
+      if (document.hidden && getBackgroundClock()) {
+        scheduledCallbacks.push({ fn: run, due: Date.now() + delay });
+        return;
+      }
+
+      setTimeout(run, delay);
+    }
+
+    function waitScheduled(delay) {
+      return new Promise(resolve => schedule(resolve, delay));
+    }
+
+    /* -------------------------------------------------------------
+       MOTOR DE ÁUDIO (Web Audio API, sem arquivos externos)
+    ------------------------------------------------------------- */
+    const gameAudio = {
+      ctx: null,
+      musicGain: null,
+      effectsGain: null,
+      musicVolume: 0.35,
+      effectsVolume: 0.70,
+      muted: false,
+      musicTimer: null,
+      nextMusicTime: 0,
+      musicStep: 0,
+
+      init() {
+        if (this.ctx) {
+          if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
+          return true;
+        }
+
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return false;
+
+        try {
+          this.ctx = new AudioContextClass();
+          this.musicGain = this.ctx.createGain();
+          this.effectsGain = this.ctx.createGain();
+          this.musicGain.connect(this.ctx.destination);
+          this.effectsGain.connect(this.ctx.destination);
+          this.applyVolumes();
+          return true;
+        } catch (error) {
+          return false;
+        }
+      },
+
+      unlock() {
+        return this.init();
+      },
+
+      applyVolumes() {
+        if (!this.ctx) return;
+        this.musicGain.gain.value = this.muted ? 0 : this.musicVolume;
+        this.effectsGain.gain.value = this.muted ? 0 : this.effectsVolume;
+      },
+
+      playTone({ frequency = 440, duration = 0.15, type = 'sine', volume = 0.18, when = 0, slideTo = null, destination = 'effects' }) {
+        if (this.muted || !this.init() || !this.ctx) return;
+        if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
+
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        const start = this.ctx.currentTime + when;
+        const safeDuration = Math.max(0.03, duration);
+
+        osc.type = type;
+        osc.frequency.setValueAtTime(Math.max(20, frequency), start);
+        if (slideTo) {
+          osc.frequency.exponentialRampToValueAtTime(Math.max(20, slideTo), start + safeDuration);
+        }
+
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.exponentialRampToValueAtTime(Math.max(0.001, volume), start + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + safeDuration);
+
+        osc.connect(gain);
+        gain.connect(destination === 'music' ? this.musicGain : this.effectsGain);
+        osc.start(start);
+        osc.stop(start + safeDuration + 0.05);
+      },
+
+      playNoise(duration = 0.18, volume = 0.12, when = 0, destination = 'effects') {
+        if (this.muted || !this.init() || !this.ctx) return;
+        const safeDuration = Math.max(0.03, duration);
+        const buffer = this.ctx.createBuffer(1, Math.ceil(this.ctx.sampleRate * safeDuration), this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < data.length; i++) {
+          data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+        }
+
+        const source = this.ctx.createBufferSource();
+        const gain = this.ctx.createGain();
+        const start = this.ctx.currentTime + when;
+        source.buffer = buffer;
+        gain.gain.setValueAtTime(volume, start);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + safeDuration);
+        source.connect(gain);
+        gain.connect(destination === 'music' ? this.musicGain : this.effectsGain);
+        source.start(start);
+        source.stop(start + safeDuration + 0.02);
+      },
+
+      startMusic() {
+        if (!this.init() || this.musicTimer) return;
+        if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
+        this.nextMusicTime = this.ctx.currentTime + 0.15;
+        this.musicStep = 0;
+        this.musicTimer = setInterval(() => this.scheduleMusic(), 100);
+      },
+
+      stopMusic() {
+        if (this.musicTimer) {
+          clearInterval(this.musicTimer);
+          this.musicTimer = null;
+        }
+      },
+
+      scheduleMusic() {
+        if (!this.ctx) return;
+        if (this.nextMusicTime < this.ctx.currentTime - 0.5) {
+          this.nextMusicTime = this.ctx.currentTime + 0.1;
+        }
+
+        const stepDuration = 0.24;
+        while (this.nextMusicTime < this.ctx.currentTime + 0.5) {
+          this.playMusicStep(this.musicStep, this.nextMusicTime - this.ctx.currentTime);
+          this.nextMusicTime += stepDuration;
+          this.musicStep = (this.musicStep + 1) % 32;
+        }
+      },
+
+      playMusicStep(step, when) {
+        const chords = [
+          [261.63, 329.63, 392.00],
+          [220.00, 261.63, 329.63],
+          [174.61, 220.00, 261.63],
+          [196.00, 246.94, 293.66]
+        ];
+        const basses = [130.81, 110.00, 87.31, 98.00];
+        const melodies = [523.25, 587.33, 659.25, 523.25, 440.00, 523.25, 392.00, 440.00];
+        const chord = chords[Math.floor(step / 8) % 4];
+
+        if (step % 8 === 0) {
+          this.playTone({ frequency: basses[Math.floor(step / 8) % 4], duration: 0.48, type: 'triangle', volume: 0.10, when, destination: 'music' });
+        }
+        if (step % 8 === 4) {
+          this.playTone({ frequency: basses[Math.floor(step / 8) % 4] * 1.5, duration: 0.36, type: 'triangle', volume: 0.07, when, destination: 'music' });
+        }
+        if (step % 2 === 0) {
+          this.playTone({ frequency: chord[(step / 2) % 3], duration: 0.28, type: 'sine', volume: 0.055, when, destination: 'music' });
+        }
+        if (step % 4 === 2) {
+          this.playTone({ frequency: melodies[(Math.floor(step / 4) * 2) % 8], duration: 0.22, type: 'sine', volume: 0.045, when, destination: 'music' });
+        }
+        if (step % 8 === 0 || step % 8 === 5) {
+          this.playNoise(0.05, 0.025, when, 'music');
+        }
+      },
+
+      playClick() {
+        this.playTone({ frequency: 660, duration: 0.06, type: 'triangle', volume: 0.10 });
+      },
+
+      playDice() {
+        for (let i = 0; i < 6; i++) {
+          this.playTone({ frequency: 180 + i * 28, duration: 0.045, type: 'square', volume: 0.075, when: i * 0.05 });
+        }
+        this.playNoise(0.24, 0.07, 0.05);
+      },
+
+      playMove() {
+        this.playTone({ frequency: 520, duration: 0.09, type: 'triangle', volume: 0.12, slideTo: 680 });
+      },
+
+      playCapture() {
+        this.playTone({ frequency: 420, duration: 0.28, type: 'sawtooth', volume: 0.14, slideTo: 105 });
+        this.playNoise(0.22, 0.10);
+      },
+
+      playPoint() {
+        [523.25, 659.25, 783.99].forEach((frequency, index) => {
+          this.playTone({ frequency, duration: 0.16, type: 'triangle', volume: 0.14, when: index * 0.08 });
+        });
+      },
+
+      playVictory() {
+        [392.00, 523.25, 659.25, 783.99].forEach((frequency, index) => {
+          this.playTone({ frequency, duration: index === 3 ? 0.55 : 0.2, type: 'triangle', volume: 0.17, when: index * 0.14 });
+        });
+      },
+
+      playDefeat() {
+        [329.63, 261.63, 220.00, 174.61].forEach((frequency, index) => {
+          this.playTone({ frequency, duration: index === 3 ? 0.55 : 0.22, type: 'sine', volume: 0.15, when: index * 0.16 });
+        });
+      },
+
+      playNoMove() {
+        this.playTone({ frequency: 180, duration: 0.18, type: 'square', volume: 0.08, slideTo: 120 });
+      }
+    };
+
+    function updateSoundSettingsUI() {
+      const musicPercent = Math.round(gameAudio.musicVolume * 100);
+      const effectsPercent = Math.round(gameAudio.effectsVolume * 100);
+
+      document.getElementById('music-volume').value = musicPercent;
+      document.getElementById('effects-volume').value = effectsPercent;
+      document.getElementById('music-volume-value').innerText = `${musicPercent}%`;
+      document.getElementById('effects-volume-value').innerText = `${effectsPercent}%`;
+      // O ícone de som só existe quando o botão está presente na interface
+      const soundIcon = document.getElementById('sound-icon');
+      if (soundIcon) soundIcon.innerText = gameAudio.muted ? '🔇' : '🔊';
+      document.getElementById('sound-mute-button').innerText = gameAudio.muted ? 'Ativar Som' : 'Silenciar Som';
+    }
+
+    function toggleSoundSettings() {
+      gameAudio.unlock();
+      const modal = document.getElementById('sound-modal');
+      const willOpen = modal.classList.contains('hidden');
+      modal.classList.toggle('hidden', !willOpen);
+      if (willOpen) gameAudio.playClick();
+    }
+
+    function closeSoundSettings() {
+      gameAudio.playClick();
+      document.getElementById('sound-modal').classList.add('hidden');
+    }
+
+    function setMusicVolume(value) {
+      gameAudio.musicVolume = Math.max(0, Math.min(100, Number(value) || 0)) / 100;
+      gameAudio.applyVolumes();
+      updateSoundSettingsUI();
+    }
+
+    function setEffectsVolume(value) {
+      gameAudio.effectsVolume = Math.max(0, Math.min(100, Number(value) || 0)) / 100;
+      gameAudio.applyVolumes();
+      updateSoundSettingsUI();
+    }
+
+    function toggleSoundMute() {
+      gameAudio.muted = !gameAudio.muted;
+      gameAudio.applyVolumes();
+      updateSoundSettingsUI();
+      if (!gameAudio.muted) gameAudio.playClick();
+    }
+
+    function playSoundTest() {
+      gameAudio.unlock();
+      gameAudio.playPoint();
+    }
+
+    let tokensState = {
+      RED: [-1, -1, -1, -1],
+      GREEN: [-1, -1, -1, -1],
+      YELLOW: [-1, -1, -1, -1],
+      BLUE: [-1, -1, -1, -1]
+    };
+
+    let playerScores = {
+      RED: 0,
+      GREEN: 0,
+      YELLOW: 0,
+      BLUE: 0
+    };
+
+    function getHumanPlayerKey() {
+      // Slot de base do jogador humano. Em partidas online este slot é
+      // definido pelo servidor; a cor personalizada é pintada sobre ele.
+      return selectedHumanColor;
+    }
+
+    function getColorAssignments() {
+      const assignments = {};
+      const humanPlayer = getHumanPlayerKey();
+      const humanHex = usingCustomColor ? customColorHex : PLAYER_COLORS[humanPlayer].hex;
+      const humanName = usingCustomColor ? customColorName : PLAYER_COLORS[humanPlayer].name;
+
+      if (isTeamMode()) {
+        const partner = DIAGONAL_PARTNER[humanPlayer];
+        const preferredOpponentThemes = humanPlayer === 'RED' || humanPlayer === 'YELLOW'
+          ? ['BLUE', 'GREEN', 'RED']
+          : ['RED', 'BLUE', 'GREEN'];
+        const opponentTheme = preferredOpponentThemes.find(theme => {
+          return !areColorsSimilar(humanHex, PLAYER_COLORS[theme].hex);
+        }) || preferredOpponentThemes[0];
+        const opponentHex = PLAYER_COLORS[opponentTheme].hex;
+        const opponentName = PLAYER_COLORS[opponentTheme].name;
+
+        PLAYERS.forEach(player => {
+          const belongsToHumanTeam = player === humanPlayer || player === partner;
+          assignments[player] = belongsToHumanTeam
+            ? { hex: humanHex, name: humanName, custom: usingCustomColor }
+            : { hex: opponentHex, name: opponentName, custom: false };
+        });
+      } else {
+        PLAYERS.forEach(player => {
+          assignments[player] = {
+            hex: PLAYER_COLORS[player].hex,
+            name: PLAYER_COLORS[player].name,
+            custom: false
+          };
+        });
+
+        if (usingCustomColor) {
+          assignments[humanPlayer] = {
+            hex: customColorHex,
+            name: customColorName,
+            custom: true
+          };
+
+          activePlayers.forEach(player => {
+            if (playerTypes[player] === 'CPU' && areColorsSimilar(humanHex, assignments[player].hex)) {
+              const alternativeTheme = ['RED', 'BLUE', 'GREEN', 'YELLOW'].find(theme => {
+                return !areColorsSimilar(humanHex, PLAYER_COLORS[theme].hex);
+              });
+              if (alternativeTheme) {
+                assignments[player] = {
+                  hex: PLAYER_COLORS[alternativeTheme].hex,
+                  name: PLAYER_COLORS[alternativeTheme].name,
+                  custom: false
+                };
+              }
+            }
+          });
+        }
+
+        // No modo online, pinta o slot do oponente com a cor que ele escolheu
+        // (sincronizada via WebSocket), preservando a escolha de cada jogador.
+        if (isOnlineGame && onlineOpponentColor) {
+          const opponentSlot = activePlayers.find(player => player !== getHumanPlayerKey());
+          if (opponentSlot) {
+            assignments[opponentSlot] = {
+              hex: onlineOpponentColor.hex,
+              name: onlineOpponentColor.name,
+              custom: onlineOpponentColor.custom
+            };
+          }
+        }
+      }
+
+      return assignments;
+    }
+
+    function getPlayerColor(player) {
+      const assignment = getColorAssignments()[player];
+      if (!assignment) return PLAYER_COLORS[player];
+
+      const themePlayer = PLAYERS.find(key => PLAYER_COLORS[key].hex === assignment.hex);
+      const theme = themePlayer ? PLAYER_COLORS[themePlayer] : null;
+
+      return {
+        bg: `bg-${player.toLowerCase()}-ludo`,
+        text: assignment.custom ? `text-${player.toLowerCase()}-player-custom` : (theme ? theme.text : 'text-slate-200'),
+        border: assignment.custom ? `border-${player.toLowerCase()}-ludo` : (theme ? theme.border : 'border-slate-500'),
+        name: assignment.name,
+        hex: assignment.hex,
+        custom: assignment.custom
+      };
+    }
+
+    function normalizeHexColor(value) {
+      let hex = String(value || '').trim();
+      if (!hex.startsWith('#')) hex = `#${hex}`;
+
+      if (/^#[0-9a-f]{3}$/i.test(hex)) {
+        hex = `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`;
+      }
+
+      return /^#[0-9a-f]{6}$/i.test(hex) ? hex.toLowerCase() : null;
+    }
+
+    function hexToRgb(hex) {
+      const normalized = normalizeHexColor(hex) || '#000000';
+      return {
+        r: parseInt(normalized.slice(1, 3), 16),
+        g: parseInt(normalized.slice(3, 5), 16),
+        b: parseInt(normalized.slice(5, 7), 16)
+      };
+    }
+
+    function mixHexWithWhite(hex, whiteAmount = 0.6) {
+      const { r, g, b } = hexToRgb(hex);
+      const amount = Math.max(0, Math.min(1, whiteAmount));
+      const mix = (channel) => Math.round(channel + (255 - channel) * amount).toString(16).padStart(2, '0');
+      return `#${mix(r)}${mix(g)}${mix(b)}`;
+    }
+
+    function hexToHsv(hex) {
+      const { r, g, b } = hexToRgb(hex);
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      const delta = max - min;
+      let hue = 0;
+
+      if (delta !== 0) {
+        if (max === r) hue = 60 * (((g - b) / delta) % 6);
+        else if (max === g) hue = 60 * (((b - r) / delta) + 2);
+        else hue = 60 * (((r - g) / delta) + 4);
+      }
+      if (hue < 0) hue += 360;
+
+      return {
+        hue,
+        saturation: max === 0 ? 0 : delta / max,
+        value: max / 255
+      };
+    }
+
+    function areColorsSimilar(hexA, hexB) {
+      const a = hexToHsv(hexA);
+      const b = hexToHsv(hexB);
+      const hueDifference = Math.abs(a.hue - b.hue);
+      const circularHueDifference = Math.min(hueDifference, 360 - hueDifference);
+
+      if (a.saturation < 0.12 || b.saturation < 0.12) {
+        return Math.abs(a.value - b.value) < 0.16 && Math.abs(a.saturation - b.saturation) < 0.12;
+      }
+
+      return circularHueDifference < 40 &&
+        Math.abs(a.value - b.value) < 0.30 &&
+        Math.abs(a.saturation - b.saturation) < 0.32;
+    }
+
+    function getReadableAccent(hex) {
+      const { r, g, b } = hexToRgb(hex);
+      const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+      return luminance < 0.45 ? mixHexWithWhite(hex, 0.55) : hex;
+    }
+
+    function identifyColorName(hex) {
+      const { r, g, b } = hexToRgb(hex);
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      const delta = max - min;
+      const lightness = (max + min) / 510;
+
+      if (delta < 18) {
+        if (lightness < 0.16) return 'Preto';
+        if (lightness < 0.38) return 'Cinza Escuro';
+        if (lightness < 0.68) return 'Cinza';
+        if (lightness < 0.9) return 'Cinza Claro';
+        return 'Branco';
+      }
+
+      const saturation = max === 0 ? 0 : delta / max;
+      let hue;
+
+      if (max === r) {
+        hue = 60 * (((g - b) / delta) % 6);
+      } else if (max === g) {
+        hue = 60 * (((b - r) / delta) + 2);
+      } else {
+        hue = 60 * (((r - g) / delta) + 4);
+      }
+
+      if (hue < 0) hue += 360;
+
+      if (hue < 12 || hue >= 345) {
+        return lightness < 0.3 ? 'Vermelho Escuro' : 'Vermelho';
+      }
+      if (hue < 40) {
+        return lightness < 0.38 ? 'Marrom' : 'Laranja';
+      }
+      if (hue < 68) {
+        return lightness < 0.3 ? 'Marrom' : 'Amarelo';
+      }
+      if (hue < 95) return 'Verde-limão';
+      if (hue < 160) {
+        return lightness < 0.32 ? 'Verde Escuro' : 'Verde';
+      }
+      if (hue < 190) return 'Ciano';
+      if (hue < 215) return 'Azul-claro';
+      if (hue < 250) {
+        return lightness < 0.3 ? 'Azul-marinho' : 'Azul';
+      }
+      if (hue < 285) {
+        return lightness < 0.35 && hue > 260 ? 'Roxo' : 'Violeta';
+      }
+      if (hue < 320) {
+        if (lightness < 0.35) return 'Roxo';
+        return lightness > 0.68 ? 'Rosa' : 'Magenta';
+      }
+      return 'Rosa';
+    }
+
+    function isLightColor(hex) {
+      const { r, g, b } = hexToRgb(hex);
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      const saturation = max === 0 ? 0 : (max - min) / max;
+      const lightness = (max + min) / 510;
+      return (saturation < 0.22 && lightness >= 0.68) || min >= 205;
+    }
+
+    function updatePlayerName(value) {
+      playerName = String(value || '')
+        .replace(/[\u0000-\u001f\u007f]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 24);
+    }
+
+    function updateColorVariables() {
+      const root = document.documentElement;
+      const assignments = getColorAssignments();
+      const defaultPastels = {
+        RED: '#fca5a5',
+        GREEN: '#86efac',
+        YELLOW: '#fde047',
+        BLUE: '#93c5fd'
+      };
+      const lightCustomColor = usingCustomColor && isLightColor(customColorHex);
+
+      root.style.setProperty('--custom-player-color', customColorHex);
+      root.style.setProperty('--custom-player-text', getReadableAccent(customColorHex));
+
+      PLAYERS.forEach(player => {
+        const assignment = assignments[player];
+        const lightColor = isLightColor(assignment.hex);
+        const pastel = lightColor ? '#e2e8f0' : mixHexWithWhite(assignment.hex, 0.68);
+
+        root.style.setProperty(`--${player.toLowerCase()}-player-color`, assignment.hex);
+        root.style.setProperty(`--${player.toLowerCase()}-player-text`, getReadableAccent(assignment.hex));
+        root.style.setProperty(`--${player.toLowerCase()}-player-border`, lightColor ? '#000000' : assignment.hex);
+        root.style.setProperty(`--${player.toLowerCase()}-player-cell-border`, lightColor ? '#000000' : '#cbd5e1');
+        const useDefaultPastel = !assignment.custom && assignment.hex === PLAYER_COLORS[player].hex;
+        root.style.setProperty(`--${player.toLowerCase()}-player-pastel`, useDefaultPastel ? defaultPastels[player] : pastel);
+      });
+
+      document.body.classList.toggle('custom-light-color', lightCustomColor);
+    }
+
+    function updateColorSelectionUI() {
+      PLAYERS.forEach(player => {
+        const btn = document.getElementById(`color-btn-${player}`);
+        const isSelected = !usingCustomColor && player === selectedHumanColor;
+        btn.classList.toggle('border-white', isSelected);
+        btn.classList.toggle('border-transparent', !isSelected);
+      });
+
+      const customBtn = document.getElementById('color-btn-CUSTOM');
+      customBtn.classList.toggle('border-white', usingCustomColor);
+      customBtn.classList.toggle('border-transparent', !usingCustomColor);
+      document.getElementById('custom-color-label').textContent = customColorPreviewName;
+      document.getElementById('custom-color-hex-label').textContent = customColorPreviewHex.toUpperCase();
+    }
+
+    function selectHumanColor(color) {
+      if (!PLAYERS.includes(color)) return;
+
+      gameAudio.playClick();
+      selectedHumanColor = color;
+      usingCustomColor = false;
+      saveColorPreference();
+      updateColorVariables();
+      updateColorSelectionUI();
+      document.getElementById('custom-color-menu').classList.add('hidden');
+      document.getElementById('color-btn-CUSTOM').setAttribute('aria-expanded', 'false');
+    }
+
+    function toggleCustomColorMenu() {
+      gameAudio.playClick();
+      const menu = document.getElementById('custom-color-menu');
+      const willOpen = menu.classList.contains('hidden');
+      menu.classList.toggle('hidden', !willOpen);
+      document.getElementById('color-btn-CUSTOM').setAttribute('aria-expanded', String(willOpen));
+
+      if (willOpen) {
+        previewCustomColor(customColorPreviewHex);
+        document.getElementById('custom-color-picker').focus();
+      }
+    }
+
+    function previewCustomColor(value) {
+      const normalized = normalizeHexColor(value);
+      if (!normalized) return;
+
+      customColorPreviewHex = normalized;
+      customColorPreviewName = identifyColorName(normalized);
+      document.getElementById('custom-color-picker').value = normalized;
+      document.getElementById('custom-color-hex').value = normalized.toUpperCase();
+      document.getElementById('custom-color-swatch').style.backgroundColor = normalized;
+      document.getElementById('custom-color-label').textContent = customColorPreviewName;
+      document.getElementById('custom-color-hex-label').textContent = normalized.toUpperCase();
+      document.getElementById('custom-color-message').textContent = `Pré-visualização da cor ${customColorPreviewName} (${normalized.toUpperCase()}).`;
+    }
+
+    function applyCustomColor() {
+      const hexInput = document.getElementById('custom-color-hex');
+      const normalized = normalizeHexColor(hexInput.value);
+      const message = document.getElementById('custom-color-message');
+
+      if (!normalized) {
+        message.textContent = 'Informe uma cor hexadecimal válida, como #8B5CF6.';
+        hexInput.focus();
+        return;
+      }
+
+      customColorHex = normalized;
+      customColorPreviewHex = normalized;
+      customColorName = identifyColorName(normalized);
+      customColorPreviewName = customColorName;
+      usingCustomColor = true;
+      gameAudio.playClick();
+      updateColorVariables();
+      updateColorSelectionUI();
+      previewCustomColor(normalized);
+      saveColorPreference();
+      message.textContent = `Cor ${customColorName} (${normalized.toUpperCase()}) aplicada à sua equipe.`;
+    }
+
+    /* -------------------------------------------------------------
+       PREFERÊNCIA DE COR (armazenada no navegador)
+       Guarda a cor escolhida pelo jogador para que ela não se perca
+       ao iniciar partidas online ou ao recarregar a página.
+    ------------------------------------------------------------- */
+    const COLOR_PREFERENCE_KEY = 'luud_color_preference';
+
+    function saveColorPreference() {
+      try {
+        localStorage.setItem(COLOR_PREFERENCE_KEY, JSON.stringify({
+          selectedHumanColor,
+          usingCustomColor,
+          customColorHex
+        }));
+      } catch (error) {
+        /* Armazenamento indisponível: a escolha vale apenas nesta sessão */
+      }
+    }
+
+    function restoreColorPreference() {
+      let preference = null;
+      try {
+        const raw = localStorage.getItem(COLOR_PREFERENCE_KEY);
+        preference = raw ? JSON.parse(raw) : null;
+      } catch (error) {
+        return; /* Armazenamento indisponível ou dados corrompidos */
+      }
+      if (!preference || typeof preference !== 'object') return;
+
+      if (PLAYERS.includes(preference.selectedHumanColor)) {
+        selectedHumanColor = preference.selectedHumanColor;
+      }
+
+      const hex = normalizeHexColor(preference.customColorHex);
+      if (hex) {
+        customColorHex = hex;
+        customColorName = identifyColorName(hex);
+        previewCustomColor(hex);
+      }
+
+      usingCustomColor = Boolean(preference.usingCustomColor) && Boolean(hex);
+    }
+
+    function isTeamMode() {
+      return opponentsCount === 3;
+    }
+
+    function getWinningScore() {
+      return isTeamMode() ? 8 : 4;
+    }
+
+    function isHumanTeamPlayer(player) {
+      return playerTypes[player] === 'HUMAN' || playerTypes[player] === 'ALLY';
+    }
+
+    function isAutomatedPlayer(player) {
+      return playerTypes[player] === 'CPU' || playerTypes[player] === 'ALLY';
+    }
+
+    function areSameTeam(playerA, playerB) {
+      if (!isTeamMode()) return playerA === playerB;
+      return isHumanTeamPlayer(playerA) === isHumanTeamPlayer(playerB);
+    }
+
+    function getFirstName(value) {
+      return String(value ?? '').trim().split(/\s+/)[0] || '';
+    }
+
+    function getPlayerDisplayName(player) {
+      if (isOnlineGame && player !== getHumanPlayerKey()) return getFirstName(onlineOpponentName) || 'Oponente';
+      if (playerTypes[player] === 'HUMAN') return playerName || 'Você';
+      if (playerTypes[player] === 'ALLY') return playerName ? `Aliado de ${playerName}` : 'Aliado';
+      return isTeamMode() ? 'CPU adversária' : 'CPU';
+    }
+
+    function updateModeUI() {
+      const teamMode = isTeamMode();
+      [1, 3].forEach(count => {
+        const btn = document.getElementById(`mode-btn-${count}`);
+        const isSelected = opponentsCount !== null && count === opponentsCount;
+        btn.classList.toggle('border-white', isSelected);
+        btn.classList.toggle('border-transparent', !isSelected);
+      });
+    }
+
+    function selectOpponentsMode(count) {
+      opponentsCount = count;
+      updateModeUI();
+      updateColorVariables();
+      updateScoreboardUI();
+      gameAudio.playClick();
+    }
+
+    function openPauseMenu() {
+      gameAudio.playClick();
+
+      // No modo online não existe pausa: a partida segue rodando (inclusive
+      // o relógio do turno, mesmo com a aba em segundo plano)
+      const onlinePlaying = isOnlineGame && !onlineMatchEnded;
+      const subtitle = document.getElementById('pause-subtitle');
+      if (subtitle) subtitle.classList.toggle('hidden', onlinePlaying);
+
+      if (!onlinePlaying) {
+        isPaused = true;
+        pauseTurnTimer();
+        if (activeDiceAnimation) activeDiceAnimation.pause();
+        if (activeTokenAnimation) activeTokenAnimation.pause();
+      }
+
+      document.getElementById('pause-modal').classList.remove('hidden');
+    }
+
+    function closePauseMenu() {
+      gameAudio.playClick();
+      const onlinePlaying = isOnlineGame && !onlineMatchEnded;
+      document.getElementById('pause-modal').classList.add('hidden');
+
+      // No modo online nada foi pausado; apenas fecha o menu
+      if (onlinePlaying) return;
+
+      isPaused = false;
+      resumeTurnTimer();
+      if (activeDiceAnimation) activeDiceAnimation.play();
+      if (activeTokenAnimation) activeTokenAnimation.play();
+      checkCPUTurn();
+    }
+
+    function restartCurrentGame() {
+      closePauseMenu();
+      // Reiniciar uma partida online em andamento desiste da partida:
+      // o oponente recebe a vitória por desistência
+      if (isOnlineGame && !onlineMatchEnded) {
+        startAbandonFlow(true);
+        return;
+      }
+      startGame();
+    }
+
+    // Posiciona o botão de conta conforme a tela:
+    // - tela inicial: flutua sozinho no canto superior direito (sem o
+    //   cabeçalho por cima do menu, evitando telas sobrepostas);
+    // - durante a partida: volta para a posição no cabeçalho.
+    function layoutAccountArea() {
+      const area = document.getElementById('account-area');
+      const setup = document.getElementById('setup-screen');
+      if (!area || !setup) return;
+
+      if (!setup.classList.contains('hidden')) {
+        area.classList.add('absolute', 'top-3', 'right-3', 'sm:top-4', 'sm:right-4', 'z-[85]');
+        area.classList.remove('relative');
+        setup.appendChild(area);
+      } else {
+        area.classList.add('relative');
+        area.classList.remove('absolute', 'top-3', 'right-3', 'sm:top-4', 'sm:right-4', 'z-[85]');
+        const holder = document.getElementById('account-area-holder');
+        if (holder && area.parentElement !== holder) holder.appendChild(area);
+      }
+    }
+
+    // Esconde/mostra o botão ☰ Menu do cabeçalho.
+    // Escondido na tela inicial (sem partida em andamento) para que o
+    // cabeçalho sirva apenas de acesso à conta nessa tela.
+    function setMenuButtonVisible(visible) {
+      const btn = document.getElementById('pause-menu-button');
+      if (btn) btn.classList.toggle('hidden', !visible);
+    }
+
+    /* -------------------------------------------------------------
+       HISTÓRICO DE PARTIDAS
+       Toda partida finalizada é registrada na conta do jogador
+       (fim normal, desistência ou W.O.) via /api/matches, e pode
+       ser consultada no menu da conta ou pelo botão Histórico.
+    ------------------------------------------------------------- */
+    const MATCH_MODE_LABELS = {
+      quick: 'Jogo Rápido',
+      invite: 'Convite',
+      local: 'Local vs CPU'
+    };
+
+    function escapeHtmlText(text) {
+      return String(text).replace(/[&<>"']/g, ch => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      })[ch]);
+    }
+
+    function postMatchRecord(mode, result, playerScore, opponentScore, opponentName) {
+      if (typeof accountUser === 'undefined' || !accountUser) return;
+
+      try {
+        fetch('/api/matches', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode, result, playerScore, opponentScore, opponentName })
+        }).catch(() => { /* histórico é o melhor esforço */ });
+      } catch (error) { /* ignora falhas de rede aqui */ }
+    }
+
+    function openHistoryModal() {
+      gameAudio.playClick();
+      if (typeof hideAccountDropdown === 'function') hideAccountDropdown();
+
+      const modal = document.getElementById('history-modal');
+      const list = document.getElementById('history-list');
+      if (!modal || !list) return;
+
+      modal.classList.remove('hidden');
+      list.innerHTML = '<p class="text-sm text-slate-400 text-center py-6">Carregando...</p>';
+
+      fetch('/api/matches')
+        .then(response => {
+          if (!response.ok) throw new Error('Falha ao carregar o histórico.');
+          return response.json();
+        })
+        .then(data => renderHistoryList(Array.isArray(data.matches) ? data.matches : []))
+        .catch(() => {
+          list.innerHTML = '<p class="text-sm text-red-400 text-center py-6">Não foi possível carregar o histórico. Tente novamente.</p>';
+        });
+    }
+
+    function closeHistoryModal() {
+      gameAudio.playClick();
+      const modal = document.getElementById('history-modal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function renderHistoryList(records) {
+      const list = document.getElementById('history-list');
+      if (!list) return;
+
+      if (records.length === 0) {
+        list.innerHTML = '<p class="text-sm text-slate-400 text-center py-6">Nenhuma partida registrada ainda.</p>';
+        return;
+      }
+
+      list.innerHTML = records.map(record => {
+        const win = record.result === 'win';
+        const when = new Date(record.finishedAt);
+        const whenLabel = when.toLocaleDateString('pt-BR') + ' às ' +
+          when.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        const modeLabel = MATCH_MODE_LABELS[record.mode] || record.mode;
+        const resultColor = win ? 'text-emerald-400' : 'text-red-400';
+        const borderColor = win ? 'border-emerald-700' : 'border-red-700';
+
+        return `
+          <div class="bg-slate-800 border-2 ${borderColor} p-3 flex items-center justify-between gap-3">
+            <div class="min-w-0 text-left">
+              <p class="font-brand font-black text-sm ${resultColor}">${win ? 'VITÓRIA' : 'DERROTA'}</p>
+              <p class="text-xs text-slate-300 truncate">${escapeHtmlText(modeLabel)} · vs ${escapeHtmlText(record.opponentName)}</p>
+              <p class="text-[11px] text-slate-500">${whenLabel}</p>
+            </div>
+            <p class="font-mono text-lg text-slate-100 whitespace-nowrap">${record.playerScore} - ${record.opponentScore}</p>
+          </div>`;
+      }).join('');
+    }
+
+    /* -------------------------------------------------------------
+       MENU DO OPONENTE (partida online)
+       Clicar no nome do oponente no placar abre o menu com nome,
+       sobrenome, Conta Google e opções de amizade.
+    ------------------------------------------------------------- */
+
+    function updateFriendsBadge() {
+      const badge = document.getElementById('friends-badge');
+      if (!badge) return;
+      if (pendingFriendRequestsCount > 0) {
+        badge.textContent = String(pendingFriendRequestsCount);
+        badge.classList.remove('hidden');
+      } else {
+        badge.classList.add('hidden');
+      }
+    }
+
+    function positionOpponentMenu() {
+      const menu = document.getElementById('opponent-menu');
+      const anchor = document.getElementById('scoreboard');
+      if (!menu || !anchor) return;
+      const rect = anchor.getBoundingClientRect();
+      let left = rect.left;
+      let top = rect.bottom + 8;
+      const width = 260;
+      if (left + width > window.innerWidth - 8) left = window.innerWidth - width - 8;
+      if (left < 8) left = 8;
+      if (top + 200 > window.innerHeight) top = rect.top - 200 - 8;
+      menu.style.left = `${Math.max(8, left)}px`;
+      menu.style.top = `${Math.max(8, top)}px`;
+    }
+
+    function closeOpponentMenu() {
+      document.getElementById('opponent-menu').classList.add('hidden');
+      opponentMenuOpen = false;
+    }
+
+    function menuItem(text, className, onClick) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `w-full text-left py-2 px-3 text-sm rounded transition ${className || 'text-slate-100 hover:bg-slate-700'}`;
+      btn.textContent = text;
+      btn.onclick = (event) => {
+        event.stopPropagation();
+        onClick();
+      };
+      return btn;
+    }
+
+    function disabledItem(text) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'w-full text-left py-2 px-3 text-sm rounded text-slate-500 bg-slate-700/50';
+      btn.textContent = text;
+      btn.disabled = true;
+      return btn;
+    }
+
+    function relationOfCurrent(friends, sent, received, targetId) {
+      if (!targetId) return 'none';
+      if (friends.includes(targetId)) return 'friend';
+      if (sent.includes(targetId)) return 'sent';
+      if (received.includes(targetId)) return 'received';
+      return 'none';
+    }
+
+    async function renderOpponentMenuActions(prof) {
+      const actions = document.getElementById('opp-menu-actions');
+      actions.innerHTML = '';
+      const data = await fetch('/api/friends')
+        .then(r => r.ok ? r.json() : null)
+        .catch(() => null);
+      if (data) {
+        const friendIds = data.friends.map(f => f.id);
+        const sentIds = data.sent.map(f => f.id);
+        const receivedIds = data.received.map(f => f.id);
+        const rel = relationOfCurrent(friendIds, sentIds, receivedIds, prof.id);
+
+        if (rel === 'friend') {
+          actions.appendChild(menuItem('Perfil', '', () => {
+            closeOpponentMenu();
+            openFriendProfile(prof);
+          }));
+          actions.appendChild(menuItem('Remover amigo', 'text-red-400 hover:bg-red-500/20', () => {
+            closeOpponentMenu();
+            confirmRemoveFriend(prof.id, prof.playerName || prof.displayName || prof.name || 'Oponente');
+          }));
+        } else if (rel === 'sent') {
+          actions.appendChild(disabledItem('Solicitação enviada'));
+        } else if (rel === 'received') {
+          actions.appendChild(menuItem('Aceitar amigo', '', () => {
+            closeOpponentMenu();
+            respondFriendRequest(prof.id, true);
+          }));
+          actions.appendChild(menuItem('Recusar', 'text-red-400 hover:bg-red-500/20', () => {
+            closeOpponentMenu();
+            respondFriendRequest(prof.id, false);
+          }));
+        } else {
+          actions.appendChild(menuItem('+ Adicionar amigo', 'bg-blue-600 hover:bg-blue-500 text-white', () => {
+            closeOpponentMenu();
+            sendFriendRequestTo(prof.id, prof.playerName || prof.displayName || prof.name || 'Oponente');
+          }));
+        }
+      } else {
+        actions.appendChild(disabledItem('Não foi possível carregar a lista de amigos.'));
+      }
+    }
+
+    function openOpponentMenu() {
+      if (!isOnlineGame || onlineMatchEnded || !onlineOpponentProfile) return;
+      gameAudio.playClick();
+      hideAccountDropdown();
+      closeHistoryModal();
+      closeProfileModal();
+
+      const prof = onlineOpponentProfile;
+      const fullName = String(prof.playerName || prof.displayName || prof.name || 'Oponente');
+      const parts = fullName.split(/\s+/);
+      const first = parts[0] || 'Oponente';
+      const last = parts.slice(1).join(' ') || '—';
+
+      document.getElementById('opp-menu-name').textContent = first;
+      document.getElementById('opp-menu-surname').textContent = last;
+      document.getElementById('opp-menu-email').textContent = prof.email || '—';
+      setAvatarImage(document.getElementById('opp-menu-avatar'), prof.picture || '');
+
+      document.getElementById('opp-menu-actions').innerHTML = '<p class="text-xs text-slate-500 text-center">Carregando...</p>';
+      positionOpponentMenu();
+      document.getElementById('opponent-menu').classList.remove('hidden');
+      opponentMenuOpen = true;
+
+      renderOpponentMenuActions(prof);
+    }
+
+    async function sendFriendRequestTo(targetId, targetName) {
+      try {
+        const response = await fetch('/api/friends/request', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetId })
+        });
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}));
+          const actions = document.getElementById('opp-menu-actions');
+          actions.innerHTML = `<p class="text-xs text-red-400 text-center">${escapeHtmlText(error.error || 'Não foi possível enviar a solicitação.')}</p>`;
+          setTimeout(() => renderOpponentMenuActions(onlineOpponentProfile), 1500);
+          return;
+        }
+        const actions = document.getElementById('opp-menu-actions');
+        actions.innerHTML = '<p class="text-xs text-emerald-400 text-center">Solicitação de amizade enviada</p>';
+        setTimeout(() => renderOpponentMenuActions(onlineOpponentProfile), 1200);
+      } catch (error) {
+        // falha de rede: ignora e mantém o menu aberto
+      }
+    }
+
+    async function respondFriendRequest(targetId, accept) {
+      try {
+        const response = await fetch('/api/friends/' + (accept ? 'accept' : 'decline'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetId })
+        });
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}));
+          alert(error.error || 'Não foi possível responder a solicitação.');
+          return;
+        }
+        closeOpponentMenu();
+      } catch (error) {
+        // ignora falhas de rede
+      }
+    }
+
+    /* -------------------------------------------------------------
+       PERFIL DO AMIGO (foto, nome no jogo e histórico de partidas)
+    ------------------------------------------------------------- */
+
+    async function openFriendProfile(prof) {
+      const modal = document.getElementById('friend-profile-modal');
+      const list = document.getElementById('friend-profile-matches');
+      document.getElementById('friend-profile-name').textContent = prof.playerName || prof.displayName || prof.name || 'Oponente';
+      document.getElementById('friend-profile-email').textContent = prof.email || '—';
+      setAvatarImage(document.getElementById('friend-profile-avatar'), prof.picture || '');
+      list.innerHTML = '<p class="text-sm text-slate-400 text-center py-6">Carregando partidas...</p>';
+      modal.classList.remove('hidden');
+
+      try {
+        const response = await fetch('/api/users/' + encodeURIComponent(prof.id) + '/matches');
+        if (!response.ok) throw new Error(response.status === 403 ? 'Você só pode ver o histórico de amigos.' : 'Não foi possível carregar as partidas.');
+        const data = await response.json();
+        renderFriendMatches(list, data.matches || []);
+      } catch (error) {
+        list.innerHTML = `<p class="text-sm text-red-400 text-center py-6">${escapeHtmlText(error.message)}</p>`;
+      }
+    }
+
+    function closeFriendProfileModal() {
+      document.getElementById('friend-profile-modal').classList.add('hidden');
+    }
+
+    function renderFriendMatches(list, records) {
+      if (!list) return;
+      if (records.length === 0) {
+        list.innerHTML = '<p class="text-sm text-slate-400 text-center py-6">Nenhuma partida registrada ainda.</p>';
+        return;
+      }
+      list.innerHTML = records.map(record => {
+        const win = record.result === 'win';
+        const when = new Date(record.finishedAt);
+        const whenLabel = when.toLocaleDateString('pt-BR') + ' às ' +
+          when.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        const modeLabel = MATCH_MODE_LABELS[record.mode] || record.mode;
+        const resultColor = win ? 'text-emerald-400' : 'text-red-400';
+        const borderColor = win ? 'border-emerald-700' : 'border-red-700';
+        return `
+          <div class="bg-slate-800 border-2 ${borderColor} p-3 flex items-center justify-between gap-3">
+            <div class="min-w-0 text-left">
+              <p class="font-brand font-black text-sm ${resultColor}">${win ? 'VITÓRIA' : 'DERROTA'}</p>
+              <p class="text-xs text-slate-300 truncate">${escapeHtmlText(modeLabel)} · vs ${escapeHtmlText(record.opponentName)}</p>
+              <p class="text-[11px] text-slate-500">${whenLabel}</p>
+            </div>
+            <p class="font-mono text-lg text-slate-100 whitespace-nowrap">${record.playerScore} - ${record.opponentScore}</p>
+          </div>`;
+      }).join('');
+    }
+
+    /* -------------------------------------------------------------
+       REMOVER AMIGO (confirmação SIM / NÃO)
+    ------------------------------------------------------------- */
+
+    function confirmRemoveFriend(id, name) {
+      friendConfirmTarget = { id, name };
+      document.getElementById('friend-confirm-name').textContent = name;
+      document.getElementById('friend-confirm-modal').classList.remove('hidden');
+    }
+
+    async function confirmRemoveFriendYes() {
+      if (!friendConfirmTarget) return;
+      const { id, name } = friendConfirmTarget;
+      closeFriendConfirmModal();
+      try {
+        const response = await fetch('/api/friends/remove', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetId: id })
+        });
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}));
+          alert(error.error || 'Não foi possível remover o amigo.');
+          return;
+        }
+        // Atualiza a lista de amigos se a modal estiver aberta
+        if (!document.getElementById('friends-modal').classList.contains('hidden')) {
+          renderFriends();
+        }
+        // Fecha o menu do oponente se ele fosse o alvo
+        if (opponentMenuOpen && onlineOpponentProfile && onlineOpponentProfile.id === id) {
+          closeOpponentMenu();
+        }
+      } catch (error) {
+        // ignora falhas de rede
+      }
+      friendConfirmTarget = null;
+    }
+
+    function confirmRemoveFriendNo() {
+      closeFriendConfirmModal();
+      friendConfirmTarget = null;
+    }
+
+    function closeFriendConfirmModal() {
+      document.getElementById('friend-confirm-modal').classList.add('hidden');
+    }
+
+    /* -------------------------------------------------------------
+       MODAL DE AMIGOS (busca, lista de amigos e convites pendentes)
+    ------------------------------------------------------------- */
+
+    function openFriendsModal() {
+      gameAudio.playClick();
+      hideAccountDropdown();
+      document.getElementById('friends-search').value = '';
+      document.getElementById('friends-search-result').innerHTML = '';
+      document.getElementById('friends-search-status').textContent = '';
+      document.getElementById('friends-modal').classList.remove('hidden');
+      renderFriends();
+    }
+
+    function closeFriendsModal() {
+      document.getElementById('friends-modal').classList.add('hidden');
+    }
+
+    async function renderFriends() {
+      const data = await fetch('/api/friends')
+        .then(r => r.ok ? r.json() : null)
+        .catch(() => null);
+      if (!data) {
+        document.getElementById('friends-list').innerHTML = '<p class="text-xs text-red-400 text-center py-4">Não foi possível carregar a lista de amigos.</p>';
+        document.getElementById('friends-sent').innerHTML = '<p class="text-xs text-red-400 text-center py-4">Não foi possível carregar as solicitações enviadas.</p>';
+        document.getElementById('friends-received').innerHTML = '<p class="text-xs text-red-400 text-center py-4">Não foi possível carregar os convites pendentes.</p>';
+        return;
+      }
+
+      // Sincroniza o contador de notificações com as solicitações recebidas do servidor
+      pendingFriendRequestsCount = Array.isArray(data.friendRequestsReceived) ? data.friendRequestsReceived.length : 0;
+      updateFriendsBadge();
+
+      document.getElementById('friends-list-title').textContent = `Lista de amigos (${data.friends.length})`;
+      document.getElementById('friends-sent-title').textContent = `Solicitações enviadas (${data.sent.length})`;
+      document.getElementById('friends-received-title').textContent = `Convites pendentes (${data.received.length})`;
+
+      // Coluna 1: Lista de amigos (clicável para abrir perfil)
+      const list = document.getElementById('friends-list');
+      if (data.friends.length === 0) {
+        list.innerHTML = '<p class="text-xs text-slate-500 text-center py-4">Nenhum amigo ainda.</p>';
+      } else {
+        list.innerHTML = data.friends.map(friendRow).join('');
+      }
+
+      // Coluna 2: Solicitações enviadas (você enviou, aguardando resposta)
+      const sent = document.getElementById('friends-sent');
+      if (data.sent.length === 0) {
+        sent.innerHTML = '<p class="text-xs text-slate-500 text-center py-4">Nenhuma solicitação enviada aguardando resposta.</p>';
+      } else {
+        sent.innerHTML = data.sent.map(sentRow).join('');
+      }
+
+      // Coluna 3: Convites pendentes (você recebeu, aguardando sua resposta)
+      const received = document.getElementById('friends-received');
+      if (data.received.length === 0) {
+        received.innerHTML = '<p class="text-xs text-slate-500 text-center py-4">Nenhum convite pendente.</p>';
+      } else {
+        received.innerHTML = data.received.map(receivedRow).join('');
+      }
+    }
+
+    // Clica na foto, nome ou email do amigo para abrir o perfil dele
+    function friendRow(f) {
+      const name = f.playerName || f.displayName || f.email;
+      const safeName = String(name).replace(/"/g, '&quot;');
+      const safeEmail = String(f.email || '—').replace(/"/g, '&quot;');
+      const safePicture = escapeHtmlText(f.picture || '');
+      return `
+        <div class="bg-slate-800 border border-slate-700 p-2.5 flex items-center gap-3 cursor-pointer" onclick="openFriendProfile({ id: '${escapeHtmlText(f.id)}', playerName: '${safeName}', email: '${safeEmail}', picture: '${safePicture}' })">
+          <img src="${safePicture}" alt="Foto" class="w-8 h-8 rounded-full object-cover bg-slate-700 border border-slate-600" onerror="this.onerror=null;this.src='/assets/avatar.svg'">
+          <div class="min-w-0 flex-1">
+            <p class="text-sm font-bold text-slate-100 truncate">${escapeHtmlText(name)}</p>
+            <p class="text-[11px] text-slate-400 truncate">${safeEmail}</p>
+          </div>
+          <button type="button" data-friend-action="remove" data-friend-id="${escapeHtmlText(f.id)}" data-friend-name="${safeName}" class="text-[11px] text-red-400 hover:text-red-300 underline">Remover</button>
+        </div>`;
+    }
+
+    // Solicitações que você enviou e ainda não foram respondidas
+    function sentRow(f) {
+      const name = f.playerName || f.displayName || f.email;
+      const safeName = String(name).replace(/"/g, '&quot;');
+      return `
+        <div class="bg-slate-800 border border-slate-700 p-2.5 flex items-center gap-3">
+          <img src="${escapeHtmlText(f.picture || '')}" alt="Foto" class="w-8 h-8 rounded-full object-cover bg-slate-700 border border-slate-600" onerror="this.onerror=null;this.src='/assets/avatar.svg'">
+          <div class="min-w-0 flex-1">
+            <p class="text-sm font-bold text-slate-100 truncate">${escapeHtmlText(name)}</p>
+            <p class="text-[11px] text-slate-400 truncate">${escapeHtmlText(f.email || '—')}</p>
+          </div>
+          <button type="button" data-friend-action="cancel" data-friend-id="${escapeHtmlText(f.id)}" data-friend-name="${safeName}" class="text-[11px] text-red-400 hover:text-red-300 underline">Cancelar solicitação</button>
+        </div>`;
+    }
+
+    // Solicitações que você recebeu e ainda não respondeu
+    function receivedRow(f) {
+      const name = f.playerName || f.displayName || f.email;
+      const safeName = String(name).replace(/"/g, '&quot;');
+      return `
+        <div class="bg-slate-800 border border-slate-700 p-2.5 flex items-center gap-3">
+          <img src="${escapeHtmlText(f.picture || '')}" alt="Foto" class="w-8 h-8 rounded-full object-cover bg-slate-700 border border-slate-600" onerror="this.onerror=null;this.src='/assets/avatar.svg'">
+          <div class="min-w-0 flex-1">
+            <p class="text-sm font-bold text-slate-100 truncate">${escapeHtmlText(name)}</p>
+            <p class="text-[11px] text-slate-400 truncate">${escapeHtmlText(f.email || '—')}</p>
+          </div>
+          <button type="button" data-friend-action="accept" data-friend-id="${escapeHtmlText(f.id)}" data-friend-name="${safeName}" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-1.5 rounded transition mr-2">Aceitar</button>
+          <button type="button" data-friend-action="decline" data-friend-id="${escapeHtmlText(f.id)}" data-friend-name="${safeName}" class="text-red-400 hover:bg-red-500/20 text-xs font-bold px-3 py-1.5 rounded transition">Recusar</button>
+        </div>`;
+    }
+
+    async function handleFriendSearch() {
+      const input = document.getElementById('friends-search');
+      const status = document.getElementById('friends-search-status');
+      const result = document.getElementById('friends-search-result');
+      const query = String(input.value || '').trim();
+      if (!query) {
+        status.textContent = 'Digite um Gmail ou nome no jogo para buscar.';
+        result.innerHTML = '';
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/friends/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query })
+        });
+        const data = await response.json();
+
+        if (!data.found) {
+          status.textContent = 'Conta não encontrada.';
+          result.innerHTML = '<p class="text-sm text-slate-400">Não existe conta com este Gmail ou nome no jogo.</p>';
+          return;
+        }
+
+        const acc = data.account;
+        const rel = data.relation;
+        const name = acc.playerName || acc.displayName || acc.email;
+        const safeName = String(name).replace(/"/g, '&quot;');
+
+        let action = '';
+        let statusText = '';
+        if (rel === 'none') {
+          action = `<button type="button" data-friend-action="add" data-friend-id="${escapeHtmlText(acc.id)}" data-friend-name="${safeName}" onclick="handleAddFriendButton(this, '${escapeHtmlText(acc.id)}')" class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3 py-1.5 rounded transition">+ Adicionar amigo</button>`;
+          statusText = '';
+        } else if (rel === 'friend') {
+          action = `<button type="button" disabled class="text-xs font-bold px-3 py-1.5 rounded bg-slate-700/50 text-slate-500">Já é seu amigo</button>`;
+          statusText = '';
+        } else if (rel === 'sent') {
+          action = `<button type="button" disabled class="text-xs font-bold px-3 py-1.5 rounded bg-slate-700/50 text-slate-500">Solicitação enviada</button>`;
+          statusText = '';
+        } else if (rel === 'received') {
+          action = `<button type="button" data-friend-action="accept" data-friend-id="${escapeHtmlText(acc.id)}" data-friend-name="${safeName}" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-1.5 rounded transition mr-2">Aceitar</button>
+                    <button type="button" data-friend-action="decline" data-friend-id="${escapeHtmlText(acc.id)}" data-friend-name="${safeName}" class="text-red-400 hover:bg-red-500/20 text-xs font-bold px-3 py-1.5 rounded transition">Recusar</button>`;
+          statusText = '';
+        }
+
+        result.innerHTML = `
+          <div class="bg-slate-800 border border-slate-700 p-3 flex items-center gap-3">
+            <img src="${escapeHtmlText(acc.picture || '')}" alt="Foto" class="w-10 h-10 rounded-full object-cover bg-slate-700 border border-slate-600" onerror="this.onerror=null;this.src='/assets/avatar.svg'">
+            <div class="min-w-0">
+              <p class="text-sm font-bold text-slate-100 truncate">${escapeHtmlText(name)}</p>
+              <p class="text-[11px] text-slate-400 truncate">${escapeHtmlText(acc.email || '—')}</p>
+            </div>
+            <div>${action}</div>
+          </div>`;
+        status.textContent = statusText;
+      } catch (error) {
+        status.textContent = 'Erro ao buscar a conta.';
+        result.innerHTML = '';
+      }
+    }
+
+    async function handleAddFriendButton(btn, targetId) {
+      // Feedback imediato: troca o botão para "Solicitação enviada"
+      btn.textContent = 'Solicitação enviada';
+      btn.disabled = true;
+      btn.className = 'text-xs font-bold px-3 py-1.5 rounded bg-slate-700/50 text-slate-500';
+      try {
+        await executeFriendAction('request', targetId);
+      } catch (error) {
+        // Em caso de falha, restaura o botão para tentar novamente
+        btn.textContent = '+ Adicionar amigo';
+        btn.disabled = false;
+        btn.className = 'bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3 py-1.5 rounded transition';
+      }
+    }
+
+    async function executeFriendAction(action, targetId, targetName) {
+      try {
+        const response = await fetch('/api/friends/' + action, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetId })
+        });
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}));
+          document.getElementById('friends-search-status').textContent = error.error || 'Não foi possível completar a ação.';
+          return;
+        }
+        await renderFriends();
+        document.getElementById('friends-search-status').textContent = '';
+        document.getElementById('friends-search-result').innerHTML = '';
+      } catch (error) {
+        // ignora falhas de rede
+      }
+    }
+
+    function openSetupModal() {
+      // Sair de uma partida online em andamento (menu, reiniciar)
+      // conta como desistência: derrota por desistência
+      if (isOnlineGame && !onlineMatchEnded) {
+        startAbandonFlow(true);
+        return;
+      }
+
+      clearAbandonCountdown();
+      document.getElementById('win-countdown').classList.add('hidden');
+      document.getElementById('win-subtitle').classList.add('hidden');
+      gameAudio.stopMusic();
+      gameAudio.playClick();
+      stopTurnTimer();
+      // Voltando ao menu: encerra o relógio em segundo plano
+      stopBackgroundClock();
+      invalidateScheduledCallbacks();
+      setMenuButtonVisible(false);
+      document.getElementById('pause-modal').classList.add('hidden');
+      document.getElementById('win-modal').classList.add('hidden');
+      document.getElementById('setup-screen').classList.remove('hidden');
+      layoutAccountArea();
+
+      // Reseta o estado do jogo online (a sala anterior deixa de ser válida)
+      isOnlineGame = false;
+      onlineMatchEnded = false;
+      onlineMatchType = 'local';
+      onlineRoomCode = null;
+      onlinePlayerIdx = null;
+      onlineOpponentName = null;
+      onlineOpponentColor = null;
+
+      // Restaura a escolha de cor feita na tela inicial antes da partida
+      // online (o slot usado na partida era definido pelo servidor)
+      if (preOnlineColorState) {
+        selectedHumanColor = preOnlineColorState.selectedHumanColor;
+        usingCustomColor = preOnlineColorState.usingCustomColor;
+        customColorHex = preOnlineColorState.customColorHex;
+        customColorName = preOnlineColorState.customColorName;
+        preOnlineColorState = null;
+        if (usingCustomColor) previewCustomColor(customColorHex);
+        updateColorVariables();
+        updateColorSelectionUI();
+      }
+
+      // Reseta o modo de jogo (nenhum pré-selecionado)
+      opponentsCount = null;
+      updateModeUI();
+
+      // Limpa a mensagem de status do login Google
+      const statusEl = document.getElementById('login-status-setup');
+      if (statusEl) statusEl.textContent = '';
+
+      // Atualiza o estado do botão Single Player Online baseado na sessão atual
+      updateOnlineSingleButton();
+      // Garante que a visão de modos online (Jogo Rápido/Convite) volte ao menu
+      resetOnlineModesUI();
+    }
+
+    function getCurrentPlayer() {
+      return activePlayers[currentTurnIndex];
+    }
+
+    function logStatus(msg) {
+      const statusLog = document.getElementById('status-log');
+      if (statusLog) statusLog.innerText = msg;
+    }
+
+    /* -------------------------------------------------------------
+       RELÓGIO DO TURNO (30 SEGUNDOS)
+       Quando o tempo do jogador humano acaba, ele perde a vez.
+    ------------------------------------------------------------- */
+    const TURN_TIMER_DURATION = 30;
+    const TURN_TIMER_CIRCUMFERENCE = 2 * Math.PI * 44;
+
+    const turnTimer = {
+      duration: TURN_TIMER_DURATION,
+      remaining: TURN_TIMER_DURATION,
+      endsAt: null,
+      interval: null,
+      expired: false,
+      mirrored: false // true quando cronometra o turno do oponente (espelho)
+    };
+
+    function isHumanTurn() {
+      return playerTypes[getCurrentPlayer()] === 'HUMAN';
+    }
+
+    function renderTurnTimer() {
+      const root = document.getElementById('turn-timer');
+      const value = document.getElementById('timer-value');
+      const progress = document.getElementById('timer-progress');
+      if (!root || !value || !progress) return;
+
+      const running = Boolean(turnTimer.endsAt);
+      const seconds = Math.max(0, Math.ceil(turnTimer.remaining));
+
+      value.textContent = String(seconds);
+      progress.style.strokeDashoffset = String(
+        TURN_TIMER_CIRCUMFERENCE * (1 - Math.max(0, Math.min(1, turnTimer.remaining / turnTimer.duration)))
+      );
+
+      root.classList.toggle('is-idle', !running);
+      root.classList.toggle('is-warning', running && seconds <= 10 && seconds > 5);
+      root.classList.toggle('is-danger', running && seconds <= 5);
+      root.classList.toggle('is-expired', turnTimer.expired);
+      root.setAttribute('aria-label', `Tempo restante para jogar: ${seconds} segundos`);
+    }
+
+    function clearTurnTimerInterval() {
+      if (turnTimer.interval) {
+        clearInterval(turnTimer.interval);
+        turnTimer.interval = null;
+      }
+    }
+
+    function startTurnTimer(mirrored = false) {
+      clearTurnTimerInterval();
+      turnTimer.remaining = turnTimer.duration;
+      turnTimer.endsAt = Date.now() + turnTimer.duration * 1000;
+      turnTimer.expired = false;
+      turnTimer.mirrored = Boolean(mirrored);
+      renderTurnTimer();
+      turnTimer.interval = setInterval(tickTurnTimer, 100);
+    }
+
+    function stopTurnTimer() {
+      clearTurnTimerInterval();
+      turnTimer.endsAt = null;
+      turnTimer.remaining = turnTimer.duration;
+      turnTimer.expired = false;
+      turnTimer.mirrored = false;
+      renderTurnTimer();
+    }
+
+    function pauseTurnTimer() {
+      if (!turnTimer.endsAt) return;
+      turnTimer.remaining = Math.max(0, (turnTimer.endsAt - Date.now()) / 1000);
+      turnTimer.endsAt = null;
+      clearTurnTimerInterval();
+      renderTurnTimer();
+    }
+
+    function resumeTurnTimer() {
+      if (turnTimer.endsAt || turnTimer.remaining <= 0 || turnTimer.expired) return;
+      if (!isHumanTurn() || isPaused) return;
+      turnTimer.endsAt = Date.now() + turnTimer.remaining * 1000;
+      clearTurnTimerInterval();
+      turnTimer.interval = setInterval(tickTurnTimer, 100);
+      renderTurnTimer();
+    }
+
+    function tickTurnTimer() {
+      if (!turnTimer.endsAt) return;
+      turnTimer.remaining = Math.max(0, (turnTimer.endsAt - Date.now()) / 1000);
+
+      if (turnTimer.remaining <= 0) {
+        if (turnTimer.mirrored) {
+          // O tempo do oponente acabou neste cliente (espelho): apenas sinaliza
+          // visualmente e aguarda o pass_turn enviado pelo cliente dele.
+          clearTurnTimerInterval();
+          turnTimer.endsAt = null;
+          turnTimer.expired = true;
+          renderTurnTimer();
+          return;
+        }
+        onTurnTimeout();
+        return;
+      }
+
+      renderTurnTimer();
+    }
+
+    function onTurnTimeout() {
+      if (turnTimer.mirrored) return; // o oponente cuida do próprio tempo
+      if (turnTimer.expired || isPaused || !isHumanTurn()) return;
+
+      if (isAnimating) {
+        // Aguarda a animação em andamento para não quebrar o estado do tabuleiro.
+        turnTimer.endsAt = Date.now() + 1000;
+        renderTurnTimer();
+        return;
+      }
+
+      clearTurnTimerInterval();
+      turnTimer.endsAt = null;
+      turnTimer.remaining = 0;
+      turnTimer.expired = true;
+      renderTurnTimer();
+
+      gameAudio.playNoMove();
+      logStatus('⏱️ Tempo esgotado! Você perdeu a vez.');
+      const instruction = document.getElementById('dice-instruction');
+      if (instruction) instruction.textContent = 'Tempo esgotado!';
+
+      hasRolled = false;
+      isAnimating = false;
+      clearHighlights();
+
+      schedule(() => {
+        turnTimer.expired = false;
+        if (isPaused) {
+          renderTurnTimer();
+          return;
+        }
+        // No modo online, avisa o oponente de que o tempo esgotou e a vez passou
+        if (isOnlineGame) sendOnlinePassTurn();
+        nextTurn();
+      }, 1200);
+    }
+
+    function syncTurnTimerWithTurn() {
+      const player = getCurrentPlayer();
+      const color = getPlayerColor(player);
+      const root = document.getElementById('turn-timer');
+      if (root) root.style.setProperty('--timer-color', color.hex);
+
+      // No modo online, o relógio também roda (espelhado) na vez do oponente,
+      // para o jogador local acompanhar quanto tempo resta para a jogada dele.
+      const isHumanSide = playerTypes[player] === 'HUMAN';
+      const isLocalSide = isHumanSide && (!isOnlineGame || player === getHumanPlayerKey());
+      if (isHumanSide && !isPaused) {
+        startTurnTimer(isOnlineGame && !isLocalSide);
+      } else {
+        stopTurnTimer();
+      }
+    }
+
+    function getHumanTeamScore() {
+      // No modo online, apenas os pontos do jogador local contam para o placar
+      if (isOnlineGame) return playerScores[getHumanPlayerKey()] || 0;
+      return activePlayers.reduce((total, player) => {
+        return total + (isHumanTeamPlayer(player) ? (playerScores[player] || 0) : 0);
+      }, 0);
+    }
+
+    function getCpuScore() {
+      // No modo online, o slot do oponente mostra os pontos do jogador remoto
+      if (isOnlineGame) {
+        const opponentKey = activePlayers.find(player => player !== getHumanPlayerKey());
+        return opponentKey ? (playerScores[opponentKey] || 0) : 0;
+      }
+      return activePlayers.reduce((total, player) => {
+        return total + (playerTypes[player] === 'CPU' ? (playerScores[player] || 0) : 0);
+      }, 0);
+    }
+
+    function updateScoreboardUI() {
+      if (isOnlineGame) {
+        // Placar online: primeiro nome do jogador local x primeiro nome do oponente
+        document.getElementById('score-player-name').innerText = playerName || 'Você';
+        document.getElementById('score-cpu-label').innerText = getFirstName(onlineOpponentName) || 'Oponente';
+        document.getElementById('score-cpu-label').style.cursor = 'pointer';
+        document.getElementById('score-cpu-label').title = 'Clique no oponente';
+        document.getElementById('score-cpu-label').onclick = openOpponentMenu;
+      } else {
+        document.getElementById('score-player-name').innerText = playerName || (isTeamMode() ? 'Dupla' : 'Jogador');
+        document.getElementById('score-cpu-label').innerText = isTeamMode() ? 'CPUs' : 'CPU';
+        document.getElementById('score-cpu-label').style.cursor = 'default';
+        document.getElementById('score-cpu-label').title = '';
+        document.getElementById('score-cpu-label').onclick = null;
+      }
+      document.getElementById('score-human').innerText = getHumanTeamScore();
+      document.getElementById('score-cpu').innerText = getCpuScore();
+      document.getElementById('scoreboard').title = `Primeiro a marcar ${getWinningScore()} pontos vence`;
+    }
+
+    function awardFinalPoint(player) {
+      playerScores[player] = (playerScores[player] || 0) + 1;
+      updateScoreboardUI();
+      gameAudio.playPoint();
+    }
+
+    function updateTurnUI() {
+      const player = getCurrentPlayer();
+      const color = getPlayerColor(player);
+      const dot = document.getElementById('turn-color-dot');
+      const text = document.getElementById('turn-text');
+      const badge = document.getElementById('turn-badge');
+      const currentPlayerName = getPlayerDisplayName(player);
+
+      dot.className = `w-3.5 h-3.5 shrink-0 ${color.bg}`;
+      text.className = `font-bold text-sm truncate ${color.text}`;
+      text.innerText = `Turno: ${currentPlayerName}`;
+      badge.className = `flex items-center justify-center gap-2 px-4 py-1.5 bg-slate-800 border max-w-full ${color.border}`;
+
+      const instruction = document.getElementById('dice-instruction');
+      if (isOnlineGame && player !== getHumanPlayerKey()) {
+        instruction.textContent = `Vez de ${getPlayerDisplayName(player)}...`;
+      } else if (!hasRolled && !isAnimating) {
+        instruction.textContent = 'Toque para rolar';
+      }
+
+      syncTurnTimerWithTurn();
+    }
+
+    function handleDiceClick() {
+      if (playerTypes[getCurrentPlayer()] === 'HUMAN' && !hasRolled && !isAnimating && !isPaused) {
+        // No modo online, só é permitido rolar quando é o turno do jogador local
+        if (isOnlineGame && getCurrentPlayer() !== getHumanPlayerKey()) return;
+        rollDice();
+      }
+    }
+
+    function initBoard() {
+      const board = document.getElementById('ludo-board');
+      board.innerHTML = '';
+
+      for (let r = 0; r < 15; r++) {
+        for (let c = 0; c < 15; c++) {
+          const cell = document.createElement('div');
+          cell.id = `cell-${r}-${c}`;
+          cell.className = 'cell';
+
+          styleCell(cell, r, c);
+          board.appendChild(cell);
+        }
+      }
+    }
+
+    function styleCell(cell, r, c) {
+      if (r < 6 && c < 6) cell.classList.add('bg-red-ludo');
+      else if (r < 6 && c > 8) cell.classList.add('bg-green-ludo');
+      else if (r > 8 && c > 8) cell.classList.add('bg-yellow-ludo');
+      else if (r > 8 && c < 6) cell.classList.add('bg-blue-ludo');
+
+      if ((r >= 1 && r <= 4) && (c >= 1 && c <= 4)) cell.classList.add('!bg-white', 'border-red-ludo');
+      if ((r >= 1 && r <= 4) && (c >= 10 && c <= 13)) cell.classList.add('!bg-white', 'border-green-ludo');
+      if ((r >= 10 && r <= 13) && (c >= 10 && c <= 13)) cell.classList.add('!bg-white', 'border-yellow-ludo');
+      if ((r >= 10 && r <= 13) && (c >= 1 && c <= 4)) cell.classList.add('!bg-white', 'border-blue-ludo');
+
+      if ((r===2||r===3) && (c===2||c===3)) cell.classList.add('!border-2', 'border-red-ludo', '!');
+      if ((r===2||r===3) && (c===11||c===12)) cell.classList.add('!border-2', 'border-green-ludo', '!');
+      if ((r===11||r===12) && (c===11||c===12)) cell.classList.add('!border-2', 'border-yellow-ludo', '!');
+      if ((r===11||r===12) && (c===2||c===3)) cell.classList.add('!border-2', 'border-blue-ludo', '!');
+
+      if (r === 7 && c >= 1 && c <= 5) cell.classList.add('bg-red-ludo');
+      if (c === 7 && r >= 1 && r <= 5) cell.classList.add('bg-green-ludo');
+      if (r === 7 && c >= 9 && c <= 13) cell.classList.add('bg-yellow-ludo');
+      if (c === 7 && r >= 9 && r <= 13) cell.classList.add('bg-blue-ludo');
+
+      /* Cores Pastéis para Casas Iniciais/Especiais */
+      if (r === 6 && c === 1) cell.style.backgroundColor = 'var(--red-player-pastel)';
+      if (r === 1 && c === 8) cell.style.backgroundColor = 'var(--green-player-pastel)';
+      if (r === 8 && c === 13) cell.style.backgroundColor = 'var(--yellow-player-pastel)';
+      if (r === 13 && c === 6) cell.style.backgroundColor = 'var(--blue-player-pastel)';
+
+      if (r === 7 && c === 0) cell.innerHTML = `<div class="cell-bg-icon" style="background-color: var(--red-player-pastel);">${SVG_ARROW_RIGHT}</div>`;
+      if (r === 0 && c === 7) cell.innerHTML = `<div class="cell-bg-icon" style="background-color: var(--green-player-pastel);">${SVG_ARROW_DOWN}</div>`;
+      if (r === 7 && c === 14) cell.innerHTML = `<div class="cell-bg-icon" style="background-color: var(--yellow-player-pastel);">${SVG_ARROW_LEFT}</div>`;
+      if (r === 14 && c === 7) {
+        cell.classList.add('bg-blue-ludo');
+        cell.innerHTML = `<div class="cell-bg-icon" style="background-color: var(--blue-player-pastel);">${SVG_ARROW_UP}</div>`;
+      }
+
+      STAR_CELLS.forEach(star => {
+        if (star.r === r && star.c === c) {
+          let pastelBg = '#f1f5f9';
+          if (r === 6 && c === 1) pastelBg = 'var(--red-player-pastel)';
+          if (r === 1 && c === 8) pastelBg = 'var(--green-player-pastel)';
+          if (r === 8 && c === 13) pastelBg = 'var(--yellow-player-pastel)';
+          if (r === 13 && c === 6) pastelBg = 'var(--blue-player-pastel)';
+          cell.innerHTML = `<div class="cell-bg-icon" style="background-color: ${pastelBg};">${SVG_STAR(star.color)}</div>`;
+        }
+      });
+
+      /* Triângulos centrais alinhados */
+      if (r >= 6 && r <= 8 && c >= 6 && c <= 8) {
+        cell.classList.add('!border-none', '!p-0');
+        if (r === 7 && c === 6) cell.innerHTML = '<div class="w-full h-full bg-red-ludo center-triangle-red"></div>';
+        if (r === 6 && c === 7) cell.innerHTML = '<div class="w-full h-full bg-green-ludo center-triangle-green"></div>';
+        if (r === 7 && c === 8) cell.innerHTML = '<div class="w-full h-full bg-yellow-ludo center-triangle-yellow"></div>';
+        if (r === 8 && c === 7) cell.innerHTML = '<div class="w-full h-full bg-blue-ludo center-triangle-blue"></div>';
+      }
+    }
+
+    function toggleFullscreen() {
+      gameAudio.playClick();
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        }
+      }
+    }
+
+    function getForwardRotation(current, desired) {
+      const currentMod = ((current % 360) + 360) % 360;
+      const desiredMod = ((desired % 360) + 360) % 360;
+      const delta = (desiredMod - currentMod + 360) % 360;
+      return current + delta;
+    }
+
+    function completeDiceRoll() {
+      isAnimating = false;
+      hasRolled = true;
+      document.getElementById('dice-instruction').textContent = 'Toque para rolar';
+      logStatus(`${getPlayerColor(getCurrentPlayer()).name} tirou ${diceValue} no dado!`);
+
+      if (diceValue === 6) {
+        consecutiveSixes++;
+        if (consecutiveSixes === 3) {
+          gameAudio.playNoMove();
+          logStatus(`3 Seis consecutivos! Perdeu a vez.`);
+          consecutiveSixes = 0;
+          // No modo online, o turno também precisa avançar no oponente
+          if (isOnlineGame) sendOnlinePassTurn();
+          schedule(nextTurn, 1200);
+          return;
+        }
+      } else {
+        consecutiveSixes = 0;
+      }
+
+      if (isOnlineGame) {
+        sendOnlineDiceRoll(diceValue);
+      }
+      evaluateMoves();
+    }
+
+    function animateDiceRoll(dice, rotations, onDone = completeDiceRoll) {
+      const rot = rotations[diceValue];
+      const extraSpins = 1080;
+      const finalX = getForwardRotation(diceCurrentX, rot.x) + extraSpins;
+      const finalY = getForwardRotation(diceCurrentY, rot.y) + extraSpins;
+      const finalTransform = `translateY(0px) rotateX(${finalX}deg) rotateY(${finalY}deg) scale(1)`;
+      const deltaX = finalX - diceCurrentX;
+      const deltaY = finalY - diceCurrentY;
+      const frameAt = (progress, lift, scale) =>
+        `translateY(${lift}px) rotateX(${diceCurrentX + deltaX * progress}deg) rotateY(${diceCurrentY + deltaY * progress}deg) scale(${scale})`;
+
+      const keyframes = [
+        { transform: diceCurrentTransform, offset: 0 },
+        { transform: frameAt(0.22, -2, 1.04), offset: 0.22 },
+        { transform: frameAt(0.52, -6, 1.13), offset: 0.52 },
+        { transform: frameAt(0.78, -2, 1.06), offset: 0.78 },
+        { transform: finalTransform, offset: 1 }
+      ];
+
+      // Sem suporte a Web Animations ou com a aba em segundo plano:
+      // aplica a face final do dado diretamente e segue o fluxo da partida
+      if (typeof dice.animate !== 'function' || document.hidden) {
+        dice.style.transform = finalTransform;
+        diceCurrentX = finalX;
+        diceCurrentY = finalY;
+        diceCurrentTransform = finalTransform;
+        schedule(onDone, document.hidden ? 250 : 1500);
+        return;
+      }
+
+      const animation = dice.animate(keyframes, {
+        duration: 1500,
+        easing: 'cubic-bezier(0.16, 0.78, 0.18, 1)',
+        fill: 'forwards'
+      });
+
+      activeDiceAnimation = animation;
+      animation.addEventListener('finish', () => {
+        dice.style.transition = 'none';
+        dice.style.transform = finalTransform;
+        diceCurrentX = finalX;
+        diceCurrentY = finalY;
+        diceCurrentTransform = finalTransform;
+        void dice.offsetWidth;
+        dice.style.transition = '';
+        activeDiceAnimation = null;
+        animation.cancel();
+        onDone();
+      }, { once: true });
+    }
+
+    function rollDice() {
+      if (hasRolled || isAnimating || isPaused) return;
+
+      isAnimating = true;
+      document.getElementById('dice-instruction').textContent = 'Girando o dado...';
+      gameAudio.playDice();
+
+      diceValue = Math.floor(Math.random() * 6) + 1;
+
+      animateDiceRoll(document.getElementById('dice'), DICE_ROTATIONS);
+    }
+
+    function evaluateMoves() {
+      const player = getCurrentPlayer();
+      const validTokens = getValidTokenIndices(player, diceValue);
+
+      if (validTokens.length === 0) {
+        gameAudio.playNoMove();
+        logStatus(`Nenhum movimento possível para ${getPlayerColor(player).name}.`);
+        // No modo online, avisa o oponente para também avançar o turno
+        if (isOnlineGame && player === getHumanPlayerKey()) sendOnlinePassTurn();
+        schedule(nextTurn, 1200);
+      } else if (isAutomatedPlayer(player)) {
+        schedule(() => makeCPUMove(validTokens), 800);
+      } else if (isOnlineGame && player !== getHumanPlayerKey()) {
+        // Turno do oponente remoto: aguardar o movimento chegar via WebSocket
+        return;
+      } else {
+        highlightSelectableTokens(validTokens);
+      }
+    }
+
+    function getValidTokenIndices(player, roll) {
+      const tokens = tokensState[player];
+      const valid = [];
+
+      tokens.forEach((pos, idx) => {
+        if (pos === -1) {
+          if (roll === 6) valid.push(idx);
+        } else if (pos < FINAL_POSITION) {
+          if (pos + roll <= FINAL_POSITION) valid.push(idx);
+        }
+      });
+
+      return valid;
+    }
+
+    function highlightSelectableTokens(validIndices) {
+      const player = getCurrentPlayer();
+      validIndices.forEach(idx => {
+        const el = document.getElementById(`token-${player}-${idx}`);
+        if (el) {
+          el.classList.add('selectable');
+          el.onclick = () => moveToken(player, idx, diceValue);
+        }
+      });
+    }
+
+    function clearHighlights() {
+      document.querySelectorAll('.token.selectable').forEach(el => {
+        el.classList.remove('selectable');
+        el.onclick = null;
+      });
+    }
+
+    function wait(duration) {
+      return new Promise(resolve => setTimeout(resolve, duration));
+    }
+
+    async function animateTokenTransition(player, tokenIdx, fromPos, toPos, duration = 320) {
+      const token = document.getElementById(`token-${player}-${tokenIdx}`);
+      if (!token) return;
+
+      const [fromRow, fromCol] = getCoords(player, tokenIdx, fromPos);
+      const [toRow, toCol] = getCoords(player, tokenIdx, toPos);
+      const board = document.getElementById('ludo-board');
+      const cellSize = board.clientWidth / 15;
+      const deltaX = (fromCol - toCol) * cellSize;
+      const deltaY = (fromRow - toRow) * cellSize;
+
+      const keyframes = [
+        {
+          transform: `translate(${deltaX}px, ${deltaY}px) scale(0.92) rotate(-4deg)`,
+          filter: 'brightness(0.96)',
+          boxShadow: '0 2px 4px rgba(0, 0, 0, 0.28)',
+          offset: 0
+        },
+        {
+          transform: `translate(${deltaX * 0.46}px, ${deltaY * 0.46 - 10}px) scale(1.12) rotate(3deg)`,
+          filter: 'brightness(1.16)',
+          boxShadow: '0 10px 14px rgba(0, 0, 0, 0.42)',
+          offset: 0.48
+        },
+        {
+          transform: `translate(${deltaX * 0.12}px, ${deltaY * 0.12 - 3}px) scale(1.04) rotate(1deg)`,
+          filter: 'brightness(1.05)',
+          boxShadow: '0 5px 8px rgba(0, 0, 0, 0.34)',
+          offset: 0.8
+        },
+        {
+          transform: 'translate(0px, 0px) scale(1) rotate(0deg)',
+          filter: 'brightness(1)',
+          boxShadow: '0 3px 6px rgba(0, 0, 0, 0.4)',
+          offset: 1
+        }
+      ];
+
+      // Sem Web Animations ou com a aba em segundo plano: pula a animação,
+      // já posicionando a peça na casa final do movimento.
+      if (typeof token.animate !== 'function' || document.hidden) return;
+
+      const animation = token.animate(keyframes, {
+        duration,
+        easing: 'cubic-bezier(0.2, 0.78, 0.24, 1)',
+        fill: 'both'
+      });
+
+      activeTokenAnimation = animation;
+      try {
+        await animation.finished;
+      } catch (error) {
+        // A animação pode ser cancelada ao reiniciar a partida.
+      }
+
+      if (activeTokenAnimation === animation) {
+        activeTokenAnimation = null;
+        animation.cancel();
+      }
+    }
+
+    async function moveToken(player, tokenIdx, steps, isRemote = false) {
+      clearHighlights();
+      isAnimating = true;
+      const session = movementSession;
+      const startingPosition = tokensState[player][tokenIdx];
+
+      // No modo remoto (movimento do oponente), não reenvia a mensagem
+      if (isOnlineGame && !isRemote) {
+        sendOnlineTokenMove(player, tokenIdx, steps);
+      }
+
+      try {
+        if (startingPosition === -1 && steps === 6) {
+          gameAudio.playMove();
+          tokensState[player][tokenIdx] = 0;
+          renderTokens();
+          await animateTokenTransition(player, tokenIdx, -1, 0, 560);
+        } else {
+          for (let step = 0; step < steps; step++) {
+            while (isPaused && session === movementSession) {
+              await wait(80);
+            }
+            if (session !== movementSession) return;
+
+            const fromPosition = tokensState[player][tokenIdx];
+            gameAudio.playMove();
+            tokensState[player][tokenIdx]++;
+            renderTokens();
+            await animateTokenTransition(player, tokenIdx, fromPosition, tokensState[player][tokenIdx], 320);
+            if (session !== movementSession) return;
+            if (tokensState[player][tokenIdx] === FINAL_POSITION) {
+              awardFinalPoint(player);
+            }
+          }
+        }
+
+        if (session !== movementSession) return;
+        checkCapture(player, tokensState[player][tokenIdx]);
+        finishMove();
+      } catch (error) {
+        if (session === movementSession) finishMove();
+      }
+    }
+
+    function checkCapture(player, pos) {
+      if (pos < 0 || pos >= FIRST_HOME_POSITION) return;
+
+      const [r, c] = getCoords(player, 0, pos);
+      const isStar = STAR_CELLS.some(star => star.r === r && star.c === c);
+
+      if (isStar) return;
+
+      const mainIdx = getMainPathIndex(player, pos);
+      let captured = false;
+
+      activePlayers.forEach(otherPlayer => {
+        if (otherPlayer === player || areSameTeam(player, otherPlayer)) return;
+
+        tokensState[otherPlayer].forEach((otherPos, otherIdx) => {
+          if (otherPos >= 0 && otherPos < FIRST_HOME_POSITION) {
+            const otherMainIdx = getMainPathIndex(otherPlayer, otherPos);
+            if (otherMainIdx === mainIdx) {
+              // Captura apenas peças da equipe adversária.
+              tokensState[otherPlayer][otherIdx] = -1;
+              captured = true;
+              logStatus(`💥 ${getPlayerDisplayName(player)} capturou a peça de ${getPlayerDisplayName(otherPlayer)}!`);
+            }
+          }
+        });
+      });
+
+      if (captured) gameAudio.playCapture();
+    }
+
+    function finishMove() {
+      renderTokens();
+      isAnimating = false;
+
+      const player = getCurrentPlayer();
+      const winningTeam = getWinningTeam();
+      if (winningTeam) {
+        const humanWon = winningTeam === 'HUMAN';
+        const winTitle = document.getElementById('win-title');
+
+        // A partida online terminou normalmente: desconexões seguintes
+        // não contam como abandono
+        if (isOnlineGame) onlineMatchEnded = true;
+        clearAbandonCountdown();
+        document.getElementById('win-countdown').classList.add('hidden');
+
+        stopTurnTimer();
+        winTitle.innerText = humanWon ? 'V I T Ó R I A' : 'D E R R O T A';
+        winTitle.className = `win-title font-display font-black ${humanWon ? 'text-amber-400' : 'text-red-500'}`;
+        document.getElementById('win-subtitle').classList.add('hidden');
+        document.getElementById('win-score').innerText = `${getHumanTeamScore()} - ${getCpuScore()}`;
+        document.getElementById('win-modal').classList.remove('hidden');
+
+        if (humanWon) {
+          gameAudio.playVictory();
+        } else {
+          gameAudio.playDefeat();
+        }
+
+        // Registra o resultado no histórico da conta
+        postMatchRecord(
+          isOnlineGame ? onlineMatchType : 'local',
+          humanWon ? 'win' : 'loss',
+          getHumanTeamScore(),
+          getCpuScore(),
+          isOnlineGame ? (onlineOpponentName || 'Oponente') : 'CPU'
+        );
+
+        // Fim da partida: encerra o relógio em segundo plano
+        stopBackgroundClock();
+        invalidateScheduledCallbacks();
+        setMenuButtonVisible(false);
+        return;
+      }
+
+      // Se tirou 6 no dado, ganha outro turno!
+      if (diceValue === 6) {
+        hasRolled = false;
+        logStatus(`${getPlayerColor(player).name} tirou 6 e joga novamente! 🎲`);
+        updateTurnUI();
+        checkCPUTurn();
+      } else {
+        nextTurn();
+      }
+    }
+
+    function getWinningTeam() {
+      const target = getWinningScore();
+      if (getHumanTeamScore() >= target) return 'HUMAN';
+      if (getCpuScore() >= target) return 'CPU';
+      return null;
+    }
+
+    function checkWin() {
+      return getWinningTeam() !== null;
+    }
+
+    function nextTurn() {
+      hasRolled = false;
+      currentTurnIndex = (currentTurnIndex + 1) % activePlayers.length;
+      updateTurnUI();
+      checkCPUTurn();
+    }
+
+    function startGame() {
+      const nameInput = document.getElementById('player-name-input');
+      let startName = nameInput ? nameInput.value : '';
+      if (isOnlineGame) {
+        // Usa o primeiro nome da conta Google como nome do jogador local
+        const account = typeof accountUser !== 'undefined' ? accountUser : null;
+        startName = getFirstName(account && (account.playerName || account.displayName)) || 'Você';
+      }
+      updatePlayerName(startName);
+      onlineMatchEnded = false;
+      movementSession++;
+
+      if (activeDiceAnimation) {
+        activeDiceAnimation.cancel();
+        activeDiceAnimation = null;
+      }
+      if (activeTokenAnimation) {
+        activeTokenAnimation.cancel();
+        activeTokenAnimation = null;
+      }
+
+      // O jogador humano sempre fica na posição BOTTOM_LEFT (canto inferior esquerdo)
+      const humanPlayerKey = getHumanPlayerKey();
+      const humanColorIdx = CLOCKWISE_COLORS.indexOf(humanPlayerKey);
+      boardRotationIndex = (4 - humanColorIdx) % 4;
+
+      playerTypes = { RED: 'NONE', GREEN: 'NONE', YELLOW: 'NONE', BLUE: 'NONE' };
+      playerTypes[humanPlayerKey] = 'HUMAN';
+
+      if (isTeamMode()) {
+        // Duplas nas bases diagonais: humano + 1 CPU aliado vs 2 CPUs adversárias.
+        const partnerColor = DIAGONAL_PARTNER[humanPlayerKey];
+        playerTypes[partnerColor] = 'ALLY';
+        CLOCKWISE_COLORS.forEach(color => {
+          if (color !== humanPlayerKey && color !== partnerColor) {
+            playerTypes[color] = 'CPU';
+          }
+        });
+      } else if (isOnlineGame) {
+        // No modo online o oponente é outro humano, controlado via WebSocket
+        const opponentColor = CLOCKWISE_COLORS[(humanColorIdx + 2) % 4];
+        playerTypes[opponentColor] = 'HUMAN';
+      } else {
+        const opponentColor = CLOCKWISE_COLORS[(humanColorIdx + 2) % 4];
+        playerTypes[opponentColor] = 'CPU';
+      }
+
+      activePlayers = CLOCKWISE_COLORS.filter(c => playerTypes[c] !== 'NONE');
+      updateColorVariables();
+
+      tokensState = {
+        RED: [-1, -1, -1, -1],
+        GREEN: [-1, -1, -1, -1],
+        YELLOW: [-1, -1, -1, -1],
+        BLUE: [-1, -1, -1, -1]
+      };
+
+      playerScores = {
+        RED: 0,
+        GREEN: 0,
+        YELLOW: 0,
+        BLUE: 0
+      };
+
+      // No modo local, o jogador humano começa. No modo online, ambos os
+      // clientes precisam concordar com o turno inicial: o player 0
+      // (criador da sala, cor AZUL) começa, garantindo turno sincronizado.
+      currentTurnIndex = isOnlineGame
+        ? 0
+        : activePlayers.indexOf(humanPlayerKey);
+      hasRolled = false;
+      consecutiveSixes = 0;
+      isAnimating = false;
+      isPaused = false;
+
+      document.getElementById('setup-screen').classList.add('hidden');
+      document.getElementById('win-modal').classList.add('hidden');
+      document.getElementById('pause-modal').classList.add('hidden');
+
+      initBoard();
+      
+      // Rotaciona visualmente o tabuleiro para alinhar a cor escolhida ao canto inferior esquerdo
+      const boardEl = document.getElementById('ludo-board');
+      const degrees = boardRotationIndex * 90;
+      boardEl.style.transform = `rotate(${degrees}deg)`;
+
+      renderTokens();
+      updateTurnUI();
+      updateScoreboardUI();
+      gameAudio.unlock();
+      gameAudio.startMusic();
+      const greeting = playerName ? `Boa sorte, ${playerName}! ` : '';
+      logStatus(`${greeting}Partida iniciada! Sua cor (${getPlayerColor(humanPlayerKey).name}) está no Canto Inferior Esquerdo.`);
+      checkCPUTurn();
+
+      // Ativa o relógio em segundo plano (Web Worker) e invalida callbacks
+      // agendados de partidas anteriores
+      invalidateScheduledCallbacks();
+      startBackgroundClock();
+      // O botão Menu volta a ficar disponível durante a partida
+      setMenuButtonVisible(true);
+      layoutAccountArea();
+    }
+
+    function checkCPUTurn() {
+      const player = getCurrentPlayer();
+      if (isAutomatedPlayer(player) && !hasRolled && !isPaused) {
+        schedule(() => {
+          if (!isPaused) rollDice();
+        }, 600);
+      }
+    }
+
+    function makeCPUMove(validIndices) {
+      const player = getCurrentPlayer();
+      let chosenTokenIndex = validIndices[0];
+      let maxScore = -999;
+
+      validIndices.forEach(idx => {
+        let score = 0;
+        const currentPos = tokensState[player][idx];
+
+        if (currentPos === -1) {
+          score += 50;
+        } else {
+          const nextPos = currentPos + diceValue;
+          if (nextPos < FIRST_HOME_POSITION) {
+            const targetMainIdx = getMainPathIndex(player, nextPos);
+            activePlayers.forEach(other => {
+              if (other !== player && !areSameTeam(player, other)) {
+                tokensState[other].forEach(oPos => {
+                  if (oPos >= 0 && oPos < FIRST_HOME_POSITION && getMainPathIndex(other, oPos) === targetMainIdx) {
+                    score += 100;
+                  }
+                });
+              }
+            });
+          }
+          score += nextPos;
+        }
+
+        if (score > maxScore) {
+          maxScore = score;
+          chosenTokenIndex = idx;
+        }
+      });
+
+      moveToken(player, chosenTokenIndex, diceValue);
+    }
+
+    function getMainPathIndex(player, relativePos) {
+      const start = START_INDEX[player];
+      return (start + relativePos) % TRACK_LENGTH;
+    }
+
+    function getCoords(player, tokenIdx, pos) {
+      if (pos === -1) {
+        return YARD_POSITIONS[player][tokenIdx];
+      } else if (pos < FIRST_HOME_POSITION) {
+        const mainIdx = getMainPathIndex(player, pos);
+        return MAIN_PATH[mainIdx];
+      } else {
+        const homeIdx = pos - FIRST_HOME_POSITION;
+        return HOME_PATHS[player][homeIdx];
+      }
+    }
+
+    function renderTokens() {
+      document.querySelectorAll('.tokens-container').forEach(el => el.remove());
+
+      const cellMap = {};
+
+      activePlayers.forEach(player => {
+        tokensState[player].forEach((pos, idx) => {
+          const [r, c] = getCoords(player, idx, pos);
+          const key = `${r}-${c}`;
+          if (!cellMap[key]) cellMap[key] = [];
+          cellMap[key].push({ player, idx });
+        });
+      });
+
+      Object.keys(cellMap).forEach(key => {
+        const cell = document.getElementById(`cell-${key}`);
+        if (!cell) return;
+
+        const container = document.createElement('div');
+        container.className = 'tokens-container';
+
+        cellMap[key].forEach(({ player, idx }) => {
+          const token = document.createElement('div');
+          const teamClass = isHumanTeamPlayer(player) ? 'human-piece' : 'cpu-piece';
+          token.id = `token-${player}-${idx}`;
+          token.className = `token ${teamClass} ${getPlayerColor(player).bg}`;
+          token.innerHTML = '<div class="token-center"></div>';
+          container.appendChild(token);
+        });
+
+        cell.appendChild(container);
+      });
+    }
+
+    /* -------------------------------------------------------------
+       MULTIPLAYER ONLINE - WebSocket (jogar com outra pessoa em outro computador)
+    ------------------------------------------------------------- */
+    let onlineWs = null;
+    let onlineRoomCode = null;
+    let onlinePlayerIdx = null;
+    let onlineOpponentName = null;
+    let onlineOpponentColor = null; // cor escolhida pelo oponente (sincronizada via WS)
+    let preOnlineColorState = null; // escolha de cor da tela inicial, guardada durante a partida online
+    let isOnlineGame = false;
+    let onlineSendQueue = [];
+    let onlineConnecting = false;
+    let onlineMatchEnded = false; // partida online encerrada (vitória normal ou W.O.)
+    let onlineQueued = false; // jogador aguardando na fila do Jogo Rápido
+    let onlineMatchType = 'local'; // 'quick' | 'invite' | 'local' (para o histórico)
+    let quickMatchTimerInterval = null; // cronômetro da fila do Jogo Rápido
+    let matchFoundInterval = null; // contagem regressiva do aviso "PARTIDA ENCONTRADA"
+    let pendingQuickStart = null; // jogadores da partida encontrada, aguardando o aviso terminar
+    let abandonCountdownInterval = null;
+    let onlineOpponentProfile = null; // perfil completo do oponente (id, e-mail, foto)
+    let opponentMenuOpen = false; // menu do oponente aberto no placar
+    let friendConfirmTarget = null; // { id, name } aguardando confirmação de remoção
+    let pendingFriendRequestsCount = 0; // solicitações de amizade recebidas não lidas
+
+    const WS_URL = (window.location.protocol === 'https:' ? 'wss:' : 'ws:') +
+      '//' + window.location.host + '/ws';
+
+    function initWebSocket() {
+      if (onlineConnecting) return;
+      onlineConnecting = true;
+
+      try {
+        if (onlineWs) {
+          onlineWs.onopen = null;
+          onlineWs.onmessage = null;
+          onlineWs.onclose = null;
+          onlineWs.onerror = null;
+          onlineWs.close();
+          onlineWs = null;
+        }
+
+        onlineWs = new WebSocket(WS_URL);
+
+        let connectTimeout = setTimeout(() => {
+          if (onlineWs && onlineWs.readyState === WebSocket.CONNECTING) {
+            onlineConnecting = false;
+            onlineWs.close();
+            document.getElementById('online-status').textContent = 'Falha ao conectar ao servidor. Tente novamente.';
+          }
+        }, 8000);
+
+        onlineWs.onopen = () => {
+          onlineConnecting = false;
+          clearTimeout(connectTimeout);
+          console.log('[WS] conectado');
+          document.getElementById('online-status').textContent = 'Conectado.';
+          while (onlineSendQueue.length > 0) {
+            const msg = onlineSendQueue.shift();
+            sendOnlineRaw(msg);
+          }
+          // Identifica o usuário logado para receber notificações em tempo real
+          // (solicitações de amizade, etc.) mesmo sem estar numa sala de jogo.
+          if (typeof accountUser !== 'undefined' && accountUser) {
+            sendOnline({ type: 'identify', uid: accountUser.id });
+          }
+        };
+
+        onlineWs.onmessage = (event) => {
+          let data;
+          try {
+            data = JSON.parse(event.data);
+          } catch (error) {
+            return;
+          }
+          handleOnlineMessage(data);
+        };
+
+        onlineWs.onclose = () => {
+          onlineConnecting = false;
+          clearTimeout(connectTimeout);
+          if (isOnlineGame) {
+            logStatus('Conexão com o oponente perdida.');
+            onlineWs = null;
+          } else if (onlineSendQueue.length > 0) {
+            setTimeout(() => {
+              if (onlineSendQueue.length > 0) initWebSocket();
+            }, 1000);
+          }
+        };
+
+        onlineWs.onerror = () => {
+          onlineConnecting = false;
+          clearTimeout(connectTimeout);
+          document.getElementById('online-status').textContent = 'Erro ao conectar ao servidor.';
+        };
+      } catch (error) {
+        onlineConnecting = false;
+        document.getElementById('online-status').textContent = 'Erro ao conectar ao servidor.';
+      }
+    }
+
+    function sendOnlineRaw(payload) {
+      if (onlineWs && onlineWs.readyState === WebSocket.OPEN) {
+        onlineWs.send(JSON.stringify(payload));
+      }
+    }
+
+    function sendOnline(payload) {
+      if (onlineWs && onlineWs.readyState === WebSocket.OPEN) {
+        onlineWs.send(JSON.stringify(payload));
+      } else {
+        onlineSendQueue.push(payload);
+        document.getElementById('online-status').textContent = 'Conectando ao servidor...';
+        if (!onlineConnecting && (!onlineWs || onlineWs.readyState === WebSocket.CLOSED || onlineWs.readyState === WebSocket.CLOSING)) {
+          initWebSocket();
+        }
+      }
+    }
+
+    function handleOnlineMessage(data) {
+      switch (data.type) {
+        case 'room_created':
+          onlineRoomCode = data.room;
+          onlinePlayerIdx = data.player;
+          document.getElementById('online-room-code-display').textContent = data.room;
+          document.getElementById('online-room-created').classList.remove('hidden');
+          if (data.quick) {
+            // Sala criada pelo matchmaking (Jogo Rápido): oponente já encontrado.
+            // Para o cronômetro da fila e mostra o aviso gigante com contagem
+            onlineMatchType = 'quick';
+            stopQuickMatchTimer();
+            pendingQuickStart = null;
+            showMatchFoundNotice();
+            document.getElementById('online-code-hint').classList.add('hidden');
+            document.getElementById('online-waiting').textContent = 'Preparando a partida...';
+            document.getElementById('online-status').textContent = 'Oponente encontrado! Preparando a partida...';
+          } else {
+            document.getElementById('online-code-hint').classList.remove('hidden');
+            document.getElementById('online-waiting').textContent = 'Aguardando oponente...';
+            document.getElementById('online-status').textContent = 'Sala criada. Aguardando oponente...';
+          }
+          break;
+
+        case 'room_joined':
+          onlineRoomCode = data.room;
+          onlinePlayerIdx = data.player;
+          onlineOpponentName = data.opponent;
+          onlineMatchType = 'invite';
+          if (data.opponentProfile) {
+            onlineOpponentProfile = {
+              id: data.opponentProfile.uid || data.opponentProfile.id || null,
+              name: data.opponentProfile.name,
+              email: data.opponentProfile.email || '',
+              picture: data.opponentProfile.picture || '',
+              playerName: data.opponentProfile.playerName || data.opponentProfile.name
+            };
+          }
+          document.getElementById('online-status').textContent =
+            `Você entrou como ${data.name}. Oponente: ${data.opponent}. Aguardando início...`;
+          break;
+
+        case 'room_ready':
+          // Durante o aviso "PARTIDA ENCONTRADA", guarda os jogadores e
+          // começa o jogo quando a contagem regressiva chegar ao fim
+          if (matchFoundInterval) {
+            pendingQuickStart = data.players;
+            return;
+          }
+          onlineQueued = false;
+          closeOnlineModal();
+          startOnlineGame(data.players);
+          break;
+
+        case 'color_info': {
+          // O oponente avisou a cor que ele escolheu: pinta o slot dele
+          if (!isOnlineGame) return;
+          const color = data.color || {};
+          const hex = normalizeHexColor(color.hex);
+          if (!hex) return;
+          onlineOpponentColor = {
+            hex,
+            name: String(color.name || 'Oponente').slice(0, 24),
+            custom: Boolean(color.custom)
+          };
+          updateColorVariables();
+          break;
+        }
+
+        case 'opponent_disconnected':
+          if (isOnlineGame && !onlineMatchEnded) {
+            // O oponente desistiu da partida em andamento: vitória por desistência
+            startAbandonFlow(false);
+          } else if (!document.getElementById('online-modal').classList.contains('hidden')) {
+            // O oponente saiu enquanto aguardávamos na sala
+            logStatus('O oponente saiu da sala.');
+            closeOnlineModal();
+          }
+          // Cancela o aviso se o oponente sumiu antes de começar a partida
+          if (matchFoundInterval) {
+            clearMatchFoundInterval();
+            hideMatchFoundNotice();
+            pendingQuickStart = null;
+          }
+          break;
+
+        case 'dice_roll':
+          if (!isOnlineGame) return;
+          handleRemoteDiceRoll(data.from, data.value);
+          break;
+
+        case 'token_move':
+          if (!isOnlineGame) return;
+          handleRemoteTokenMove(data.from, data.player, data.tokenIdx, data.steps);
+          break;
+
+        case 'pass_turn':
+          if (!isOnlineGame) return;
+          // O oponente passou a vez (sem movimentos, 3 seis ou tempo esgotado):
+          // avança o turno aqui também para manter os dois clientes sincronizados
+          logStatus(`${getFirstName(onlineOpponentName) || 'Oponente'} passou a vez.`);
+          document.getElementById('dice-instruction').textContent = 'Toque para rolar';
+          nextTurn();
+          break;
+
+        case 'ack':
+          // confirmação de entrega, não requer ação
+          break;
+
+        case 'friend_request_received':
+          // Alguém enviou uma solicitação de amizade para esta conta.
+          pendingFriendRequestsCount = (pendingFriendRequestsCount || 0) + 1;
+          updateFriendsBadge();
+          const fromName = (data.from && (data.from.playerName || data.from.name || data.from.displayName)) || 'Alguém';
+          logStatus(`Nova solicitação de amizade de ${escapeHtmlText(fromName)}`);
+          // Atualiza a coluna "Convites pendentes" se a modal estiver aberta
+          if (!document.getElementById('friends-modal').classList.contains('hidden')) {
+            renderFriends();
+          }
+          break;
+
+        case 'friend_request_accepted':
+          // Sua solicitação foi aceita: move da coluna "Solicitações enviadas" para "Lista de amigos"
+          if (!document.getElementById('friends-modal').classList.contains('hidden')) {
+            renderFriends();
+          }
+          break;
+
+        case 'friend_request_declined':
+          // Sua solicitação foi recusada: remove da coluna "Solicitações enviadas"
+          if (!document.getElementById('friends-modal').classList.contains('hidden')) {
+            renderFriends();
+          }
+          break;
+
+        case 'error':
+          document.getElementById('online-status').textContent = data.error || 'Ocorreu um erro no modo online.';
+          break;
+      }
+    }
+
+    function openOnlineModal(title) {
+      document.getElementById('online-modal-title').textContent = title || 'Convite';
+      document.getElementById('online-modal').classList.remove('hidden');
+      document.getElementById('online-status').textContent = '';
+      document.getElementById('online-room-created').classList.add('hidden');
+      document.getElementById('online-waiting').textContent = 'Aguardando oponente...';
+      document.getElementById('online-code-hint').textContent = 'Envie este código para o seu amigo.';
+      document.getElementById('online-code-hint').classList.remove('hidden');
+      document.getElementById('online-room-code').value = '';
+      document.getElementById('online-join-section').classList.remove('hidden');
+    }
+
+    function closeOnlineModal() {
+      if (onlineQueued) {
+        // Sai da fila do Jogo Rápido ao fechar o modal
+        sendOnline({ type: 'leave_queue' });
+        onlineQueued = false;
+      }
+      stopQuickMatchTimer();
+      if (matchFoundInterval) {
+        // Fechando o modal durante o aviso: cancela a contagem
+        // e descarta a partida pendente (a sala ficou indisponível)
+        clearMatchFoundInterval();
+        hideMatchFoundNotice();
+        pendingQuickStart = null;
+      }
+      document.getElementById('online-modal').classList.add('hidden');
+    }
+
+    /* -------------------------------------------------------------
+       CRONÔMETRO DA FILA (Jogo Rápido)
+       Conta o tempo de espera na fila, no estilo do código da sala
+    ------------------------------------------------------------- */
+    function startQuickMatchTimer() {
+      stopQuickMatchTimer();
+      const wrap = document.getElementById('quick-match-timer-wrap');
+      const timerEl = document.getElementById('quick-match-timer');
+      if (!wrap || !timerEl) return;
+
+      let seconds = 0;
+      const update = () => {
+        // Formato M:SS (um algarismo para minutos, dois para segundos)
+        const m = String(Math.floor(seconds / 60));
+        const ss = String(seconds % 60).padStart(2, '0');
+        timerEl.textContent = `${m}:${ss}`;
+      };
+
+      wrap.classList.remove('hidden');
+      update();
+      quickMatchTimerInterval = setInterval(() => {
+        seconds++;
+        update();
+      }, 1000);
+    }
+
+    function stopQuickMatchTimer() {
+      if (quickMatchTimerInterval) {
+        clearInterval(quickMatchTimerInterval);
+        quickMatchTimerInterval = null;
+      }
+      const wrap = document.getElementById('quick-match-timer-wrap');
+      if (wrap) wrap.classList.add('hidden');
+    }
+
+    /* -------------------------------------------------------------
+       AVISO GIGANTE "PARTIDA ENCONTRADA"
+       Cobre a página com a notícia e conta 5 segundos antes de
+       começar a partida (o jogo só inicia no fim da contagem)
+    ------------------------------------------------------------- */
+    function showMatchFoundNotice() {
+      const overlay = document.getElementById('match-found-overlay');
+      const countdownEl = document.getElementById('match-found-countdown');
+      if (!overlay) return;
+
+      clearMatchFoundInterval();
+      overlay.classList.remove('hidden');
+      overlay.classList.add('flex');
+
+      let seconds = 5;
+      const update = () => {
+        if (countdownEl) countdownEl.textContent = `Começando o jogo em ${seconds}...`;
+      };
+      update();
+
+      matchFoundInterval = setInterval(() => {
+        seconds--;
+        if (seconds <= 0) {
+          clearMatchFoundInterval();
+          hideMatchFoundNotice();
+          startPendingQuickGame();
+        } else {
+          update();
+        }
+      }, 1000);
+    }
+
+    function clearMatchFoundInterval() {
+      if (matchFoundInterval) {
+        clearInterval(matchFoundInterval);
+        matchFoundInterval = null;
+      }
+    }
+
+    function hideMatchFoundNotice() {
+      const overlay = document.getElementById('match-found-overlay');
+      if (overlay) {
+        overlay.classList.add('hidden');
+        overlay.classList.remove('flex');
+      }
+    }
+
+    function startPendingQuickGame() {
+      const players = pendingQuickStart;
+      pendingQuickStart = null;
+      onlineQueued = false;
+      closeOnlineModal();
+      if (players) {
+        startOnlineGame(players);
+      }
+    }
+
+    /* -------------------------------------------------------------
+       MODOS ONLINE (tela inicial): Jogo Rápido e Convite
+       O botão Single Player online abre esta visão com três botões:
+       JOGO RÁPIDO (fila de matchmaking), CONVITE (sala com código)
+       e VOLTAR (menu principal).
+    ------------------------------------------------------------- */
+    function showOnlineModes() {
+      const mainView = document.getElementById('setup-main-view');
+      const modesView = document.getElementById('online-modes-view');
+      if (!mainView || !modesView) return;
+      mainView.classList.add('hidden');
+      modesView.classList.remove('hidden');
+    }
+
+    function hideOnlineModes() {
+      // Volta ao menu principal da tela inicial
+      resetOnlineModesUI();
+      gameAudio.playClick();
+    }
+
+    function resetOnlineModesUI() {
+      const mainView = document.getElementById('setup-main-view');
+      const modesView = document.getElementById('online-modes-view');
+      if (mainView) mainView.classList.remove('hidden');
+      if (modesView) modesView.classList.add('hidden');
+    }
+
+    // Identificador único da conta Google (usado para impedir que a mesma
+    // conta participe da mesma partida nos dois lados)
+    function getAccountUid() {
+      if (typeof accountUser === 'undefined' || !accountUser) return null;
+      return accountUser.id || accountUser.googleSub || accountUser.email || accountUser.playerName || null;
+    }
+
+    function startQuickMatch() {
+      gameAudio.playClick();
+
+      if (typeof accountUser === 'undefined' || !accountUser) return;
+
+      onlineQueued = true;
+      openOnlineModal('Jogo Rápido');
+      // Na fila de matchmaking não existe código para digitar: esconde a entrada
+      document.getElementById('online-join-section').classList.add('hidden');
+      document.getElementById('online-status').textContent = 'Procurando um oponente...';
+      // Cronômetro de espera na fila
+      startQuickMatchTimer();
+
+      sendOnline({
+        type: 'quick_match',
+        uid: getAccountUid(),
+        name: accountUser.playerName || accountUser.displayName || 'Jogador'
+      });
+    }
+
+    // CONVITE: abre o modal de sala com código para o amigo entrar
+    function openInviteModal() {
+      gameAudio.playClick();
+      createOnlineRoom();
+    }
+
+    // Copia o código da sala para a área de transferência
+    function copyRoomCode() {
+      const codeEl = document.getElementById('online-room-code-display');
+      const statusEl = document.getElementById('online-status');
+      const code = codeEl ? codeEl.textContent.trim() : '';
+      if (!code) return;
+
+      const done = () => {
+        if (statusEl) {
+          statusEl.textContent = 'Código copiado para a área de transferência!';
+          statusEl.style.color = '#4ade80';
+          setTimeout(function restoreStatus() {
+            statusEl.textContent = 'Sala criada. Aguardando oponente...';
+            statusEl.style.color = '';
+          }, 2500);
+        }
+      };
+
+      // clipboard API exige a página focada; sem foco vai direto ao fallback
+      if (document.hasFocus() && navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(code).then(done).catch(() => fallbackCopy());
+      } else {
+        fallbackCopy();
+      }
+
+      function fallbackCopy() {
+        const textarea = document.createElement('textarea');
+        textarea.value = code;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        try {
+          document.execCommand('copy');
+          done();
+        } catch (error) {
+          if (statusEl) statusEl.textContent = 'Não foi possível copiar. Copie o código manualmente.';
+        }
+        document.body.removeChild(textarea);
+      }
+    }
+
+    /* -------------------------------------------------------------
+       DESISTÊNCIA / ABANDONO DE PARTIDA
+       Quem sai de uma partida em andamento (ou aperta DESISTIR) perde
+       por desistência; o outro jogador recebe a vitória por desistência.
+       A tela final informa "VITÓRIA POR" ou "DERROTA POR" na frase de
+       cima e "DESISTÊNCIA" logo abaixo, voltando ao menu principal
+       após contagem regressiva de 5 segundos.
+    ------------------------------------------------------------- */
+    function startAbandonFlow(localAbandoned) {
+      // Encerra a partida: nenhuma outra mensagem será exibida além desta
+      onlineMatchEnded = true;
+
+      // Guarda o modo e o oponente para o histórico antes de trocar o modo
+      const matchMode = onlineMatchType;
+      const opponentName = onlineOpponentName;
+      isOnlineGame = false;
+
+      if (localAbandoned && onlineWs) {
+        // Fecha a conexão: o servidor avisará o oponente (vitória por desistência para ele)
+        const ws = onlineWs;
+        onlineWs = null;
+        onlineSendQueue = [];
+        try { ws.close(); } catch (error) { /* conexão já encerrada */ }
+      }
+
+      // Quem desiste perde; quem recebe a desistência vence
+      showResignationScreen(!localAbandoned, matchMode, opponentName);
+    }
+
+    // Botão DESISTIR do menu: encerra a partida atual por desistência
+    function resignCurrentGame() {
+      gameAudio.playClick();
+
+      // Desistir de uma partida online encerra a conexão e dá a vitória ao oponente
+      if (isOnlineGame && !onlineMatchEnded) {
+        startAbandonFlow(true);
+        return;
+      }
+
+      // Desistir de uma partida local (vs CPU): derrota direta do jogador
+      showResignationScreen(false, 'local', 'CPU');
+    }
+
+    function showResignationScreen(humanWon, matchMode, opponentName) {
+      matchMode = matchMode || 'local';
+      opponentName = opponentName || 'Oponente';
+      stopTurnTimer();
+      // Partida encerrada por desistência: desliga o relógio em segundo plano
+      // e descarta callbacks ainda pendentes da partida antiga
+      stopBackgroundClock();
+      invalidateScheduledCallbacks();
+      setMenuButtonVisible(false);
+      movementSession++;
+      if (activeDiceAnimation) { activeDiceAnimation.cancel(); activeDiceAnimation = null; }
+      if (activeTokenAnimation) { activeTokenAnimation.cancel(); activeTokenAnimation = null; }
+      isAnimating = false;
+      hasRolled = false;
+      clearHighlights();
+      isPaused = false;
+      document.getElementById('pause-modal').classList.add('hidden');
+      closeOnlineModal();
+
+      const winTitle = document.getElementById('win-title');
+      const winSubtitle = document.getElementById('win-subtitle');
+      winTitle.innerText = humanWon ? 'VITÓRIA POR' : 'DERROTA POR';
+      winTitle.className = `win-title font-display font-black ${humanWon ? 'text-amber-400' : 'text-red-500'}`;
+      winSubtitle.innerText = 'DESISTÊNCIA';
+      winSubtitle.className = `win-subtitle font-display font-black ${humanWon ? 'text-amber-400' : 'text-red-500'}`;
+      // Placar por desistência: o vencedor recebe "4 - 0" e quem desiste recebe "0 - 4"
+      document.getElementById('win-score').innerText = humanWon ? '4 - 0' : '0 - 4';
+      document.getElementById('win-modal').classList.remove('hidden');
+
+      // Registra o resultado por desistência no histórico da conta
+      postMatchRecord(matchMode, humanWon ? 'win' : 'loss', humanWon ? 4 : 0, humanWon ? 0 : 4, opponentName);
+
+      if (humanWon) gameAudio.playVictory();
+      else gameAudio.playDefeat();
+
+      startAbandonCountdown();
+    }
+
+    function startAbandonCountdown() {
+      clearAbandonCountdown();
+      const countdownEl = document.getElementById('win-countdown');
+      let seconds = 5;
+      countdownEl.classList.remove('hidden');
+      countdownEl.textContent = 'Voltando para o menu principal em 5...';
+
+      abandonCountdownInterval = setInterval(() => {
+        seconds--;
+        if (seconds <= 0) {
+          clearAbandonCountdown();
+          countdownEl.textContent = 'Voltando para o menu principal em 0...';
+          openSetupModal();
+        } else {
+          countdownEl.textContent = `Voltando para o menu principal em ${seconds}...`;
+        }
+      }, 1000);
+    }
+
+    function clearAbandonCountdown() {
+      if (abandonCountdownInterval) {
+        clearInterval(abandonCountdownInterval);
+        abandonCountdownInterval = null;
+      }
+    }
+
+    function createOnlineRoom() {
+      // Abre o modal da sala para que o código e o status fiquem visíveis
+      openOnlineModal();
+
+      if (typeof accountUser === 'undefined' || !accountUser) {
+        document.getElementById('online-status').textContent = 'Você precisa fazer login com o Google para jogar online.';
+        return;
+      }
+
+      // Partida online via convite (para o histórico)
+      onlineMatchType = 'invite';
+
+      // Se este jogador já criou uma sala, apenas exibe o código existente
+      // (evita criar salas duplicadas ao clicar várias vezes no botão)
+      if (onlineRoomCode && !isOnlineGame) {
+        document.getElementById('online-room-code-display').textContent = onlineRoomCode;
+        document.getElementById('online-room-created').classList.remove('hidden');
+        document.getElementById('online-waiting').textContent = 'Aguardando oponente...';
+        document.getElementById('online-status').textContent = 'Sala criada. Aguardando oponente...';
+        return;
+      }
+
+      const name = accountUser.playerName || accountUser.displayName || 'Jogador 1';
+      sendOnline({ type: 'join_room', room: '', name, uid: getAccountUid() });
+    }
+
+    function joinOnlineRoom() {
+      if (typeof accountUser === 'undefined' || !accountUser) {
+        document.getElementById('online-status').textContent = 'Você precisa fazer login com o Google para jogar online.';
+        return;
+      }
+
+      const code = document.getElementById('online-room-code').value.trim().toUpperCase();
+      const name = accountUser.playerName || accountUser.displayName || 'Jogador 2';
+      if (!code) {
+        document.getElementById('online-status').textContent = 'Informe o código da sala.';
+        return;
+      }
+      sendOnline({ type: 'join_room', room: code, name, uid: getAccountUid() });
+    }
+
+    function startOnlineGame(players) {
+      isOnlineGame = true;
+      opponentsCount = 1; // 1 vs 1 online
+
+      // Define a cor base (slot) do jogador local com base no índice do player.
+      // Os índices 0 e 1 recebem cores DIAGONAIS (AZUL e VERDE) para que
+      // ambos os clientes usem as mesmas chaves de cor nas mensagens WS.
+      const localColorKey = CLOCKWISE_COLORS[(onlinePlayerIdx * 2) % 4] || 'BLUE';
+
+      // Guarda a escolha de cor feita na tela inicial para restaurá-la
+      // quando o jogador voltar ao menu (o slot online é definido pelo servidor).
+      preOnlineColorState = {
+        selectedHumanColor,
+        usingCustomColor,
+        customColorHex,
+        customColorName
+      };
+
+      // O jogador ocupa o slot definido pelo servidor, mas mantém a cor
+      // personalizada escolhida: ela é aplicada sobre o slot local.
+      selectedHumanColor = localColorKey;
+      updateColorVariables();
+      updateColorSelectionUI();
+
+      // Guarda o nome e o perfil completo do oponente (vindo do room_ready)
+      const opponentEntry = Array.isArray(players) ? players.find(p => p.id !== onlinePlayerIdx) : null;
+      if (opponentEntry) {
+        onlineOpponentName = opponentEntry.name || 'Oponente';
+        onlineOpponentProfile = {
+          id: opponentEntry.uid || opponentEntry.id || null,
+          name: opponentEntry.name || 'Oponente',
+          email: opponentEntry.email || '',
+          picture: opponentEntry.picture || '',
+          playerName: opponentEntry.playerName || opponentEntry.name || 'Oponente'
+        };
+      }
+
+      // Inicia o jogo normalmente (o oponente é o outro humano, controlado via WS)
+      startGame();
+
+      // Envia a cor escolhida para o oponente renderizar as peças locais
+      sendOnlineColorInfo();
+    }
+
+    function sendOnlineColorInfo() {
+      const localKey = getHumanPlayerKey();
+      sendOnline({
+        type: 'color_info',
+        from: onlinePlayerIdx,
+        color: {
+          custom: usingCustomColor,
+          hex: usingCustomColor ? customColorHex : PLAYER_COLORS[localKey].hex,
+          name: usingCustomColor ? customColorName : PLAYER_COLORS[localKey].name
+        }
+      });
+    }
+
+    function sendOnlineDiceRoll(value) {
+      sendOnline({
+        type: 'dice_roll',
+        from: onlinePlayerIdx,
+        value
+      });
+    }
+
+    function sendOnlineTokenMove(player, tokenIdx, steps) {
+      sendOnline({
+        type: 'token_move',
+        from: onlinePlayerIdx,
+        player,
+        tokenIdx,
+        steps
+      });
+    }
+
+    function sendOnlinePassTurn() {
+      // Avisa o oponente de que o turno passou sem movimento de peça
+      // (sem movimentos possíveis, 3 seis seguidos ou tempo esgotado),
+      // para que o turno avance nos dois clientes.
+      sendOnline({ type: 'pass_turn', from: onlinePlayerIdx });
+    }
+
+    function handleRemoteDiceRoll(from, value) {
+      if (!isOnlineGame) return;
+
+      // Vez do oponente: mesma animação e o mesmo som do dado local
+      isAnimating = true;
+      document.getElementById('dice-instruction').textContent = 'Girando o dado...';
+      gameAudio.playDice();
+      diceValue = value;
+
+      animateDiceRoll(document.getElementById('dice'), DICE_ROTATIONS, () => {
+        isAnimating = false;
+
+        // Se a vez já voltou ao jogador local (pass_turn pode ter chegado
+        // durante a animação), não marca o dado como rolado
+        if (isOnlineGame && getCurrentPlayer() !== getHumanPlayerKey()) {
+          hasRolled = true;
+          const opponentName = getFirstName(onlineOpponentName) || 'Oponente';
+          document.getElementById('dice-instruction').textContent = `${opponentName} tirou ${value}!`;
+          logStatus(`${opponentName} tirou ${value} no dado!`);
+        }
+      });
+    }
+
+    function handleRemoteTokenMove(from, player, tokenIdx, steps) {
+      // O oponente moveu uma peça: replica com as mesmas animações e sons
+      if (!isOnlineGame) return;
+      moveToken(player, tokenIdx, steps, true);
+    }
+
+    /* -------------------------------------------------------------
+       LOGIN GOOGLE NA TELA INICIAL (setup-screen)
+    ------------------------------------------------------------- */
+
+    // Habilita/desabilita o botão Single Player Online conforme o login
+    function updateOnlineSingleButton() {
+      const onlineSingleBtn = document.getElementById('online-single-btn');
+      if (!onlineSingleBtn) return;
+
+      const loggedIn = typeof accountUser !== 'undefined' && Boolean(accountUser);
+      const label = onlineSingleBtn.querySelector('span:last-child');
+
+      if (loggedIn) {
+        onlineSingleBtn.disabled = false;
+        onlineSingleBtn.classList.remove('opacity-70', 'cursor-not-allowed', 'text-slate-500', 'border-white');
+        onlineSingleBtn.classList.add('hover:bg-slate-600');
+        if (label) label.textContent = '1 vs 1';
+      } else {
+        onlineSingleBtn.disabled = true;
+        onlineSingleBtn.classList.add('opacity-70', 'cursor-not-allowed', 'text-slate-500');
+        onlineSingleBtn.classList.remove('hover:bg-slate-600', 'border-white');
+        if (label) label.textContent = 'FAZER LOGIN';
+      }
+    }
+
+    // Sincroniza a tela inicial com o estado de login atual
+    // (também chamado pelo auth.js depois que a sessão da conta é carregada)
+    function syncSetupLoginUI() {
+      const loggedIn = typeof accountUser !== 'undefined' && Boolean(accountUser);
+
+      if (loggedIn) {
+        const googleBtnSetup = document.getElementById('google-button-setup');
+        if (googleBtnSetup) googleBtnSetup.style.display = 'none';
+        const statusEl = document.getElementById('login-status-setup');
+        if (statusEl) statusEl.textContent = '';
+      }
+
+      updateOnlineSingleButton();
+    }
+
+    function initGoogleLoginSetup() {
+      const buttonEl = document.getElementById('google-button-setup');
+      const statusEl = document.getElementById('login-status-setup');
+      if (!buttonEl || !statusEl) return;
+
+      // Se já estiver logado, esconde o botão de login e não faz nada mais
+      if (typeof accountUser !== 'undefined' && accountUser) {
+        buttonEl.style.display = 'none';
+        statusEl.textContent = '';
+        return;
+      }
+
+      async function init() {
+        let config = { configured: false, clientId: '' };
+        try {
+          const response = await fetch('/api/auth/config');
+          config = await response.json();
+        } catch (error) {
+          statusEl.textContent = 'Não foi possível carregar as configurações de login.';
+          return;
+        }
+
+        if (!config.configured || !config.clientId) {
+          statusEl.textContent = 'Login Google ainda não configurado.';
+          return;
+        }
+
+        const waitForGoogle = setInterval(() => {
+          if (!window.google?.accounts?.id) return;
+          clearInterval(waitForGoogle);
+
+          window.google.accounts.id.initialize({
+            client_id: config.clientId,
+            callback: handleGoogleCredentialSetup,
+            auto_select: false,
+            cancel_on_tap_outside: true
+          });
+
+          window.google.accounts.id.renderButton(buttonEl, {
+            theme: 'filled_blue',
+            size: 'large',
+            shape: 'rect',
+            text: 'signin_with',
+            logo_alignment: 'center',
+            width: 280
+          });
+        }, 100);
+      }
+
+      async function handleGoogleCredentialSetup(response) {
+        statusEl.style.color = '#94a3b8';
+        statusEl.textContent = 'Verificando sua conta...';
+
+        try {
+          const serverResponse = await fetch('/api/auth/google', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ credential: response.credential })
+          });
+
+          if (!serverResponse.ok) {
+            const error = await serverResponse.json();
+            throw new Error(error.error || 'Não foi possível entrar.');
+          }
+
+          const data = await serverResponse.json();
+          // Atualiza a UI da conta no header (se existir) e o nome do jogador
+          if (typeof updateAccountUI === 'function') updateAccountUI(data.user);
+
+          // Identifica esta conexão WebSocket para receber notificações em tempo real
+          // (solicitações de amizade, etc.) mesmo sem estar numa sala de jogo.
+          if (onlineWs && onlineWs.readyState === WebSocket.OPEN) {
+            onlineWs.send(JSON.stringify({ type: 'identify', uid: data.user.id }));
+          } else if (onlineWs && onlineWs.readyState === WebSocket.CONNECTING) {
+            onlineSendQueue.push({ type: 'identify', uid: data.user.id });
+          }
+
+          const nameInput = document.getElementById('player-name-input');
+          if (nameInput && !nameInput.value) {
+            nameInput.value = data.user.playerName || data.user.displayName || '';
+            if (typeof updatePlayerName === 'function') updatePlayerName(nameInput.value);
+          }
+          statusEl.style.color = '#4ade80';
+          statusEl.textContent = 'Conta Google conectada com sucesso!';
+          // Usa o primeiro nome da conta Google
+          const firstName = data.user.displayName ? data.user.displayName.split(' ')[0] : data.user.playerName || 'Jogador';
+          if (nameInput) {
+            nameInput.value = firstName;
+            if (typeof updatePlayerName === 'function') updatePlayerName(firstName);
+          }
+          // Esconde o botão de login e habilita o botão Single Player Online
+          syncSetupLoginUI();
+        } catch (error) {
+          statusEl.style.color = '#f87171';
+          statusEl.textContent = error.message;
+        }
+      }
+
+      init();
+    }
+
+    window.onload = function() {
+      const nameInput = document.getElementById('player-name-input');
+      updatePlayerName(nameInput ? nameInput.value : '');
+      updateModeUI();
+      restoreColorPreference();
+      updateColorVariables();
+      updateColorSelectionUI();
+      updateScoreboardUI();
+      updateSoundSettingsUI();
+      initBoard();
+      initWebSocket();
+      initGoogleLoginSetup();
+      // Tela inicial: sem partida em andamento, o Menu fica oculto
+      setMenuButtonVisible(false);
+      // Botão de conta flutuando no canto da tela inicial
+      layoutAccountArea();
+
+      // Se já estiver logado, habilita o botão Single Player Online.
+      // (a sessão também é reavaliada pelo auth.js após carregar /api/session)
+      syncSetupLoginUI();
+
+      // Fecha o menu do oponente ao clicar fora dele ou no placar
+      document.addEventListener('click', (event) => {
+        const menu = document.getElementById('opponent-menu');
+        const anchor = document.getElementById('scoreboard');
+        if (opponentMenuOpen && menu && !menu.classList.contains('hidden') && !menu.contains(event.target) && !(anchor && anchor.contains(event.target))) {
+          closeOpponentMenu();
+        }
+      });
+
+      // Fecha modais ao pressionar Escape
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+          closeOpponentMenu();
+          closeFriendsModal();
+          closeFriendProfileModal();
+          closeFriendConfirmModal();
+        }
+      });
+
+      // Tecla Enter no campo de busca de amigos
+      const friendsSearch = document.getElementById('friends-search');
+      if (friendsSearch) {
+        friendsSearch.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            handleFriendSearch();
+          }
+        });
+      }
+
+      // Ações da modal de Amigos (adicionar, aceitar, recusar, cancelar, remover)
+      const friendsModal = document.getElementById('friends-modal');
+      if (friendsModal) {
+        friendsModal.addEventListener('click', (event) => {
+          const btn = event.target.closest('[data-friend-action]');
+          if (!btn) return;
+          // Impede que o clique nos botões de ação dispare a abertura do perfil do amigo
+          event.stopPropagation();
+          const action = btn.dataset.friendAction;
+          const targetId = btn.dataset.friendId;
+          const targetName = btn.dataset.friendName || '';
+          if (action === 'add') {
+            executeFriendAction('request', targetId, targetName);
+          } else if (action === 'accept') {
+            executeFriendAction('accept', targetId, targetName);
+          } else if (action === 'decline') {
+            executeFriendAction('decline', targetId, targetName);
+          } else if (action === 'cancel') {
+            executeFriendAction('cancel', targetId, targetName);
+          } else if (action === 'remove') {
+            confirmRemoveFriend(targetId, targetName);
+          }
+        });
+      }
+    };
+  </script>
+  <script src="/auth.js" defer></script>
+</body>
+</html>
