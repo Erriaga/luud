@@ -856,7 +856,7 @@
       <p id="friends-search-status" class="text-xs text-slate-400 min-h-[16px]"></p>
       <div id="friends-search-result" class="mt-3"></div>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
         <div>
           <h3 id="friends-list-title" class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-3">Lista de amigos (0)</h3>
           <div id="friends-list" class="space-y-2">
@@ -864,9 +864,15 @@
           </div>
         </div>
         <div>
-          <h3 class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-3">Convites pendentes</h3>
-          <div id="friends-pending" class="space-y-2">
-            <p class="text-xs text-slate-500 text-center py-4">Nenhuma solicitação aguardando resposta.</p>
+          <h3 id="friends-sent-title" class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-3">Solicitações enviadas (0)</h3>
+          <div id="friends-sent" class="space-y-2">
+            <p class="text-xs text-slate-500 text-center py-4">Nenhuma solicitação enviada aguardando resposta.</p>
+          </div>
+        </div>
+        <div>
+          <h3 id="friends-received-title" class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-3">Convites pendentes (0)</h3>
+          <div id="friends-received" class="space-y-2">
+            <p class="text-xs text-slate-500 text-center py-4">Nenhum convite pendente.</p>
           </div>
         </div>
       </div>
@@ -2311,15 +2317,20 @@
         .catch(() => null);
       if (!data) {
         document.getElementById('friends-list').innerHTML = '<p class="text-xs text-red-400 text-center py-4">Não foi possível carregar a lista de amigos.</p>';
-        document.getElementById('friends-pending').innerHTML = '<p class="text-xs text-red-400 text-center py-4">Não foi possível carregar os convites pendentes.</p>';
+        document.getElementById('friends-sent').innerHTML = '<p class="text-xs text-red-400 text-center py-4">Não foi possível carregar as solicitações enviadas.</p>';
+        document.getElementById('friends-received').innerHTML = '<p class="text-xs text-red-400 text-center py-4">Não foi possível carregar os convites pendentes.</p>';
         return;
       }
 
       // Sincroniza o contador de notificações com as solicitações recebidas do servidor
       pendingFriendRequestsCount = Array.isArray(data.friendRequestsReceived) ? data.friendRequestsReceived.length : 0;
       updateFriendsBadge();
-      document.getElementById('friends-list-title').textContent = `Lista de amigos (${data.friends.length})`;
 
+      document.getElementById('friends-list-title').textContent = `Lista de amigos (${data.friends.length})`;
+      document.getElementById('friends-sent-title').textContent = `Solicitações enviadas (${data.sent.length})`;
+      document.getElementById('friends-received-title').textContent = `Convites pendentes (${data.received.length})`;
+
+      // Coluna 1: Lista de amigos (clicável para abrir perfil)
       const list = document.getElementById('friends-list');
       if (data.friends.length === 0) {
         list.innerHTML = '<p class="text-xs text-slate-500 text-center py-4">Nenhum amigo ainda.</p>';
@@ -2327,29 +2338,42 @@
         list.innerHTML = data.friends.map(friendRow).join('');
       }
 
-      const pending = document.getElementById('friends-pending');
+      // Coluna 2: Solicitações enviadas (você enviou, aguardando resposta)
+      const sent = document.getElementById('friends-sent');
       if (data.sent.length === 0) {
-        pending.innerHTML = '<p class="text-xs text-slate-500 text-center py-4">Nenhuma solicitação aguardando resposta.</p>';
+        sent.innerHTML = '<p class="text-xs text-slate-500 text-center py-4">Nenhuma solicitação enviada aguardando resposta.</p>';
       } else {
-        pending.innerHTML = data.sent.map(pendingRow).join('');
+        sent.innerHTML = data.sent.map(sentRow).join('');
+      }
+
+      // Coluna 3: Convites pendentes (você recebeu, aguardando sua resposta)
+      const received = document.getElementById('friends-received');
+      if (data.received.length === 0) {
+        received.innerHTML = '<p class="text-xs text-slate-500 text-center py-4">Nenhum convite pendente.</p>';
+      } else {
+        received.innerHTML = data.received.map(receivedRow).join('');
       }
     }
 
+    // Clica na foto, nome ou email do amigo para abrir o perfil dele
     function friendRow(f) {
       const name = f.playerName || f.displayName || f.email;
       const safeName = String(name).replace(/"/g, '&quot;');
+      const safeEmail = String(f.email || '—').replace(/"/g, '&quot;');
+      const safePicture = escapeHtmlText(f.picture || '');
       return `
-        <div class="bg-slate-800 border border-slate-700 p-2.5 flex items-center gap-3">
-          <img src="${escapeHtmlText(f.picture || '')}" alt="Foto" class="w-8 h-8 rounded-full object-cover bg-slate-700 border border-slate-600" onerror="this.onerror=null;this.src='/assets/avatar.svg'">
+        <div class="bg-slate-800 border border-slate-700 p-2.5 flex items-center gap-3 cursor-pointer" onclick="openFriendProfile({ id: '${escapeHtmlText(f.id)}', playerName: '${safeName}', email: '${safeEmail}', picture: '${safePicture}' })">
+          <img src="${safePicture}" alt="Foto" class="w-8 h-8 rounded-full object-cover bg-slate-700 border border-slate-600" onerror="this.onerror=null;this.src='/assets/avatar.svg'">
           <div class="min-w-0 flex-1">
             <p class="text-sm font-bold text-slate-100 truncate">${escapeHtmlText(name)}</p>
-            <p class="text-[11px] text-slate-400 truncate">${escapeHtmlText(f.email || '—')}</p>
+            <p class="text-[11px] text-slate-400 truncate">${safeEmail}</p>
           </div>
           <button type="button" data-friend-action="remove" data-friend-id="${escapeHtmlText(f.id)}" data-friend-name="${safeName}" class="text-[11px] text-red-400 hover:text-red-300 underline">Remover</button>
         </div>`;
     }
 
-    function pendingRow(f) {
+    // Solicitações que você enviou e ainda não foram respondidas
+    function sentRow(f) {
       const name = f.playerName || f.displayName || f.email;
       const safeName = String(name).replace(/"/g, '&quot;');
       return `
@@ -2360,6 +2384,22 @@
             <p class="text-[11px] text-slate-400 truncate">${escapeHtmlText(f.email || '—')}</p>
           </div>
           <button type="button" data-friend-action="cancel" data-friend-id="${escapeHtmlText(f.id)}" data-friend-name="${safeName}" class="text-[11px] text-red-400 hover:text-red-300 underline">Cancelar solicitação</button>
+        </div>`;
+    }
+
+    // Solicitações que você recebeu e ainda não respondeu
+    function receivedRow(f) {
+      const name = f.playerName || f.displayName || f.email;
+      const safeName = String(name).replace(/"/g, '&quot;');
+      return `
+        <div class="bg-slate-800 border border-slate-700 p-2.5 flex items-center gap-3">
+          <img src="${escapeHtmlText(f.picture || '')}" alt="Foto" class="w-8 h-8 rounded-full object-cover bg-slate-700 border border-slate-600" onerror="this.onerror=null;this.src='/assets/avatar.svg'">
+          <div class="min-w-0 flex-1">
+            <p class="text-sm font-bold text-slate-100 truncate">${escapeHtmlText(name)}</p>
+            <p class="text-[11px] text-slate-400 truncate">${escapeHtmlText(f.email || '—')}</p>
+          </div>
+          <button type="button" data-friend-action="accept" data-friend-id="${escapeHtmlText(f.id)}" data-friend-name="${safeName}" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-1.5 rounded transition mr-2">Aceitar</button>
+          <button type="button" data-friend-action="decline" data-friend-id="${escapeHtmlText(f.id)}" data-friend-name="${safeName}" class="text-red-400 hover:bg-red-500/20 text-xs font-bold px-3 py-1.5 rounded transition">Recusar</button>
         </div>`;
     }
 
@@ -3646,10 +3686,21 @@
           updateFriendsBadge();
           const fromName = (data.from && (data.from.playerName || data.from.name || data.from.displayName)) || 'Alguém';
           logStatus(`Nova solicitação de amizade de ${escapeHtmlText(fromName)}`);
+          // Atualiza a coluna "Convites pendentes" se a modal estiver aberta
+          if (!document.getElementById('friends-modal').classList.contains('hidden')) {
+            renderFriends();
+          }
           break;
 
         case 'friend_request_accepted':
-          // Sua solicitação foi aceita: atualiza a lista se a modal estiver aberta
+          // Sua solicitação foi aceita: move da coluna "Solicitações enviadas" para "Lista de amigos"
+          if (!document.getElementById('friends-modal').classList.contains('hidden')) {
+            renderFriends();
+          }
+          break;
+
+        case 'friend_request_declined':
+          // Sua solicitação foi recusada: remove da coluna "Solicitações enviadas"
           if (!document.getElementById('friends-modal').classList.contains('hidden')) {
             renderFriends();
           }
@@ -4341,6 +4392,8 @@
         friendsModal.addEventListener('click', (event) => {
           const btn = event.target.closest('[data-friend-action]');
           if (!btn) return;
+          // Impede que o clique nos botões de ação dispare a abertura do perfil do amigo
+          event.stopPropagation();
           const action = btn.dataset.friendAction;
           const targetId = btn.dataset.friendId;
           const targetName = btn.dataset.friendName || '';
