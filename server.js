@@ -481,7 +481,13 @@ async function listFriends(request, response) {
   const sent = await db.getSentRequests(user.id);
   const received = await db.getReceivedRequests(user.id);
 
-  sendJson(response, 200, { friends, sent, received });
+  // Adiciona status online baseado nas conexões WebSocket ativas
+  const friendsWithStatus = friends.map(f => ({
+    ...f,
+    online: userConnections.has(f.id) && userConnections.get(f.id).size > 0
+  }));
+
+  sendJson(response, 200, { friends: friendsWithStatus, sent, received });
 }
 
 async function searchFriend(request, response) {
@@ -557,10 +563,20 @@ async function withFriendship(request, response, action) {
     // Notificação em tempo real para o alvo quando uma solicitação é enviada
     if (action === 'request') {
       const fromProfile = await db.getUserProfile(user.id);
-      db.sendToUserInternal(targetId, {
+      sendToUser(targetId, {
         type: 'friend_request_received',
         fromId: user.id,
         from: fromProfile || { id: user.id, name: user.displayName || user.playerName || user.email, email: user.email, picture: '', playerName: user.playerName || user.displayName || user.email }
+      });
+    }
+
+    // Notificação em tempo real para o solicitante quando a solicitação é aceita
+    if (action === 'accept') {
+      const toProfile = await db.getUserProfile(user.id);
+      sendToUser(targetId, {
+        type: 'friend_request_accepted',
+        fromId: user.id,
+        from: toProfile || { id: user.id, name: user.displayName || user.playerName || user.email, email: user.email, picture: '', playerName: user.playerName || user.displayName || user.email }
       });
     }
 

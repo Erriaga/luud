@@ -864,9 +864,9 @@
           </div>
         </div>
         <div>
-          <h3 id="friends-sent-title" class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-3">Solicitações enviadas (0)</h3>
+          <h3 id="friends-sent-title" class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-3">Convites enviados (0)</h3>
           <div id="friends-sent" class="space-y-2">
-            <p class="text-xs text-slate-500 text-center py-4">Nenhuma solicitação enviada aguardando resposta.</p>
+            <p class="text-xs text-slate-500 text-center py-4">Nenhum convite enviado aguardando resposta.</p>
           </div>
         </div>
         <div>
@@ -892,7 +892,7 @@
         <div class="min-w-0">
           <p id="friend-profile-name" class="text-sm font-bold text-slate-100 truncate">Nome no jogo</p>
           <p id="friend-profile-email" class="text-xs text-slate-400 truncate">conta@example.com</p>
-          <p class="text-xs text-slate-500">Conta Google conectada</p>
+          <p id="friend-profile-status" class="text-xs text-slate-400">Offline</p>
         </div>
       </div>
 
@@ -900,6 +900,10 @@
       <div id="friend-profile-matches" class="space-y-2">
         <p class="text-sm text-slate-400 text-center py-6">Carregando partidas...</p>
       </div>
+
+      <button type="button" onclick="confirmRemoveFriendFromProfile()" id="friend-profile-remove-btn" class="w-full py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold text-sm border border-red-700 transition">
+        Remover amigo
+      </button>
 
       <div class="px-5 pb-5">
         <button onclick="closeFriendProfileModal()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold text-sm border border-slate-600">
@@ -2199,11 +2203,29 @@
     async function openFriendProfile(prof) {
       const modal = document.getElementById('friend-profile-modal');
       const list = document.getElementById('friend-profile-matches');
-      document.getElementById('friend-profile-name').textContent = prof.playerName || prof.displayName || prof.name || 'Oponente';
-      document.getElementById('friend-profile-email').textContent = prof.email || '—';
+      const nameEl = document.getElementById('friend-profile-name');
+      const emailEl = document.getElementById('friend-profile-email');
+      const statusEl = document.getElementById('friend-profile-status');
+      const removeBtn = document.getElementById('friend-profile-remove-btn');
+
+      nameEl.textContent = prof.playerName || prof.displayName || prof.name || 'Oponente';
+      emailEl.textContent = prof.email || '—';
+
+      // Status online/offline
+      if (prof.online === true) {
+        statusEl.textContent = 'Online';
+        statusEl.className = 'text-xs text-emerald-400';
+      } else {
+        statusEl.textContent = 'Offline';
+        statusEl.className = 'text-xs text-slate-400';
+      }
+
       setAvatarImage(document.getElementById('friend-profile-avatar'), prof.picture || '');
       list.innerHTML = '<p class="text-sm text-slate-400 text-center py-6">Carregando partidas...</p>';
       modal.classList.remove('hidden');
+
+      // Configura o botão de remover amigo
+      removeBtn.onclick = () => confirmRemoveFriendFromProfile(prof.id, prof.playerName || prof.displayName || prof.name || 'Oponente');
 
       try {
         const response = await fetch('/api/users/' + encodeURIComponent(prof.id) + '/matches');
@@ -2289,6 +2311,11 @@
       friendConfirmTarget = null;
     }
 
+    function confirmRemoveFriendFromProfile(id, name) {
+      closeFriendProfileModal();
+      confirmRemoveFriend(id, name);
+    }
+
     function closeFriendConfirmModal() {
       document.getElementById('friend-confirm-modal').classList.add('hidden');
     }
@@ -2359,16 +2386,17 @@
     function friendRow(f) {
       const name = f.playerName || f.displayName || f.email;
       const safeName = String(name).replace(/"/g, '&quot;');
-      const safeEmail = String(f.email || '—').replace(/"/g, '&quot;');
       const safePicture = escapeHtmlText(f.picture || '');
+      const isOnline = f.online === true;
+      const statusColor = isOnline ? 'text-emerald-400' : 'text-slate-400';
+      const statusText = isOnline ? 'Online' : 'Offline';
       return `
-        <div class="bg-slate-800 border border-slate-700 p-2.5 flex items-center gap-3 cursor-pointer" onclick="openFriendProfile({ id: '${escapeHtmlText(f.id)}', playerName: '${safeName}', email: '${safeEmail}', picture: '${safePicture}' })">
+        <div class="bg-slate-800 border border-slate-700 p-2.5 flex items-center gap-3 cursor-pointer" onclick="openFriendProfile({ id: '${escapeHtmlText(f.id)}', playerName: '${safeName}', email: '${escapeHtmlText(f.email || '—')}', picture: '${safePicture}' })">
           <img src="${safePicture}" alt="Foto" class="w-8 h-8 rounded-full object-cover bg-slate-700 border border-slate-600" onerror="this.onerror=null;this.src='/assets/avatar.svg'">
           <div class="min-w-0 flex-1">
             <p class="text-sm font-bold text-slate-100 truncate">${escapeHtmlText(name)}</p>
-            <p class="text-[11px] text-slate-400 truncate">${safeEmail}</p>
+            <p class="text-[11px] ${statusColor} truncate">${statusText}</p>
           </div>
-          <button type="button" data-friend-action="remove" data-friend-id="${escapeHtmlText(f.id)}" data-friend-name="${safeName}" class="text-[11px] text-red-400 hover:text-red-300 underline">Remover</button>
         </div>`;
     }
 
