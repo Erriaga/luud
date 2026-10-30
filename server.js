@@ -102,6 +102,21 @@ function sendToUser(userId, message) {
   return delivered;
 }
 
+/**
+ * Envia para todos os clientes conectados uma mudança de status online/offline.
+ */
+function broadcastUserStatus(userId, online) {
+  const payload = JSON.stringify({
+    type: online ? 'user_online' : 'user_offline',
+    userId
+  });
+  for (const [ws, conn] of connections) {
+    if (ws.readyState === 1) {
+      ws.send(payload);
+    }
+  }
+}
+
 // Retira a conexão da sala atual, avisando quem ficou nela e
 // removendo a sala quando fica vazia
 function detachFromRoom(ws, notifyOpponent = true) {
@@ -752,8 +767,10 @@ async function handleRequest(request, response) {
       return;
     }
 
+    // Página de login descontinuada: redireciona para a página inicial
     if (request.method === 'GET' && urlPath === '/login') {
-      await serveStatic(request, response, '/login.html');
+      response.writeHead(302, { Location: '/' });
+      response.end();
       return;
     }
 
@@ -807,6 +824,7 @@ async function main() {
         if (uid) {
           trackUserConnection(ws, uid);
           if (prevConn) prevConn.userId = uid;
+          broadcastUserStatus(uid, true);
         }
         sendTo(ws, { type: 'ack', original: 'identify' });
         return;
@@ -974,7 +992,14 @@ async function main() {
       removeFromQueue(ws);
       detachFromRoom(ws);
       connections.delete(ws);
-      if (userId) untrackUserConnection(ws, userId);
+      if (userId) {
+        untrackUserConnection(ws, userId);
+        // Só envia offline se não houver mais conexões para este usuário
+        const remaining = userConnections.get(userId);
+        if (!remaining || remaining.size === 0) {
+          broadcastUserStatus(userId, false);
+        }
+      }
     });
 
     ws.on('error', () => {});

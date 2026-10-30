@@ -60,7 +60,7 @@ function handleAccountButtonClick(event) {
   event.stopPropagation();
 
   if (!accountUser) {
-    window.location.href = '/login';
+    window.location.href = '/';
     return;
   }
 
@@ -71,7 +71,7 @@ function openProfileModal() {
   hideAccountDropdown();
 
   if (!accountUser) {
-    window.location.href = '/login';
+    window.location.href = '/';
     return;
   }
 
@@ -137,7 +137,7 @@ async function logoutAccount() {
   }
 
   accountUser = null;
-  window.location.href = '/login';
+  window.location.href = '/';
 }
 
 async function loadAccountSession() {
