@@ -12,7 +12,10 @@ const ROOT = __dirname;
 loadEnvFile();
 
 const PUBLIC_DIR = path.join(ROOT, 'public');
-const DATA_DIR = path.join(ROOT, 'data');
+// No Render, o sistema de arquivos é efêmero: dados gravados em disco
+// somem a cada deploy. Para persistir, crie um Persistent Disk e defina
+// a variável de ambiente DATA_DIR apontando para o ponto de montagem.
+const DATA_DIR = path.join(process.env.DATA_DIR || ROOT, 'data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
 const MATCHES_FILE = path.join(DATA_DIR, 'matches.json');
@@ -129,6 +132,8 @@ function startQuickMatchRoom(a, b) {
     code = generateRoomCode();
   } while (rooms.has(code));
 
+  const users = readJsonFileSync(USERS_FILE);
+
   const room = {
     players: [a.ws, b.ws],
     names: [a.name || 'Jogador 1', b.name || 'Jogador 2'],
@@ -142,13 +147,24 @@ function startQuickMatchRoom(a, b) {
   if (connA) { connA.roomCode = code; connA.playerIdx = 0; }
   if (connB) { connB.roomCode = code; connB.playerIdx = 1; }
 
+  // Perfis completos (id do Google, e-mail e foto) para que os clientes
+  // possam exibir o oponente e enviar solicitações de amizade.
+  const profileA = userProfileOf(users, room.userIds[0]) || {
+    id: room.userIds[0] || null, uid: room.userIds[0] || null,
+    name: room.names[0], email: '', picture: '', playerName: room.names[0]
+  };
+  const profileB = userProfileOf(users, room.userIds[1]) || {
+    id: room.userIds[1] || null, uid: room.userIds[1] || null,
+    name: room.names[1], email: '', picture: '', playerName: room.names[1]
+  };
+
   const players = [
-    { id: 0, name: room.names[0] },
-    { id: 1, name: room.names[1] }
+    { id: 0, uid: profileA.uid, name: profileA.name, email: profileA.email, picture: profileA.picture, playerName: profileA.playerName },
+    { id: 1, uid: profileB.uid, name: profileB.name, email: profileB.email, picture: profileB.picture, playerName: profileB.playerName }
   ];
 
-  sendTo(a.ws, { type: 'room_created', room: code, player: 0, name: room.names[0], quick: true });
-  sendTo(b.ws, { type: 'room_created', room: code, player: 1, name: room.names[1], quick: true });
+  sendTo(a.ws, { type: 'room_created', room: code, player: 0, name: room.names[0], quick: true, opponentProfile: profileB });
+  sendTo(b.ws, { type: 'room_created', room: code, player: 1, name: room.names[1], quick: true, opponentProfile: profileA });
   sendTo(a.ws, { type: 'room_ready', players });
   sendTo(b.ws, { type: 'room_ready', players });
 }
@@ -218,6 +234,14 @@ async function writeJsonFile(filePath, data) {
   await fs.rename(temporary, filePath);
 }
 
+function readJsonFileSync(filePath) {
+  try {
+    return JSON.parse(fss.readFileSync(filePath, 'utf8') || '{}');
+  } catch (error) {
+    return {};
+  }
+}
+
 function normalizeUser(user) {
   return {
     id: user.id,
@@ -228,8 +252,29 @@ function normalizeUser(user) {
     bio: user.bio || '',
     googleSub: user.googleSub || '',
     picture: user.picture || '',
+    friends: Array.isArray(user.friends) ? user.friends : [],
+    friendRequestsSent: Array.isArray(user.friendRequestsSent) ? user.friendRequestsSent : [],
+    friendRequestsReceived: Array.isArray(user.friendRequestsReceived) ? user.friendRequestsReceived : [],
     createdAt: user.createdAt || new Date().toISOString(),
     updatedAt: user.updatedAt || new Date().toISOString()
+  };
+}
+
+/* -------------------------------------------------------------
+   PERFIL PÚBLICO DE USUÁRIO (para mensagens do WebSocket)
+------------------------------------------------------------- */
+function userProfileOf(users, uid) {
+  if (!uid) return null;
+  const user = users[uid];
+  if (!user) return null;
+  const n = normalizeUser(user);
+  return {
+    id: n.id,
+    uid: n.id,
+    name: n.displayName || n.playerName || n.email.split('@')[0],
+    email: n.email,
+    picture: n.picture || n.avatarUrl || '',
+    playerName: n.playerName || n.displayName || n.email.split('@')[0]
   };
 }
 
@@ -527,6 +572,268 @@ async function listMatchRecords(request, response) {
   sendJson(response, 200, { matches: (matches[user.id] || []).slice(0, 50) });
 }
 
+/* -------------------------------------------------------------
+   AMIZADES
+   Lista de amigos, solicitações enviadas/recebidas e busca de
+   contas por Gmail ou nome no jogo. Tudo gravado em users.json,
+   que (com DATA_DIR em disco persistente) sobrevive a deploys.
+------------------------------------------------------------- */
+
+function ensureFriendFields(user) {
+  user.friends = Array.isArray(user.friends) ? user.friends : [];
+  user.friendRequestsSent = Array.isArray(user.friendRequestsSent) ? user.friendRequestsSent : [];
+  user.friendRequestsReceived = Array.isArray(user.friendRequestsReceived) ? user.friendRequestsReceived : [];
+  return user;
+}
+
+function publicUserProfile(user) {
+  const n = normalizeUser(user);
+  return {
+    id: n.id,
+    email: n.email,
+    displayName: n.displayName,
+    playerName: n.playerName,
+    picture: n.picture || n.avatarUrl || ''
+  };
+}
+
+function relationOf(currentUser, targetId) {
+  if (targetId === currentUser.id) return 'self';
+  if (currentUser.friends.includes(targetId)) return 'friend';
+  if (currentUser.friendRequestsSent.includes(targetId)) return 'sent';
+  if (currentUser.friendRequestsReceived.includes(targetId)) return 'received';
+  return 'none';
+}
+
+function arrayRemove(array, value) {
+  const index = array.indexOf(value);
+  if (index === -1) return false;
+  array.splice(index, 1);
+  return true;
+}
+
+async function listFriends(request, response) {
+  const user = await getSessionUser(request);
+  if (!user) {
+    sendJson(response, 401, { error: 'Sessão expirada.' });
+    return;
+  }
+
+  const users = await readJsonFile(USERS_FILE);
+  const current = users[user.id];
+  if (!current) {
+    sendJson(response, 404, { error: 'Conta não encontrada.' });
+    return;
+  }
+  ensureFriendFields(current);
+
+  const friends = current.friends
+    .map(id => users[id] ? publicUserProfile(users[id]) : null)
+    .filter(Boolean)
+    .sort((a, b) => (a.playerName || a.displayName || a.email).localeCompare(b.playerName || b.displayName || b.email));
+
+  const sent = current.friendRequestsSent
+    .map(id => users[id] ? publicUserProfile(users[id]) : null)
+    .filter(Boolean);
+
+  const received = current.friendRequestsReceived
+    .map(id => users[id] ? publicUserProfile(users[id]) : null)
+    .filter(Boolean);
+
+  sendJson(response, 200, { friends, sent, received });
+}
+
+async function searchFriend(request, response) {
+  const user = await getSessionUser(request);
+  if (!user) {
+    sendJson(response, 401, { error: 'Sessão expirada.' });
+    return;
+  }
+
+  try {
+    const body = await readJsonBody(request);
+    const query = String(body.query || '').trim();
+    if (!query) {
+      sendJson(response, 400, { error: 'Informe um Gmail ou nome no jogo.' });
+      return;
+    }
+
+    const users = await readJsonFile(USERS_FILE);
+    const current = users[user.id];
+    if (!current) {
+      sendJson(response, 404, { error: 'Conta não encontrada.' });
+      return;
+    }
+    ensureFriendFields(current);
+
+    const qLower = query.toLowerCase();
+    let target = null;
+
+    // 1. E-mail exato (Gmail da Conta Google)
+    for (const id of Object.keys(users)) {
+      if (id === user.id) continue;
+      if (String(users[id].email || '').toLowerCase() === qLower) {
+        target = users[id];
+        break;
+      }
+    }
+    // 2. Nome no jogo / nome da conta exato
+    if (!target) {
+      for (const id of Object.keys(users)) {
+        if (id === user.id) continue;
+        const u = users[id];
+        const display = String(u.playerName || u.displayName || '').toLowerCase();
+        if (display === qLower) {
+          target = u;
+          break;
+        }
+      }
+    }
+    // 3. Nome que contenha o termo digitado
+    if (!target) {
+      for (const id of Object.keys(users)) {
+        if (id === user.id) continue;
+        const u = users[id];
+        const display = String(u.playerName || u.displayName || '').toLowerCase();
+        if (display.includes(qLower)) {
+          target = u;
+          break;
+        }
+      }
+    }
+
+    if (!target) {
+      sendJson(response, 200, { found: false });
+      return;
+    }
+
+    sendJson(response, 200, {
+      found: true,
+      account: publicUserProfile(target),
+      relation: relationOf(current, target.id)
+    });
+  } catch (error) {
+    sendJson(response, 400, { error: error.message });
+  }
+}
+
+async function withFriendship(request, response, action) {
+  const user = await getSessionUser(request);
+  if (!user) {
+    sendJson(response, 401, { error: 'Sessão expirada.' });
+    return;
+  }
+
+  try {
+    const body = await readJsonBody(request);
+    const targetId = body.targetId;
+    if (!targetId) {
+      sendJson(response, 400, { error: 'Conta alvo não informada.' });
+      return;
+    }
+
+    const users = await readJsonFile(USERS_FILE);
+    const current = users[user.id];
+    const target = users[targetId];
+    if (!current || !target) {
+      sendJson(response, 404, { error: 'Conta não encontrada.' });
+      return;
+    }
+
+    ensureFriendFields(current);
+    ensureFriendFields(target);
+
+    if (action === 'request') {
+      if (targetId === user.id) throw new Error('Você não pode adicionar a si mesmo.');
+      if (relationOf(current, targetId) === 'friend') throw new Error('Esta conta já é seu amigo.');
+      if (current.friendRequestsSent.includes(targetId)) throw new Error('Solicitação de amizade já enviada para esta conta.');
+      if (current.friendRequestsReceived.includes(targetId)) throw new Error('Esta conta já lhe enviou uma solicitação de amizade.');
+      current.friendRequestsSent.push(targetId);
+      target.friendRequestsReceived.push(user.id);
+    } else if (action === 'accept') {
+      if (!current.friendRequestsReceived.includes(targetId) || !target.friendRequestsSent.includes(user.id)) {
+        throw new Error('Solicitação de amizade não encontrada.');
+      }
+      arrayRemove(current.friendRequestsReceived, targetId);
+      arrayRemove(target.friendRequestsSent, user.id);
+      if (!current.friends.includes(targetId)) current.friends.push(targetId);
+      if (!target.friends.includes(user.id)) target.friends.push(user.id);
+    } else if (action === 'decline') {
+      if (!current.friendRequestsReceived.includes(targetId)) {
+        throw new Error('Solicitação de amizade não encontrada.');
+      }
+      arrayRemove(current.friendRequestsReceived, targetId);
+      arrayRemove(target.friendRequestsSent, user.id);
+    } else if (action === 'cancel') {
+      if (!current.friendRequestsSent.includes(targetId)) {
+        throw new Error('Solicitação de amizade não encontrada.');
+      }
+      arrayRemove(current.friendRequestsSent, targetId);
+      arrayRemove(target.friendRequestsReceived, user.id);
+    } else if (action === 'remove') {
+      if (!current.friends.includes(targetId)) {
+        throw new Error('Esta conta não está na sua lista de amigos.');
+      }
+      arrayRemove(current.friends, targetId);
+      arrayRemove(target.friends, user.id);
+    } else {
+      sendJson(response, 400, { error: 'Ação inválida.' });
+      return;
+    }
+
+    current.updatedAt = new Date().toISOString();
+    target.updatedAt = new Date().toISOString();
+    await writeJsonFile(USERS_FILE, users);
+    sendJson(response, 200, { ok: true });
+  } catch (error) {
+    sendJson(response, 400, { error: error.message });
+  }
+}
+
+async function sendFriendRequest(request, response) {
+  await withFriendship(request, response, 'request');
+}
+
+async function acceptFriendRequest(request, response) {
+  await withFriendship(request, response, 'accept');
+}
+
+async function declineFriendRequest(request, response) {
+  await withFriendship(request, response, 'decline');
+}
+
+async function cancelFriendRequest(request, response) {
+  await withFriendship(request, response, 'cancel');
+}
+
+async function removeFriend(request, response) {
+  await withFriendship(request, response, 'remove');
+}
+
+async function listUserMatches(request, response, targetId) {
+  const user = await getSessionUser(request);
+  if (!user) {
+    sendJson(response, 401, { error: 'Sessão expirada.' });
+    return;
+  }
+
+  const users = await readJsonFile(USERS_FILE);
+  const current = users[user.id];
+  if (!current) {
+    sendJson(response, 404, { error: 'Conta não encontrada.' });
+    return;
+  }
+  ensureFriendFields(current);
+
+  if (!current.friends.includes(targetId)) {
+    sendJson(response, 403, { error: 'Você só pode ver o histórico de partidas de amigos.' });
+    return;
+  }
+
+  const matches = await readJsonFile(MATCHES_FILE);
+  sendJson(response, 200, { matches: (matches[targetId] || []).slice(0, 50), targetId });
+}
+
 function isSafePublicPath(urlPath) {
   const decodedPath = decodeURIComponent(urlPath.split('?')[0]);
   const relativePath = path.normalize(decodedPath).replace(/^(\.\.[/\\])+/, '');
@@ -603,6 +910,47 @@ async function handleRequest(request, response) {
 
     if (request.method === 'PATCH' && urlPath === '/api/profile') {
       await handleProfileUpdate(request, response);
+      return;
+    }
+
+    if (request.method === 'GET' && urlPath === '/api/friends') {
+      await listFriends(request, response);
+      return;
+    }
+
+    if (request.method === 'POST' && urlPath === '/api/friends/search') {
+      await searchFriend(request, response);
+      return;
+    }
+
+    if (request.method === 'POST' && urlPath === '/api/friends/request') {
+      await sendFriendRequest(request, response);
+      return;
+    }
+
+    if (request.method === 'POST' && urlPath === '/api/friends/accept') {
+      await acceptFriendRequest(request, response);
+      return;
+    }
+
+    if (request.method === 'POST' && urlPath === '/api/friends/decline') {
+      await declineFriendRequest(request, response);
+      return;
+    }
+
+    if (request.method === 'POST' && urlPath === '/api/friends/cancel') {
+      await cancelFriendRequest(request, response);
+      return;
+    }
+
+    if (request.method === 'POST' && urlPath === '/api/friends/remove') {
+      await removeFriend(request, response);
+      return;
+    }
+
+    const userMatches = urlPath.match(/^\/api\/users\/([^/]+)\/matches$/);
+    if (request.method === 'GET' && userMatches) {
+      await listUserMatches(request, response, userMatches[1]);
       return;
     }
 
@@ -743,6 +1091,8 @@ async function main() {
           return;
         }
 
+        const users = readJsonFileSync(USERS_FILE);
+
         const playerIdx = room.players[0] ? 1 : 0;
         room.players[playerIdx] = ws;
         room.names[playerIdx] = cleanName || `Jogador ${playerIdx + 1}`;
@@ -753,22 +1103,35 @@ async function main() {
         conn.playerIdx = playerIdx;
         conn.userId = uid || null;
 
+        // Perfil do oponente já presente na sala (criador do convite)
+        const opponentIdx = otherPlayerIndex(playerIdx);
+        const opponentUid = room.userIds[opponentIdx];
+
         sendTo(ws, {
           type: 'room_joined',
           room: code,
           player: playerIdx,
           name: room.names[playerIdx],
-          opponent: room.names[otherPlayerIndex(playerIdx)]
+          opponent: room.names[opponentIdx],
+          opponentProfile: opponentUid ? userProfileOf(users, opponentUid) : null
         });
 
         // Notifica ambos que a sala está pronta quando tiver 2 jogadores
         if (room.players[0] && room.players[1]) {
           room.ready = [true, true];
+          const profile0 = userProfileOf(users, room.userIds[0]) || {
+            id: room.userIds[0] || null, uid: room.userIds[0] || null,
+            name: room.names[0], email: '', picture: '', playerName: room.names[0]
+          };
+          const profile1 = userProfileOf(users, room.userIds[1]) || {
+            id: room.userIds[1] || null, uid: room.userIds[1] || null,
+            name: room.names[1], email: '', picture: '', playerName: room.names[1]
+          };
           broadcastRoom(code, {
             type: 'room_ready',
             players: [
-              { id: 0, name: room.names[0] },
-              { id: 1, name: room.names[1] }
+              { id: 0, uid: profile0.uid, name: profile0.name, email: profile0.email, picture: profile0.picture, playerName: profile0.playerName },
+              { id: 1, uid: profile1.uid, name: profile1.name, email: profile1.email, picture: profile1.picture, playerName: profile1.playerName }
             ]
           });
         }
@@ -805,8 +1168,13 @@ async function main() {
     ws.on('error', () => {});
   });
 
+  if (NODE_ENV === 'production' && !process.env.DATA_DIR) {
+    console.warn('AVISO: DATA_DIR não definido. Em produção (Render), os dados serão perdidos a cada deploy. Crie um Persistent Disk e defina DATA_DIR com o caminho do ponto de montagem.');
+  }
+
   server.listen(PORT, HOST, () => {
     console.log(`LUUD Node.js rodando em http://${HOST}:${PORT}`);
+    console.log(`Banco de dados em: ${DATA_DIR}`);
     console.log(GOOGLE_CLIENT_ID ? 'Login Google configurado.' : 'Login Google aguardando GOOGLE_CLIENT_ID no arquivo .env.');
   });
 }
