@@ -797,12 +797,26 @@ async function withFriendship(request, response, action) {
       arrayRemove(target.friendRequestsSent, user.id);
       if (!current.friends.includes(targetId)) current.friends.push(targetId);
       if (!target.friends.includes(user.id)) target.friends.push(user.id);
+
+      // Notifica o solicitante em tempo real de que a solicitação foi aceita
+      sendToUser(targetId, {
+        type: 'friend_request_accepted',
+        fromId: user.id,
+        from: publicUserProfile(user)
+      });
     } else if (action === 'decline') {
       if (!current.friendRequestsReceived.includes(targetId)) {
         throw new Error('Solicitação de amizade não encontrada.');
       }
       arrayRemove(current.friendRequestsReceived, targetId);
       arrayRemove(target.friendRequestsSent, user.id);
+
+      // Notifica o solicitante em tempo real de que a solicitação foi recusada
+      sendToUser(targetId, {
+        type: 'friend_request_declined',
+        fromId: user.id,
+        from: publicUserProfile(user)
+      });
     } else if (action === 'cancel') {
       if (!current.friendRequestsSent.includes(targetId)) {
         throw new Error('Solicitação de amizade não encontrada.');
