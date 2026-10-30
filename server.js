@@ -34,6 +34,8 @@ const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7;
 const rooms = new Map();
 // Conexões ativas: ws -> { roomCode, playerIdx, userId, name }
 const connections = new Map();
+// Conexões por usuário: userId -> Set<ws> (para notificações em tempo real)
+const userConnections = new Map();
 // Fila do Jogo Rápido: [{ ws, uid, name }]
 const matchmakingQueue = [];
 
@@ -48,6 +50,43 @@ function sendTo(ws, message) {
   if (ws && ws.readyState === 1) {
     ws.send(JSON.stringify(message));
   }
+}
+
+function trackUserConnection(ws, userId) {
+  if (!userId) return;
+  let set = userConnections.get(userId);
+  if (!set) {
+    set = new Set();
+    userConnections.set(userId, set);
+  }
+  set.add(ws);
+}
+
+function untrackUserConnection(ws, userId) {
+  if (!userId) return;
+  const set = userConnections.get(userId);
+  if (set) {
+    set.delete(ws);
+    if (set.size === 0) userConnections.delete(userId);
+  }
+}
+
+/**
+ * Envia uma mensagem em tempo real para todas as abas abertas de um usuário.
+ * Retorna true se pelo menos uma conexão estava aberta.
+ */
+function sendToUser(userId, message) {
+  const set = userConnections.get(userId);
+  if (!set) return false;
+  const payload = JSON.stringify(message);
+  let delivered = false;
+  for (const ws of set) {
+    if (ws.readyState === 1) {
+      ws.send(payload);
+      delivered = true;
+    }
+  }
+  return delivered;
 }
 
 function broadcastRoom(roomCode, message, excludeWs = null) {
@@ -784,6 +823,17 @@ async function withFriendship(request, response, action) {
     current.updatedAt = new Date().toISOString();
     target.updatedAt = new Date().toISOString();
     await writeJsonFile(USERS_FILE, users);
+
+    // Notificação em tempo real: quando uma solicitação de amizade é enviada,
+    // avisa imediatamente o destinatário (se estiver online).
+    if (action === 'request') {
+      sendToUser(targetId, {
+        type: 'friend_request_received',
+        fromId: user.id,
+        from: publicUserProfile(current)
+      });
+    }
+
     sendJson(response, 200, { ok: true });
   } catch (error) {
     sendJson(response, 400, { error: error.message });
@@ -1004,6 +1054,21 @@ async function main() {
         return;
       }
 
+      /* --- IDENTIFICAÇÃO DE USUÁRIO (notificações em tempo real) -------- */
+      if (data.type === 'identify') {
+        const uid = data.uid || null;
+        const prevConn = connections.get(ws);
+        if (prevConn && prevConn.userId) {
+          untrackUserConnection(ws, prevConn.userId);
+        }
+        if (uid) {
+          trackUserConnection(ws, uid);
+          if (prevConn) prevConn.userId = uid;
+        }
+        sendTo(ws, { type: 'ack', original: 'identify' });
+        return;
+      }
+
       /* --- MATCHMAKING (Jogo Rápido) ------------------------------------ */
       if (data.type === 'quick_match') {
         const uid = data.uid || null;
@@ -1159,10 +1224,13 @@ async function main() {
     });
 
     ws.on('close', () => {
+      const conn = connections.get(ws);
+      const userId = conn ? conn.userId : null;
       // Sai da fila e da sala; quem ficou é notificado
       removeFromQueue(ws);
       detachFromRoom(ws);
       connections.delete(ws);
+      if (userId) untrackUserConnection(ws, userId);
     });
 
     ws.on('error', () => {});
