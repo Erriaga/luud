@@ -3,7 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Jogo de Ludo Clássico</title>
+  <title>LUUD - O seu jogo de Ludo!</title>
+  <!-- Ícone da aba da página: o próprio logo da marca -->
+  <link rel="icon" href="/assets/luud.svg" type="image/svg+xml">
+  <link rel="icon" href="/assets/luud.png" type="image/png">
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Google Fonts: Anton (display), Oswald (interface) e Fredoka (texto do jogo) -->
@@ -747,7 +750,8 @@
         <p id="dropdown-account-email" class="text-xs text-slate-400 truncate">Não conectado</p>
       </div>
       <button type="button" onclick="openProfileModal()" class="w-full px-4 py-3 text-left text-sm text-slate-100 hover:bg-slate-700 transition">Perfil</button>
-      <button type="button" onclick="openHistoryModal()" class="w-full px-4 py-3 text-left text-sm text-slate-100 hover:bg-slate-700 transition">Histórico</button>
+      <button type="button" onclick="openFriendsModal()" class="w-full px-4 py-3 text-left text-sm text-slate-100 hover:bg-slate-700 transition">Amigos</button>
+      <button type="button" onclick="openHistoryModal()" class="w-full px-4 py-3 text-left text-sm text-slate-100 hover:bg-slate-700 transition">Histórico de partidas</button>
       <button type="button" onclick="logoutAccount()" class="w-full px-4 py-3 text-left text-sm text-red-300 hover:bg-slate-700 transition">Sair</button>
     </div>
   </div>
@@ -815,6 +819,97 @@
   <footer class="w-full max-w-5xl mt-4 mb-1 flex items-center justify-center gap-2 text-center">
     <p class="font-brand text-xs sm:text-sm text-slate-500 tracking-widest">© 2026 LUUD Studios™</p>
   </footer>
+
+  <!-- MENU DO OPONENTE (partida online) -->
+  <div id="opponent-menu" class="hidden fixed z-[60] w-[260px]">
+    <div class="bg-slate-800 border border-slate-600 shadow-2xl p-4">
+      <div class="flex items-center gap-3 mb-3">
+        <img id="opp-menu-avatar" src="/assets/avatar.svg" alt="Foto do oponente" class="w-12 h-12 rounded-full object-cover bg-slate-700 border border-slate-500">
+        <div class="min-w-0">
+          <p class="text-xs text-slate-500 uppercase tracking-wider">Nome</p>
+          <p id="opp-menu-name" class="text-sm font-bold text-slate-100">Nome</p>
+          <p class="text-xs text-slate-500 uppercase tracking-wider">Sobrenome</p>
+          <p id="opp-menu-surname" class="text-sm text-slate-200">Sobrenome</p>
+          <p class="text-xs text-slate-500 uppercase tracking-wider mt-1">Conta Google</p>
+          <p id="opp-menu-email" class="text-sm text-slate-300 truncate">email@gmail.com</p>
+        </div>
+      </div>
+      <div id="opp-menu-actions" class="space-y-2"></div>
+    </div>
+  </div>
+
+  <!-- AMIGOS -->
+  <div id="friends-modal" class="hidden fixed inset-0 z-[100] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6">
+    <div class="bg-slate-800 border border-slate-600 shadow-2xl w-full max-w-2xl p-6 space-y-5 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between gap-3">
+        <h2 class="font-display text-xl font-black text-slate-100">Amigos</h2>
+        <button type="button" onclick="closeFriendsModal()" class="w-9 h-9 bg-slate-700 hover:bg-slate-600 text-slate-200 text-lg leading-none">✕</button>
+      </div>
+
+      <div class="flex gap-2">
+        <input id="friends-search" type="text" placeholder="Busque por Gmail ou nome no jogo" class="flex-1 border border-slate-600 bg-slate-900 px-3 py-2.5 text-slate-100 outline-none focus:border-slate-300">
+        <button type="button" onclick="handleFriendSearch()" class="py-2.5 px-4 bg-blue-600 hover:bg-blue-500 text-white font-bold transition">Adicionar</button>
+      </div>
+      <p id="friends-search-status" class="text-xs text-slate-400 min-h-[16px]"></p>
+      <div id="friends-search-result" class="mt-3"></div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+        <div>
+          <h3 id="friends-list-title" class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-3">Lista de amigos (0)</h3>
+          <div id="friends-list" class="space-y-2">
+            <p class="text-xs text-slate-500 text-center py-4">Nenhum amigo ainda.</p>
+          </div>
+        </div>
+        <div>
+          <h3 class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-3">Convites pendentes</h3>
+          <div id="friends-pending" class="space-y-2">
+            <p class="text-xs text-slate-500 text-center py-4">Nenhuma solicitação aguardando resposta.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PERFIL DO AMIGO -->
+  <div id="friend-profile-modal" class="hidden fixed inset-0 z-[100] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-800 border border-slate-600 shadow-2xl w-full max-w-lg p-6 space-y-5">
+      <div class="flex items-center justify-between gap-3">
+        <h2 class="font-display text-xl font-black text-slate-100">Perfil do amigo</h2>
+        <button type="button" onclick="closeFriendProfileModal()" class="w-9 h-9 bg-slate-700 hover:bg-slate-600 text-slate-200 text-lg leading-none">✕</button>
+      </div>
+
+      <div class="flex items-center gap-4">
+        <img id="friend-profile-avatar" src="/assets/avatar.svg" alt="Foto do perfil" class="w-20 h-20 rounded-full object-cover bg-slate-700 border-2 border-slate-500">
+        <div class="min-w-0">
+          <p id="friend-profile-name" class="text-sm font-bold text-slate-100 truncate">Nome no jogo</p>
+          <p id="friend-profile-email" class="text-xs text-slate-400 truncate">conta@example.com</p>
+          <p class="text-xs text-slate-500">Conta Google conectada</p>
+        </div>
+      </div>
+
+      <p class="text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">Histórico de partidas</p>
+      <div id="friend-profile-matches" class="space-y-2">
+        <p class="text-sm text-slate-400 text-center py-6">Carregando partidas...</p>
+      </div>
+
+      <div class="px-5 pb-5">
+        <button onclick="closeFriendProfileModal()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold text-sm border border-slate-600">
+          FECHAR
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONFIRMAÇÃO DE REMOVER AMIGO -->
+  <div id="friend-confirm-modal" class="hidden fixed inset-0 z-[110] bg-black/80 flex items-center justify-center p-4">
+    <div class="bg-slate-800 border border-slate-600 shadow-2xl p-6 max-w-md w-full text-center">
+      <p class="text-sm text-slate-100 mb-5">Deseja realmente remover <span id="friend-confirm-name" class="font-bold">Nome</span> da sua lista de amigos?</p>
+      <div class="flex gap-3 justify-center">
+        <button type="button" onclick="confirmRemoveFriendYes()" class="px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-bold">SIM</button>
+        <button type="button" onclick="confirmRemoveFriendNo()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold">NÃO</button>
+      </div>
+    </div>
+  </div>
 
   <!-- TELA FINAL -->
   <div id="win-modal" class="hidden fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
@@ -1913,6 +2008,428 @@
       }).join('');
     }
 
+    /* -------------------------------------------------------------
+       MENU DO OPONENTE (partida online)
+       Clicar no nome do oponente no placar abre o menu com nome,
+       sobrenome, Conta Google e opções de amizade.
+    ------------------------------------------------------------- */
+
+    function positionOpponentMenu() {
+      const menu = document.getElementById('opponent-menu');
+      const anchor = document.getElementById('scoreboard');
+      if (!menu || !anchor) return;
+      const rect = anchor.getBoundingClientRect();
+      let left = rect.left;
+      let top = rect.bottom + 8;
+      const width = 260;
+      if (left + width > window.innerWidth - 8) left = window.innerWidth - width - 8;
+      if (left < 8) left = 8;
+      if (top + 200 > window.innerHeight) top = rect.top - 200 - 8;
+      menu.style.left = `${Math.max(8, left)}px`;
+      menu.style.top = `${Math.max(8, top)}px`;
+    }
+
+    function closeOpponentMenu() {
+      document.getElementById('opponent-menu').classList.add('hidden');
+      opponentMenuOpen = false;
+    }
+
+    function menuItem(text, className, onClick) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `w-full text-left py-2 px-3 text-sm rounded transition ${className || 'text-slate-100 hover:bg-slate-700'}`;
+      btn.textContent = text;
+      btn.onclick = (event) => {
+        event.stopPropagation();
+        onClick();
+      };
+      return btn;
+    }
+
+    function disabledItem(text) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'w-full text-left py-2 px-3 text-sm rounded text-slate-500 bg-slate-700/50';
+      btn.textContent = text;
+      btn.disabled = true;
+      return btn;
+    }
+
+    function relationOfCurrent(friends, sent, received, targetId) {
+      if (!targetId) return 'none';
+      if (friends.includes(targetId)) return 'friend';
+      if (sent.includes(targetId)) return 'sent';
+      if (received.includes(targetId)) return 'received';
+      return 'none';
+    }
+
+    async function renderOpponentMenuActions(prof) {
+      const actions = document.getElementById('opp-menu-actions');
+      actions.innerHTML = '';
+      const data = await fetch('/api/friends')
+        .then(r => r.ok ? r.json() : null)
+        .catch(() => null);
+      if (data) {
+        const friendIds = data.friends.map(f => f.id);
+        const sentIds = data.sent.map(f => f.id);
+        const receivedIds = data.received.map(f => f.id);
+        const rel = relationOfCurrent(friendIds, sentIds, receivedIds, prof.id);
+
+        if (rel === 'friend') {
+          actions.appendChild(menuItem('Perfil', '', () => {
+            closeOpponentMenu();
+            openFriendProfile(prof);
+          }));
+          actions.appendChild(menuItem('Remover amigo', 'text-red-400 hover:bg-red-500/20', () => {
+            closeOpponentMenu();
+            confirmRemoveFriend(prof.id, prof.playerName || prof.displayName || prof.name || 'Oponente');
+          }));
+        } else if (rel === 'sent') {
+          actions.appendChild(disabledItem('Solicitação enviada'));
+        } else if (rel === 'received') {
+          actions.appendChild(menuItem('Aceitar amigo', '', () => {
+            closeOpponentMenu();
+            respondFriendRequest(prof.id, true);
+          }));
+          actions.appendChild(menuItem('Recusar', 'text-red-400 hover:bg-red-500/20', () => {
+            closeOpponentMenu();
+            respondFriendRequest(prof.id, false);
+          }));
+        } else {
+          actions.appendChild(menuItem('+ Adicionar amigo', 'bg-blue-600 hover:bg-blue-500 text-white', () => {
+            closeOpponentMenu();
+            sendFriendRequestTo(prof.id, prof.playerName || prof.displayName || prof.name || 'Oponente');
+          }));
+        }
+      } else {
+        actions.appendChild(disabledItem('Não foi possível carregar a lista de amigos.'));
+      }
+    }
+
+    function openOpponentMenu() {
+      if (!isOnlineGame || onlineMatchEnded || !onlineOpponentProfile) return;
+      gameAudio.playClick();
+      hideAccountDropdown();
+      closeHistoryModal();
+      closeProfileModal();
+
+      const prof = onlineOpponentProfile;
+      const fullName = String(prof.playerName || prof.displayName || prof.name || 'Oponente');
+      const parts = fullName.split(/\s+/);
+      const first = parts[0] || 'Oponente';
+      const last = parts.slice(1).join(' ') || '—';
+
+      document.getElementById('opp-menu-name').textContent = first;
+      document.getElementById('opp-menu-surname').textContent = last;
+      document.getElementById('opp-menu-email').textContent = prof.email || '—';
+      setAvatarImage(document.getElementById('opp-menu-avatar'), prof.picture || '');
+
+      document.getElementById('opp-menu-actions').innerHTML = '<p class="text-xs text-slate-500 text-center">Carregando...</p>';
+      positionOpponentMenu();
+      document.getElementById('opponent-menu').classList.remove('hidden');
+      opponentMenuOpen = true;
+
+      renderOpponentMenuActions(prof);
+    }
+
+    async function sendFriendRequestTo(targetId, targetName) {
+      try {
+        const response = await fetch('/api/friends/request', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetId })
+        });
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}));
+          const actions = document.getElementById('opp-menu-actions');
+          actions.innerHTML = `<p class="text-xs text-red-400 text-center">${escapeHtmlText(error.error || 'Não foi possível enviar a solicitação.')}</p>`;
+          setTimeout(() => renderOpponentMenuActions(onlineOpponentProfile), 1500);
+          return;
+        }
+        const actions = document.getElementById('opp-menu-actions');
+        actions.innerHTML = '<p class="text-xs text-emerald-400 text-center">Solicitação de amizade enviada</p>';
+        setTimeout(() => renderOpponentMenuActions(onlineOpponentProfile), 1200);
+      } catch (error) {
+        // falha de rede: ignora e mantém o menu aberto
+      }
+    }
+
+    async function respondFriendRequest(targetId, accept) {
+      try {
+        const response = await fetch('/api/friends/' + (accept ? 'accept' : 'decline'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetId })
+        });
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}));
+          alert(error.error || 'Não foi possível responder a solicitação.');
+          return;
+        }
+        closeOpponentMenu();
+      } catch (error) {
+        // ignora falhas de rede
+      }
+    }
+
+    /* -------------------------------------------------------------
+       PERFIL DO AMIGO (foto, nome no jogo e histórico de partidas)
+    ------------------------------------------------------------- */
+
+    async function openFriendProfile(prof) {
+      const modal = document.getElementById('friend-profile-modal');
+      const list = document.getElementById('friend-profile-matches');
+      document.getElementById('friend-profile-name').textContent = prof.playerName || prof.displayName || prof.name || 'Oponente';
+      document.getElementById('friend-profile-email').textContent = prof.email || '—';
+      setAvatarImage(document.getElementById('friend-profile-avatar'), prof.picture || '');
+      list.innerHTML = '<p class="text-sm text-slate-400 text-center py-6">Carregando partidas...</p>';
+      modal.classList.remove('hidden');
+
+      try {
+        const response = await fetch('/api/users/' + encodeURIComponent(prof.id) + '/matches');
+        if (!response.ok) throw new Error(response.status === 403 ? 'Você só pode ver o histórico de amigos.' : 'Não foi possível carregar as partidas.');
+        const data = await response.json();
+        renderFriendMatches(list, data.matches || []);
+      } catch (error) {
+        list.innerHTML = `<p class="text-sm text-red-400 text-center py-6">${escapeHtmlText(error.message)}</p>`;
+      }
+    }
+
+    function closeFriendProfileModal() {
+      document.getElementById('friend-profile-modal').classList.add('hidden');
+    }
+
+    function renderFriendMatches(list, records) {
+      if (!list) return;
+      if (records.length === 0) {
+        list.innerHTML = '<p class="text-sm text-slate-400 text-center py-6">Nenhuma partida registrada ainda.</p>';
+        return;
+      }
+      list.innerHTML = records.map(record => {
+        const win = record.result === 'win';
+        const when = new Date(record.finishedAt);
+        const whenLabel = when.toLocaleDateString('pt-BR') + ' às ' +
+          when.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        const modeLabel = MATCH_MODE_LABELS[record.mode] || record.mode;
+        const resultColor = win ? 'text-emerald-400' : 'text-red-400';
+        const borderColor = win ? 'border-emerald-700' : 'border-red-700';
+        return `
+          <div class="bg-slate-800 border-2 ${borderColor} p-3 flex items-center justify-between gap-3">
+            <div class="min-w-0 text-left">
+              <p class="font-brand font-black text-sm ${resultColor}">${win ? 'VITÓRIA' : 'DERROTA'}</p>
+              <p class="text-xs text-slate-300 truncate">${escapeHtmlText(modeLabel)} · vs ${escapeHtmlText(record.opponentName)}</p>
+              <p class="text-[11px] text-slate-500">${whenLabel}</p>
+            </div>
+            <p class="font-mono text-lg text-slate-100 whitespace-nowrap">${record.playerScore} - ${record.opponentScore}</p>
+          </div>`;
+      }).join('');
+    }
+
+    /* -------------------------------------------------------------
+       REMOVER AMIGO (confirmação SIM / NÃO)
+    ------------------------------------------------------------- */
+
+    function confirmRemoveFriend(id, name) {
+      friendConfirmTarget = { id, name };
+      document.getElementById('friend-confirm-name').textContent = name;
+      document.getElementById('friend-confirm-modal').classList.remove('hidden');
+    }
+
+    async function confirmRemoveFriendYes() {
+      if (!friendConfirmTarget) return;
+      const { id, name } = friendConfirmTarget;
+      closeFriendConfirmModal();
+      try {
+        const response = await fetch('/api/friends/remove', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetId: id })
+        });
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}));
+          alert(error.error || 'Não foi possível remover o amigo.');
+          return;
+        }
+        // Atualiza a lista de amigos se a modal estiver aberta
+        if (!document.getElementById('friends-modal').classList.contains('hidden')) {
+          renderFriends();
+        }
+        // Fecha o menu do oponente se ele fosse o alvo
+        if (opponentMenuOpen && onlineOpponentProfile && onlineOpponentProfile.id === id) {
+          closeOpponentMenu();
+        }
+      } catch (error) {
+        // ignora falhas de rede
+      }
+      friendConfirmTarget = null;
+    }
+
+    function confirmRemoveFriendNo() {
+      closeFriendConfirmModal();
+      friendConfirmTarget = null;
+    }
+
+    function closeFriendConfirmModal() {
+      document.getElementById('friend-confirm-modal').classList.add('hidden');
+    }
+
+    /* -------------------------------------------------------------
+       MODAL DE AMIGOS (busca, lista de amigos e convites pendentes)
+    ------------------------------------------------------------- */
+
+    function openFriendsModal() {
+      gameAudio.playClick();
+      hideAccountDropdown();
+      document.getElementById('friends-search').value = '';
+      document.getElementById('friends-search-result').innerHTML = '';
+      document.getElementById('friends-search-status').textContent = '';
+      document.getElementById('friends-modal').classList.remove('hidden');
+      renderFriends();
+    }
+
+    function closeFriendsModal() {
+      document.getElementById('friends-modal').classList.add('hidden');
+    }
+
+    async function renderFriends() {
+      const data = await fetch('/api/friends')
+        .then(r => r.ok ? r.json() : null)
+        .catch(() => null);
+      if (!data) {
+        document.getElementById('friends-list').innerHTML = '<p class="text-xs text-red-400 text-center py-4">Não foi possível carregar a lista de amigos.</p>';
+        document.getElementById('friends-pending').innerHTML = '<p class="text-xs text-red-400 text-center py-4">Não foi possível carregar os convites pendentes.</p>';
+        return;
+      }
+
+      document.getElementById('friends-count').textContent = data.friends.length;
+      document.getElementById('friends-list-title').textContent = `Lista de amigos (${data.friends.length})`;
+
+      const list = document.getElementById('friends-list');
+      if (data.friends.length === 0) {
+        list.innerHTML = '<p class="text-xs text-slate-500 text-center py-4">Nenhum amigo ainda.</p>';
+      } else {
+        list.innerHTML = data.friends.map(friendRow).join('');
+      }
+
+      const pending = document.getElementById('friends-pending');
+      if (data.sent.length === 0) {
+        pending.innerHTML = '<p class="text-xs text-slate-500 text-center py-4">Nenhuma solicitação aguardando resposta.</p>';
+      } else {
+        pending.innerHTML = data.sent.map(pendingRow).join('');
+      }
+    }
+
+    function friendRow(f) {
+      const name = f.playerName || f.displayName || f.email;
+      const safeName = String(name).replace(/"/g, '&quot;');
+      return `
+        <div class="bg-slate-800 border border-slate-700 p-2.5 flex items-center gap-3">
+          <img src="${escapeHtmlText(f.picture || '')}" alt="Foto" class="w-8 h-8 rounded-full object-cover bg-slate-700 border border-slate-600" onerror="this.onerror=null;this.src='/assets/avatar.svg'">
+          <div class="min-w-0 flex-1">
+            <p class="text-sm font-bold text-slate-100 truncate">${escapeHtmlText(name)}</p>
+            <p class="text-[11px] text-slate-400 truncate">${escapeHtmlText(f.email || '—')}</p>
+          </div>
+          <button type="button" data-friend-action="remove" data-friend-id="${escapeHtmlText(f.id)}" data-friend-name="${safeName}" class="text-[11px] text-red-400 hover:text-red-300 underline">Remover</button>
+        </div>`;
+    }
+
+    function pendingRow(f) {
+      const name = f.playerName || f.displayName || f.email;
+      const safeName = String(name).replace(/"/g, '&quot;');
+      return `
+        <div class="bg-slate-800 border border-slate-700 p-2.5 flex items-center gap-3">
+          <img src="${escapeHtmlText(f.picture || '')}" alt="Foto" class="w-8 h-8 rounded-full object-cover bg-slate-700 border border-slate-600" onerror="this.onerror=null;this.src='/assets/avatar.svg'">
+          <div class="min-w-0 flex-1">
+            <p class="text-sm font-bold text-slate-100 truncate">${escapeHtmlText(name)}</p>
+            <p class="text-[11px] text-slate-400 truncate">${escapeHtmlText(f.email || '—')}</p>
+          </div>
+          <button type="button" data-friend-action="cancel" data-friend-id="${escapeHtmlText(f.id)}" data-friend-name="${safeName}" class="text-[11px] text-red-400 hover:text-red-300 underline">Cancelar solicitação</button>
+        </div>`;
+    }
+
+    async function handleFriendSearch() {
+      const input = document.getElementById('friends-search');
+      const status = document.getElementById('friends-search-status');
+      const result = document.getElementById('friends-search-result');
+      const query = String(input.value || '').trim();
+      if (!query) {
+        status.textContent = 'Digite um Gmail ou nome no jogo para buscar.';
+        result.innerHTML = '';
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/friends/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query })
+        });
+        const data = await response.json();
+
+        if (!data.found) {
+          status.textContent = 'Conta não encontrada.';
+          result.innerHTML = '<p class="text-sm text-slate-400">Não existe conta com este Gmail ou nome no jogo.</p>';
+          return;
+        }
+
+        const acc = data.account;
+        const rel = data.relation;
+        const name = acc.playerName || acc.displayName || acc.email;
+        const safeName = String(name).replace(/"/g, '&quot;');
+
+        let action = '';
+        let statusText = '';
+        if (rel === 'none') {
+          action = `<button type="button" data-friend-action="add" data-friend-id="${escapeHtmlText(acc.id)}" data-friend-name="${safeName}" class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3 py-1.5 rounded transition">+ Adicionar amigo</button>`;
+          statusText = '';
+        } else if (rel === 'friend') {
+          action = `<button type="button" disabled class="text-xs font-bold px-3 py-1.5 rounded bg-slate-700/50 text-slate-500">Já é seu amigo</button>`;
+          statusText = '';
+        } else if (rel === 'sent') {
+          action = `<button type="button" disabled class="text-xs font-bold px-3 py-1.5 rounded bg-slate-700/50 text-slate-500">Solicitação enviada</button>`;
+          statusText = '';
+        } else if (rel === 'received') {
+          action = `<button type="button" data-friend-action="accept" data-friend-id="${escapeHtmlText(acc.id)}" data-friend-name="${safeName}" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-1.5 rounded transition mr-2">Aceitar</button>
+                    <button type="button" data-friend-action="decline" data-friend-id="${escapeHtmlText(acc.id)}" data-friend-name="${safeName}" class="text-red-400 hover:bg-red-500/20 text-xs font-bold px-3 py-1.5 rounded transition">Recusar</button>`;
+          statusText = '';
+        }
+
+        result.innerHTML = `
+          <div class="bg-slate-800 border border-slate-700 p-3 flex items-center gap-3">
+            <img src="${escapeHtmlText(acc.picture || '')}" alt="Foto" class="w-10 h-10 rounded-full object-cover bg-slate-700 border border-slate-600" onerror="this.onerror=null;this.src='/assets/avatar.svg'">
+            <div class="min-w-0">
+              <p class="text-sm font-bold text-slate-100 truncate">${escapeHtmlText(name)}</p>
+              <p class="text-[11px] text-slate-400 truncate">${escapeHtmlText(acc.email || '—')}</p>
+            </div>
+            <div>${action}</div>
+          </div>`;
+        status.textContent = statusText;
+      } catch (error) {
+        status.textContent = 'Erro ao buscar a conta.';
+        result.innerHTML = '';
+      }
+    }
+
+    async function executeFriendAction(action, targetId, targetName) {
+      try {
+        const response = await fetch('/api/friends/' + action, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetId })
+        });
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}));
+          document.getElementById('friends-search-status').textContent = error.error || 'Não foi possível completar a ação.';
+          return;
+        }
+        await renderFriends();
+        document.getElementById('friends-search-status').textContent = '';
+        document.getElementById('friends-search-result').innerHTML = '';
+      } catch (error) {
+        // ignora falhas de rede
+      }
+    }
+
     function openSetupModal() {
       // Sair de uma partida online em andamento (menu, reiniciar)
       // conta como desistência: derrota por desistência
@@ -2165,9 +2682,15 @@
         // Placar online: primeiro nome do jogador local x primeiro nome do oponente
         document.getElementById('score-player-name').innerText = playerName || 'Você';
         document.getElementById('score-cpu-label').innerText = getFirstName(onlineOpponentName) || 'Oponente';
+        document.getElementById('score-cpu-label').style.cursor = 'pointer';
+        document.getElementById('score-cpu-label').title = 'Clique no oponente';
+        document.getElementById('score-cpu-label').onclick = openOpponentMenu;
       } else {
         document.getElementById('score-player-name').innerText = playerName || (isTeamMode() ? 'Dupla' : 'Jogador');
         document.getElementById('score-cpu-label').innerText = isTeamMode() ? 'CPUs' : 'CPU';
+        document.getElementById('score-cpu-label').style.cursor = 'default';
+        document.getElementById('score-cpu-label').title = '';
+        document.getElementById('score-cpu-label').onclick = null;
       }
       document.getElementById('score-human').innerText = getHumanTeamScore();
       document.getElementById('score-cpu').innerText = getCpuScore();
@@ -2877,6 +3400,9 @@
     let matchFoundInterval = null; // contagem regressiva do aviso "PARTIDA ENCONTRADA"
     let pendingQuickStart = null; // jogadores da partida encontrada, aguardando o aviso terminar
     let abandonCountdownInterval = null;
+    let onlineOpponentProfile = null; // perfil completo do oponente (id, e-mail, foto)
+    let opponentMenuOpen = false; // menu do oponente aberto no placar
+    let friendConfirmTarget = null; // { id, name } aguardando confirmação de remoção
 
     const WS_URL = (window.location.protocol === 'https:' ? 'wss:' : 'ws:') +
       '//' + window.location.host + '/ws';
@@ -2997,6 +3523,15 @@
           onlinePlayerIdx = data.player;
           onlineOpponentName = data.opponent;
           onlineMatchType = 'invite';
+          if (data.opponentProfile) {
+            onlineOpponentProfile = {
+              id: data.opponentProfile.uid || data.opponentProfile.id || null,
+              name: data.opponentProfile.name,
+              email: data.opponentProfile.email || '',
+              picture: data.opponentProfile.picture || '',
+              playerName: data.opponentProfile.playerName || data.opponentProfile.name
+            };
+          }
           document.getElementById('online-status').textContent =
             `Você entrou como ${data.name}. Oponente: ${data.opponent}. Aguardando início...`;
           break;
@@ -3469,10 +4004,17 @@
       updateColorVariables();
       updateColorSelectionUI();
 
-      // Guarda o nome do oponente (vindo do room_ready) para exibir no jogo
+      // Guarda o nome e o perfil completo do oponente (vindo do room_ready)
       const opponentEntry = Array.isArray(players) ? players.find(p => p.id !== onlinePlayerIdx) : null;
-      if (opponentEntry && opponentEntry.name) {
-        onlineOpponentName = opponentEntry.name;
+      if (opponentEntry) {
+        onlineOpponentName = opponentEntry.name || 'Oponente';
+        onlineOpponentProfile = {
+          id: opponentEntry.uid || opponentEntry.id || null,
+          name: opponentEntry.name || 'Oponente',
+          email: opponentEntry.email || '',
+          picture: opponentEntry.picture || '',
+          playerName: opponentEntry.playerName || opponentEntry.name || 'Oponente'
+        };
       }
 
       // Inicia o jogo normalmente (o oponente é o outro humano, controlado via WS)
@@ -3701,6 +4243,59 @@
       // Se já estiver logado, habilita o botão Single Player Online.
       // (a sessão também é reavaliada pelo auth.js após carregar /api/session)
       syncSetupLoginUI();
+
+      // Fecha o menu do oponente ao clicar fora dele ou no placar
+      document.addEventListener('click', (event) => {
+        const menu = document.getElementById('opponent-menu');
+        const anchor = document.getElementById('scoreboard');
+        if (opponentMenuOpen && menu && !menu.classList.contains('hidden') && !menu.contains(event.target) && !(anchor && anchor.contains(event.target))) {
+          closeOpponentMenu();
+        }
+      });
+
+      // Fecha modais ao pressionar Escape
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+          closeOpponentMenu();
+          closeFriendsModal();
+          closeFriendProfileModal();
+          closeFriendConfirmModal();
+        }
+      });
+
+      // Tecla Enter no campo de busca de amigos
+      const friendsSearch = document.getElementById('friends-search');
+      if (friendsSearch) {
+        friendsSearch.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            handleFriendSearch();
+          }
+        });
+      }
+
+      // Ações da modal de Amigos (adicionar, aceitar, recusar, cancelar, remover)
+      const friendsModal = document.getElementById('friends-modal');
+      if (friendsModal) {
+        friendsModal.addEventListener('click', (event) => {
+          const btn = event.target.closest('[data-friend-action]');
+          if (!btn) return;
+          const action = btn.dataset.friendAction;
+          const targetId = btn.dataset.friendId;
+          const targetName = btn.dataset.friendName || '';
+          if (action === 'add') {
+            executeFriendAction('request', targetId, targetName);
+          } else if (action === 'accept') {
+            executeFriendAction('accept', targetId, targetName);
+          } else if (action === 'decline') {
+            executeFriendAction('decline', targetId, targetName);
+          } else if (action === 'cancel') {
+            executeFriendAction('cancel', targetId, targetName);
+          } else if (action === 'remove') {
+            confirmRemoveFriend(targetId, targetName);
+          }
+        });
+      }
     };
   </script>
   <script src="/auth.js" defer></script>
