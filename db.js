@@ -60,7 +60,8 @@ async function ensureDatabaseSchema() {
   const p = getPool();
   if (!p) return;
 
-  await p.query(`
+  try {
+    await p.query(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       email TEXT UNIQUE NOT NULL,
@@ -123,6 +124,13 @@ async function ensureDatabaseSchema() {
   await p.query(`CREATE INDEX IF NOT EXISTS idx_friend_requests_from ON friend_requests(from_user_id);`);
   await p.query(`CREATE INDEX IF NOT EXISTS idx_friend_requests_to ON friend_requests(to_user_id);`);
   await p.query(`CREATE INDEX IF NOT EXISTS idx_friend_requests_status ON friend_requests(status);`);
+  } catch (error) {
+    // Não derruba o servidor se o banco externo estiver inacessível.
+    // O servidor inicia e cada operação tratará o erro individualmente.
+    console.warn('AVISO: Não foi possível conectar ao banco de dados externo (DATABASE_URL).');
+    console.warn('Verifique se o banco está acessível e se o IP do Render está liberado no firewall.');
+    console.warn('Erro:', error.message);
+  }
 }
 
 /* ------------------------------------------------------------------
