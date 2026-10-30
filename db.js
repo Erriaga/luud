@@ -15,20 +15,25 @@ const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
 const MATCHES_FILE = path.join(DATA_DIR, 'matches.json');
 
 let pool = null;
+let dbAvailable = false; // true apenas se DATABASE_URL estiver definida E acessível
 
 function useDatabase() {
-  return Boolean(process.env.DATABASE_URL);
+  return dbAvailable;
 }
 
 function getPool() {
-  if (!pool && useDatabase()) {
-    pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  if (!pool && process.env.DATABASE_URL) {
+    try {
+      pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    } catch (error) {
+      pool = null;
+    }
   }
   return pool;
 }
 
 /* ------------------------------------------------------------------
-   JSON fallback (desenvolvimento local)
+   JSON fallback (desenvolvimento local ou banco externo inacessível)
 ------------------------------------------------------------------ */
 async function readJsonFile(filePath) {
   try {
@@ -62,73 +67,76 @@ async function ensureDatabaseSchema() {
 
   try {
     await p.query(`
-    CREATE TABLE IF NOT EXISTS users (
-      id TEXT PRIMARY KEY,
-      email TEXT UNIQUE NOT NULL,
-      display_name TEXT,
-      player_name TEXT,
-      avatar_url TEXT DEFAULT '',
-      bio TEXT DEFAULT '',
-      google_sub TEXT DEFAULT '',
-      picture TEXT DEFAULT '',
-      created_at TIMESTAMP DEFAULT NOW(),
-      updated_at TIMESTAMP DEFAULT NOW()
-    );
-  `);
+      CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        email TEXT UNIQUE NOT NULL,
+        display_name TEXT,
+        player_name TEXT,
+        avatar_url TEXT DEFAULT '',
+        bio TEXT DEFAULT '',
+        google_sub TEXT DEFAULT '',
+        picture TEXT DEFAULT '',
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
 
-  await p.query(`
-    CREATE TABLE IF NOT EXISTS sessions (
-      token TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      expires_at BIGINT NOT NULL
-    );
-  `);
+    await p.query(`
+      CREATE TABLE IF NOT EXISTS sessions (
+        token TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        expires_at BIGINT NOT NULL
+      );
+    `);
 
-  await p.query(`
-    CREATE TABLE IF NOT EXISTS matches (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      mode TEXT NOT NULL DEFAULT 'local',
-      result TEXT NOT NULL DEFAULT 'loss',
-      player_score INTEGER NOT NULL DEFAULT 0,
-      opponent_score INTEGER NOT NULL DEFAULT 0,
-      opponent_name TEXT NOT NULL DEFAULT 'Oponente',
-      finished_at TIMESTAMP DEFAULT NOW()
-    );
-  `);
+    await p.query(`
+      CREATE TABLE IF NOT EXISTS matches (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        mode TEXT NOT NULL DEFAULT 'local',
+        result TEXT NOT NULL DEFAULT 'loss',
+        player_score INTEGER NOT NULL DEFAULT 0,
+        opponent_score INTEGER NOT NULL DEFAULT 0,
+        opponent_name TEXT NOT NULL DEFAULT 'Oponente',
+        finished_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
 
-  await p.query(`
-    CREATE TABLE IF NOT EXISTS friends (
-      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      friend_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      created_at TIMESTAMP DEFAULT NOW(),
-      PRIMARY KEY (user_id, friend_id)
-    );
-  `);
+    await p.query(`
+      CREATE TABLE IF NOT EXISTS friends (
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        friend_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMP DEFAULT NOW(),
+        PRIMARY KEY (user_id, friend_id)
+      );
+    `);
 
-  await p.query(`
-    CREATE TABLE IF NOT EXISTS friend_requests (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      from_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      to_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      status TEXT NOT NULL DEFAULT 'pending',
-      created_at TIMESTAMP DEFAULT NOW()
-    );
-  `);
+    await p.query(`
+      CREATE TABLE IF NOT EXISTS friend_requests (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        from_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        to_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        status TEXT NOT NULL DEFAULT 'pending',
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
 
-  await p.query(`CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);`);
-  await p.query(`CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);`);
-  await p.query(`CREATE INDEX IF NOT EXISTS idx_matches_user_id ON matches(user_id);`);
-  await p.query(`CREATE INDEX IF NOT EXISTS idx_friends_user_id ON friends(user_id);`);
-  await p.query(`CREATE INDEX IF NOT EXISTS idx_friends_friend_id ON friends(friend_id);`);
-  await p.query(`CREATE INDEX IF NOT EXISTS idx_friend_requests_from ON friend_requests(from_user_id);`);
-  await p.query(`CREATE INDEX IF NOT EXISTS idx_friend_requests_to ON friend_requests(to_user_id);`);
-  await p.query(`CREATE INDEX IF NOT EXISTS idx_friend_requests_status ON friend_requests(status);`);
+    await p.query(`CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);`);
+    await p.query(`CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);`);
+    await p.query(`CREATE INDEX IF NOT EXISTS idx_matches_user_id ON matches(user_id);`);
+    await p.query(`CREATE INDEX IF NOT EXISTS idx_friends_user_id ON friends(user_id);`);
+    await p.query(`CREATE INDEX IF NOT EXISTS idx_friends_friend_id ON friends(friend_id);`);
+    await p.query(`CREATE INDEX IF NOT EXISTS idx_friend_requests_from ON friend_requests(from_user_id);`);
+    await p.query(`CREATE INDEX IF NOT EXISTS idx_friend_requests_to ON friend_requests(to_user_id);`);
+    await p.query(`CREATE INDEX IF NOT EXISTS idx_friend_requests_status ON friend_requests(status);`);
+
+    dbAvailable = true;
+    console.log('Banco de dados externo conectado com sucesso.');
   } catch (error) {
-    // Não derruba o servidor se o banco externo estiver inacessível.
-    // O servidor inicia e cada operação tratará o erro individualmente.
+    pool = null;
+    dbAvailable = false;
     console.warn('AVISO: Não foi possível conectar ao banco de dados externo (DATABASE_URL).');
-    console.warn('Verifique se o banco está acessível e se o IP do Render está liberado no firewall.');
+    console.warn('Usando arquivos JSON locais como fallback.');
     console.warn('Erro:', error.message);
   }
 }
@@ -137,14 +145,15 @@ async function ensureDatabaseSchema() {
    Inicialização
 ------------------------------------------------------------------ */
 async function ensureDataFiles() {
-  if (useDatabase()) {
+  if (process.env.DATABASE_URL) {
     await ensureDatabaseSchema();
-  } else {
-    await fs.mkdir(DATA_DIR, { recursive: true });
-    if (!fss.existsSync(USERS_FILE)) await fs.writeFile(USERS_FILE, JSON.stringify({}, null, 2), 'utf8');
-    if (!fss.existsSync(SESSIONS_FILE)) await fs.writeFile(SESSIONS_FILE, JSON.stringify({}, null, 2), 'utf8');
-    if (!fss.existsSync(MATCHES_FILE)) await fs.writeFile(MATCHES_FILE, JSON.stringify({}, null, 2), 'utf8');
   }
+  // Se DATABASE_URL não estiver definida ou o banco estiver inacessível,
+  // garante que os arquivos JSON locais existam
+  await fs.mkdir(DATA_DIR, { recursive: true });
+  if (!fss.existsSync(USERS_FILE)) await fs.writeFile(USERS_FILE, JSON.stringify({}, null, 2), 'utf8');
+  if (!fss.existsSync(SESSIONS_FILE)) await fs.writeFile(SESSIONS_FILE, JSON.stringify({}, null, 2), 'utf8');
+  if (!fss.existsSync(MATCHES_FILE)) await fs.writeFile(MATCHES_FILE, JSON.stringify({}, null, 2), 'utf8');
 }
 
 /* ------------------------------------------------------------------
@@ -202,22 +211,18 @@ async function getUserProfile(uid) {
 }
 
 /* ------------------------------------------------------------------
-   Envio de notificação interna (usado pelo server.js)
------------------------------------------------------------------- */
-function sendToUserInternal(userId, message) {
-  // Essa função é chamada pelo server.js que tem acesso ao userConnections.
-  // Exportamos um placeholder; o server.js usa sua própria sendToUser.
-  return false;
-}
-
-/* ------------------------------------------------------------------
    Usuários
 ------------------------------------------------------------------ */
 async function getUserById(id) {
   if (useDatabase()) {
-    const p = getPool();
-    const result = await p.query('SELECT * FROM users WHERE id = $1', [id]);
-    return result.rows[0] ? normalizeUserFromDb(result.rows[0]) : null;
+    try {
+      const p = getPool();
+      const result = await p.query('SELECT * FROM users WHERE id = $1', [id]);
+      return result.rows[0] ? normalizeUserFromDb(result.rows[0]) : null;
+    } catch (error) {
+      dbAvailable = false;
+      pool = null;
+    }
   }
   const users = await readJsonFile(USERS_FILE);
   const user = users[id];
@@ -226,9 +231,14 @@ async function getUserById(id) {
 
 async function getUserByEmail(email) {
   if (useDatabase()) {
-    const p = getPool();
-    const result = await p.query('SELECT * FROM users WHERE LOWER(email) = LOWER($1)', [email]);
-    return result.rows[0] ? normalizeUserFromDb(result.rows[0]) : null;
+    try {
+      const p = getPool();
+      const result = await p.query('SELECT * FROM users WHERE LOWER(email) = LOWER($1)', [email]);
+      return result.rows[0] ? normalizeUserFromDb(result.rows[0]) : null;
+    } catch (error) {
+      dbAvailable = false;
+      pool = null;
+    }
   }
   const users = await readJsonFile(USERS_FILE);
   for (const id of Object.keys(users)) {
@@ -244,15 +254,20 @@ async function searchUsersByQuery(query, excludeUserId) {
   if (!qLower) return null;
 
   if (useDatabase()) {
-    const p = getPool();
-    const result = await p.query(
-      `SELECT * FROM users 
-       WHERE id <> $1 
-         AND (LOWER(email) = LOWER($2) OR LOWER(player_name) = LOWER($2) OR LOWER(display_name) = LOWER($2) OR LOWER(player_name) LIKE LOWER($3))
-       LIMIT 1`,
-      [excludeUserId, qLower, `%${qLower}%`]
-    );
-    return result.rows[0] ? normalizeUserFromDb(result.rows[0]) : null;
+    try {
+      const p = getPool();
+      const result = await p.query(
+        `SELECT * FROM users 
+         WHERE id <> $1 
+           AND (LOWER(email) = LOWER($2) OR LOWER(player_name) = LOWER($2) OR LOWER(display_name) = LOWER($2) OR LOWER(player_name) LIKE LOWER($3))
+         LIMIT 1`,
+        [excludeUserId, qLower, `%${qLower}%`]
+      );
+      return result.rows[0] ? normalizeUserFromDb(result.rows[0]) : null;
+    } catch (error) {
+      dbAvailable = false;
+      pool = null;
+    }
   }
 
   const users = await readJsonFile(USERS_FILE);
@@ -288,69 +303,81 @@ async function createOrUpdateUserFromGoogle(payload) {
   const picture = payload.picture || '';
 
   if (useDatabase()) {
-    const p = getPool();
-    const existing = await p.query('SELECT * FROM users WHERE id = $1', [userId]);
-    if (existing.rows.length > 0) {
-      const u = existing.rows[0];
-      await p.query(
-        `UPDATE users SET email = $1, display_name = COALESCE($2, display_name), player_name = COALESCE($3, player_name), picture = COALESCE($4, picture), google_sub = COALESCE($5, google_sub), updated_at = $6 WHERE id = $7`,
-        [email, displayName, displayName, picture, payload.sub, now, userId]
-      );
-      const row = await p.query('SELECT * FROM users WHERE id = $1', [userId]);
-      return normalizeUserFromDb(row.rows[0]);
-    } else {
-      await p.query(
-        `INSERT INTO users (id, email, display_name, player_name, avatar_url, bio, google_sub, picture, created_at, updated_at) VALUES ($1, $2, $3, $4, '', '', $5, $6, $7, $8)`,
-        [userId, email, displayName, displayName, payload.sub, picture, now, now]
-      );
-      const row = await p.query('SELECT * FROM users WHERE id = $1', [userId]);
-      return normalizeUserFromDb(row.rows[0]);
+    try {
+      const p = getPool();
+      const existing = await p.query('SELECT * FROM users WHERE id = $1', [userId]);
+      if (existing.rows.length > 0) {
+        const u = existing.rows[0];
+        await p.query(
+          `UPDATE users SET email = $1, display_name = COALESCE($2, display_name), player_name = COALESCE($3, player_name), picture = COALESCE($4, picture), google_sub = COALESCE($5, google_sub), updated_at = $6 WHERE id = $7`,
+          [email, displayName, displayName, picture, payload.sub, now, userId]
+        );
+        const row = await p.query('SELECT * FROM users WHERE id = $1', [userId]);
+        return normalizeUserFromDb(row.rows[0]);
+      } else {
+        await p.query(
+          `INSERT INTO users (id, email, display_name, player_name, avatar_url, bio, google_sub, picture, created_at, updated_at) VALUES ($1, $2, $3, $4, '', '', $5, $6, $7, $8)`,
+          [userId, email, displayName, displayName, payload.sub, picture, now, now]
+        );
+        const row = await p.query('SELECT * FROM users WHERE id = $1', [userId]);
+        return normalizeUserFromDb(row.rows[0]);
+      }
+    } catch (error) {
+      dbAvailable = false;
+      pool = null;
     }
-  } else {
-    const users = await readJsonFile(USERS_FILE);
-    const existingUser = users[userId];
-    const updatedUser = normalizeUser({
-      id: userId,
-      email,
-      displayName: existingUser?.displayName || displayName,
-      playerName: existingUser?.playerName || existingUser?.displayName || displayName,
-      avatarUrl: existingUser?.avatarUrl || '',
-      bio: existingUser?.bio || '',
-      googleSub: payload.sub || '',
-      picture: existingUser?.picture || picture,
-      createdAt: existingUser?.createdAt || now,
-      updatedAt: now
-    });
-    users[userId] = updatedUser;
-    await writeJsonFile(USERS_FILE, users);
-    return updatedUser;
   }
+
+  // Fallback JSON
+  const users = await readJsonFile(USERS_FILE);
+  const existingUser = users[userId];
+  const updatedUser = normalizeUser({
+    id: userId,
+    email,
+    displayName: existingUser?.displayName || displayName,
+    playerName: existingUser?.playerName || existingUser?.displayName || displayName,
+    avatarUrl: existingUser?.avatarUrl || '',
+    bio: existingUser?.bio || '',
+    googleSub: payload.sub || '',
+    picture: existingUser?.picture || picture,
+    createdAt: existingUser?.createdAt || now,
+    updatedAt: now
+  });
+  users[userId] = updatedUser;
+  await writeJsonFile(USERS_FILE, users);
+  return updatedUser;
 }
 
 async function updateUserProfile(userId, fields) {
   if (useDatabase()) {
-    const p = getPool();
-    const updates = [];
-    const values = [];
-    let idx = 1;
-    if (fields.displayName !== undefined) { updates.push(`display_name = $${idx++}`); values.push(fields.displayName); }
-    if (fields.playerName !== undefined) { updates.push(`player_name = $${idx++}`); values.push(fields.playerName); }
-    if (fields.avatarUrl !== undefined) { updates.push(`avatar_url = $${idx++}`); values.push(fields.avatarUrl); }
-    if (fields.bio !== undefined) { updates.push(`bio = $${idx++}`); values.push(fields.bio); }
-    updates.push(`updated_at = $${idx++}`); values.push(new Date().toISOString());
-    values.push(userId);
+    try {
+      const p = getPool();
+      const updates = [];
+      const values = [];
+      let idx = 1;
+      if (fields.displayName !== undefined) { updates.push(`display_name = $${idx++}`); values.push(fields.displayName); }
+      if (fields.playerName !== undefined) { updates.push(`player_name = $${idx++}`); values.push(fields.playerName); }
+      if (fields.avatarUrl !== undefined) { updates.push(`avatar_url = $${idx++}`); values.push(fields.avatarUrl); }
+      if (fields.bio !== undefined) { updates.push(`bio = $${idx++}`); values.push(fields.bio); }
+      updates.push(`updated_at = $${idx++}`); values.push(new Date().toISOString());
+      values.push(userId);
 
-    await p.query(`UPDATE users SET ${updates.join(', ')} WHERE id = $${idx}`, values);
-    const row = await p.query('SELECT * FROM users WHERE id = $1', [userId]);
-    return normalizeUserFromDb(row.rows[0]);
-  } else {
-    const users = await readJsonFile(USERS_FILE);
-    const currentUser = users[userId];
-    if (!currentUser) return null;
-    users[userId] = normalizeUser({ ...currentUser, ...fields, updatedAt: new Date().toISOString() });
-    await writeJsonFile(USERS_FILE, users);
-    return users[userId];
+      await p.query(`UPDATE users SET ${updates.join(', ')} WHERE id = $${idx}`, values);
+      const row = await p.query('SELECT * FROM users WHERE id = $1', [userId]);
+      return normalizeUserFromDb(row.rows[0]);
+    } catch (error) {
+      dbAvailable = false;
+      pool = null;
+    }
   }
+
+  // Fallback JSON
+  const users = await readJsonFile(USERS_FILE);
+  const currentUser = users[userId];
+  if (!currentUser) return null;
+  users[userId] = normalizeUser({ ...currentUser, ...fields, updatedAt: new Date().toISOString() });
+  await writeJsonFile(USERS_FILE, users);
+  return users[userId];
 }
 
 /* ------------------------------------------------------------------
@@ -361,8 +388,13 @@ async function createSession(userId) {
   const expiresAt = Date.now() + 1000 * 60 * 60 * 24 * 7;
 
   if (useDatabase()) {
-    const p = getPool();
-    await p.query('INSERT INTO sessions (token, user_id, expires_at) VALUES ($1, $2, $3)', [token, userId, expiresAt]);
+    try {
+      const p = getPool();
+      await p.query('INSERT INTO sessions (token, user_id, expires_at) VALUES ($1, $2, $3)', [token, userId, expiresAt]);
+    } catch (error) {
+      dbAvailable = false;
+      pool = null;
+    }
   } else {
     const sessions = await readJsonFile(SESSIONS_FILE);
     sessions[token] = { userId, expiresAt };
@@ -375,15 +407,20 @@ async function getSessionUser(token) {
   if (!token) return null;
 
   if (useDatabase()) {
-    const p = getPool();
-    const result = await p.query('SELECT * FROM sessions WHERE token = $1', [token]);
-    if (result.rows.length === 0) return null;
-    const session = result.rows[0];
-    if (typeof session.expires_at === 'number' && session.expires_at < Date.now()) {
-      await p.query('DELETE FROM sessions WHERE token = $1', [token]);
-      return null;
+    try {
+      const p = getPool();
+      const result = await p.query('SELECT * FROM sessions WHERE token = $1', [token]);
+      if (result.rows.length === 0) return null;
+      const session = result.rows[0];
+      if (typeof session.expires_at === 'number' && session.expires_at < Date.now()) {
+        await p.query('DELETE FROM sessions WHERE token = $1', [token]);
+        return null;
+      }
+      return getUserById(session.user_id);
+    } catch (error) {
+      dbAvailable = false;
+      pool = null;
     }
-    return getUserById(session.user_id);
   } else {
     const sessions = await readJsonFile(SESSIONS_FILE);
     const session = sessions[token];
@@ -400,8 +437,13 @@ async function getSessionUser(token) {
 async function destroySession(token) {
   if (!token) return;
   if (useDatabase()) {
-    const p = getPool();
-    await p.query('DELETE FROM sessions WHERE token = $1', [token]);
+    try {
+      const p = getPool();
+      await p.query('DELETE FROM sessions WHERE token = $1', [token]);
+    } catch (error) {
+      dbAvailable = false;
+      pool = null;
+    }
   } else {
     const sessions = await readJsonFile(SESSIONS_FILE);
     if (sessions[token]) {
@@ -416,15 +458,20 @@ async function destroySession(token) {
 ------------------------------------------------------------------ */
 async function createMatchRecord(userId, record) {
   if (useDatabase()) {
-    const p = getPool();
-    await p.query(
-      `INSERT INTO matches (id, user_id, mode, result, player_score, opponent_score, opponent_name, finished_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [record.id, userId, record.mode, record.result, record.playerScore, record.opponentScore, record.opponentName, record.finishedAt]
-    );
-    await p.query(
-      `DELETE FROM matches WHERE user_id = $1 AND id NOT IN (SELECT id FROM matches WHERE user_id = $1 ORDER BY finished_at DESC LIMIT 100)`,
-      [userId]
-    );
+    try {
+      const p = getPool();
+      await p.query(
+        `INSERT INTO matches (id, user_id, mode, result, player_score, opponent_score, opponent_name, finished_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [record.id, userId, record.mode, record.result, record.playerScore, record.opponentScore, record.opponentName, record.finishedAt]
+      );
+      await p.query(
+        `DELETE FROM matches WHERE user_id = $1 AND id NOT IN (SELECT id FROM matches WHERE user_id = $1 ORDER BY finished_at DESC LIMIT 100)`,
+        [userId]
+      );
+    } catch (error) {
+      dbAvailable = false;
+      pool = null;
+    }
   } else {
     const matches = await readJsonFile(MATCHES_FILE);
     const history = matches[userId] || [];
@@ -436,16 +483,20 @@ async function createMatchRecord(userId, record) {
 
 async function listMatchRecords(userId) {
   if (useDatabase()) {
-    const p = getPool();
-    const result = await p.query(
-      `SELECT id, finished_at, mode, result, player_score AS "playerScore", opponent_score AS "opponentScore", opponent_name AS "opponentName" FROM matches WHERE user_id = $1 ORDER BY finished_at DESC LIMIT 50`,
-      [userId]
-    );
-    return { matches: result.rows };
-  } else {
-    const matches = await readJsonFile(MATCHES_FILE);
-    return { matches: (matches[userId] || []).slice(0, 50) };
+    try {
+      const p = getPool();
+      const result = await p.query(
+        `SELECT id, finished_at, mode, result, player_score AS "playerScore", opponent_score AS "opponentScore", opponent_name AS "opponentName" FROM matches WHERE user_id = $1 ORDER BY finished_at DESC LIMIT 50`,
+        [userId]
+      );
+      return { matches: result.rows };
+    } catch (error) {
+      dbAvailable = false;
+      pool = null;
+    }
   }
+  const matches = await readJsonFile(MATCHES_FILE);
+  return { matches: (matches[userId] || []).slice(0, 50) };
 }
 
 async function listMatchRecordsForUser(targetUserId) {
@@ -457,111 +508,137 @@ async function listMatchRecordsForUser(targetUserId) {
 ------------------------------------------------------------------ */
 async function getFriends(userId) {
   if (useDatabase()) {
-    const p = getPool();
-    const result = await p.query(
-      `SELECT u.id, u.email, u.display_name AS "displayName", u.player_name AS "playerName", u.picture, u.avatar_url AS "avatarUrl" 
-       FROM friends f 
-       JOIN users u ON u.id = f.friend_id 
-       WHERE f.user_id = $1 
-       ORDER BY u.player_name ASC, u.display_name ASC`,
-      [userId]
-    );
-    return result.rows.map(normalizeUserFromDb);
-  } else {
-    const users = await readJsonFile(USERS_FILE);
-    const current = users[userId];
-    if (!current) return [];
-    current.friends = Array.isArray(current.friends) ? current.friends : [];
-    return current.friends
-      .map(id => users[id] ? normalizeUser(users[id]) : null)
-      .filter(Boolean)
-      .sort((a, b) => (a.playerName || a.displayName || a.email).localeCompare(b.playerName || b.displayName || b.email));
+    try {
+      const p = getPool();
+      const result = await p.query(
+        `SELECT u.id, u.email, u.display_name AS "displayName", u.player_name AS "playerName", u.picture, u.avatar_url AS "avatarUrl" 
+         FROM friends f 
+         JOIN users u ON u.id = f.friend_id 
+         WHERE f.user_id = $1 
+         ORDER BY u.player_name ASC, u.display_name ASC`,
+        [userId]
+      );
+      return result.rows.map(normalizeUserFromDb);
+    } catch (error) {
+      dbAvailable = false;
+      pool = null;
+    }
   }
+
+  const users = await readJsonFile(USERS_FILE);
+  const current = users[userId];
+  if (!current) return [];
+  current.friends = Array.isArray(current.friends) ? current.friends : [];
+  return current.friends
+    .map(id => users[id] ? normalizeUser(users[id]) : null)
+    .filter(Boolean)
+    .sort((a, b) => (a.playerName || a.displayName || a.email).localeCompare(b.playerName || b.displayName || b.email));
 }
 
 async function getSentRequests(userId) {
   if (useDatabase()) {
-    const p = getPool();
-    const result = await p.query(
-      `SELECT u.id, u.email, u.display_name AS "displayName", u.player_name AS "playerName", u.picture, u.avatar_url AS "avatarUrl"
-       FROM friend_requests fr
-       JOIN users u ON u.id = fr.to_user_id
-       WHERE fr.from_user_id = $1 AND fr.status = 'pending'`,
-      [userId]
-    );
-    return result.rows.map(normalizeUserFromDb);
-  } else {
-    const users = await readJsonFile(USERS_FILE);
-    const current = users[userId];
-    if (!current) return [];
-    current.friendRequestsSent = Array.isArray(current.friendRequestsSent) ? current.friendRequestsSent : [];
-    return current.friendRequestsSent
-      .map(id => users[id] ? normalizeUser(users[id]) : null)
-      .filter(Boolean);
+    try {
+      const p = getPool();
+      const result = await p.query(
+        `SELECT u.id, u.email, u.display_name AS "displayName", u.player_name AS "playerName", u.picture, u.avatar_url AS "avatarUrl"
+         FROM friend_requests fr
+         JOIN users u ON u.id = fr.to_user_id
+         WHERE fr.from_user_id = $1 AND fr.status = 'pending'`,
+        [userId]
+      );
+      return result.rows.map(normalizeUserFromDb);
+    } catch (error) {
+      dbAvailable = false;
+      pool = null;
+    }
   }
+
+  const users = await readJsonFile(USERS_FILE);
+  const current = users[userId];
+  if (!current) return [];
+  current.friendRequestsSent = Array.isArray(current.friendRequestsSent) ? current.friendRequestsSent : [];
+  return current.friendRequestsSent
+    .map(id => users[id] ? normalizeUser(users[id]) : null)
+    .filter(Boolean);
 }
 
 async function getReceivedRequests(userId) {
   if (useDatabase()) {
-    const p = getPool();
-    const result = await p.query(
-      `SELECT u.id, u.email, u.display_name AS "displayName", u.player_name AS "playerName", u.picture, u.avatar_url AS "avatarUrl"
-       FROM friend_requests fr
-       JOIN users u ON u.id = fr.from_user_id
-       WHERE fr.to_user_id = $1 AND fr.status = 'pending'`,
-      [userId]
-    );
-    return result.rows.map(normalizeUserFromDb);
-  } else {
-    const users = await readJsonFile(USERS_FILE);
-    const current = users[userId];
-    if (!current) return [];
-    current.friendRequestsReceived = Array.isArray(current.friendRequestsReceived) ? current.friendRequestsReceived : [];
-    return current.friendRequestsReceived
-      .map(id => users[id] ? normalizeUser(users[id]) : null)
-      .filter(Boolean);
+    try {
+      const p = getPool();
+      const result = await p.query(
+        `SELECT u.id, u.email, u.display_name AS "displayName", u.player_name AS "playerName", u.picture, u.avatar_url AS "avatarUrl"
+         FROM friend_requests fr
+         JOIN users u ON u.id = fr.from_user_id
+         WHERE fr.to_user_id = $1 AND fr.status = 'pending'`,
+        [userId]
+      );
+      return result.rows.map(normalizeUserFromDb);
+    } catch (error) {
+      dbAvailable = false;
+      pool = null;
+    }
   }
+
+  const users = await readJsonFile(USERS_FILE);
+  const current = users[userId];
+  if (!current) return [];
+  current.friendRequestsReceived = Array.isArray(current.friendRequestsReceived) ? current.friendRequestsReceived : [];
+  return current.friendRequestsReceived
+    .map(id => users[id] ? normalizeUser(users[id]) : null)
+    .filter(Boolean);
 }
 
 async function getRelation(currentUserId, targetUserId) {
   if (currentUserId === targetUserId) return 'self';
   if (useDatabase()) {
-    const p = getPool();
-    const friendRes = await p.query('SELECT 1 FROM friends WHERE user_id = $1 AND friend_id = $2', [currentUserId, targetUserId]);
-    if (friendRes.rows.length > 0) return 'friend';
-    const sentRes = await p.query('SELECT 1 FROM friend_requests WHERE from_user_id = $1 AND to_user_id = $2 AND status = $3', [currentUserId, targetUserId, 'pending']);
-    if (sentRes.rows.length > 0) return 'sent';
-    const receivedRes = await p.query('SELECT 1 FROM friend_requests WHERE from_user_id = $1 AND to_user_id = $2 AND status = $3', [targetUserId, currentUserId, 'pending']);
-    if (receivedRes.rows.length > 0) return 'received';
-    return 'none';
-  } else {
-    const users = await readJsonFile(USERS_FILE);
-    const current = users[currentUserId];
-    if (!current) return 'none';
-    current.friends = Array.isArray(current.friends) ? current.friends : [];
-    current.friendRequestsSent = Array.isArray(current.friendRequestsSent) ? current.friendRequestsSent : [];
-    current.friendRequestsReceived = Array.isArray(current.friendRequestsReceived) ? current.friendRequestsReceived : [];
-    if (current.friends.includes(targetUserId)) return 'friend';
-    if (current.friendRequestsSent.includes(targetUserId)) return 'sent';
-    if (current.friendRequestsReceived.includes(targetUserId)) return 'received';
-    return 'none';
+    try {
+      const p = getPool();
+      const friendRes = await p.query('SELECT 1 FROM friends WHERE user_id = $1 AND friend_id = $2', [currentUserId, targetUserId]);
+      if (friendRes.rows.length > 0) return 'friend';
+      const sentRes = await p.query('SELECT 1 FROM friend_requests WHERE from_user_id = $1 AND to_user_id = $2 AND status = $3', [currentUserId, targetUserId, 'pending']);
+      if (sentRes.rows.length > 0) return 'sent';
+      const receivedRes = await p.query('SELECT 1 FROM friend_requests WHERE from_user_id = $1 AND to_user_id = $2 AND status = $3', [targetUserId, currentUserId, 'pending']);
+      if (receivedRes.rows.length > 0) return 'received';
+      return 'none';
+    } catch (error) {
+      dbAvailable = false;
+      pool = null;
+    }
   }
+
+  const users = await readJsonFile(USERS_FILE);
+  const current = users[currentUserId];
+  if (!current) return 'none';
+  current.friends = Array.isArray(current.friends) ? current.friends : [];
+  current.friendRequestsSent = Array.isArray(current.friendRequestsSent) ? current.friendRequestsSent : [];
+  current.friendRequestsReceived = Array.isArray(current.friendRequestsReceived) ? current.friendRequestsReceived : [];
+  if (current.friends.includes(targetUserId)) return 'friend';
+  if (current.friendRequestsSent.includes(targetUserId)) return 'sent';
+  if (current.friendRequestsReceived.includes(targetUserId)) return 'received';
+  return 'none';
 }
 
 async function sendFriendRequest(fromUserId, toUserId) {
   if (fromUserId === toUserId) throw new Error('Você não pode adicionar a si mesmo.');
 
   if (useDatabase()) {
-    const p = getPool();
-    const rel = await getRelation(fromUserId, toUserId);
-    if (rel === 'friend') throw new Error('Esta conta já é seu amigo.');
-    if (rel === 'sent') throw new Error('Solicitação de amizade já enviada para esta conta.');
-    if (rel === 'received') throw new Error('Esta conta já lhe enviou uma solicitação de amizade.');
+    try {
+      const p = getPool();
+      const rel = await getRelation(fromUserId, toUserId);
+      if (rel === 'friend') throw new Error('Esta conta já é seu amigo.');
+      if (rel === 'sent') throw new Error('Solicitação de amizade já enviada para esta conta.');
+      if (rel === 'received') throw new Error('Esta conta já lhe enviou uma solicitação de amizade.');
 
-    await p.query(
-      `INSERT INTO friend_requests (from_user_id, to_user_id, status) VALUES ($1, $2, 'pending')`,
-      [fromUserId, toUserId]
-    );
+      await p.query(
+        `INSERT INTO friend_requests (from_user_id, to_user_id, status) VALUES ($1, $2, 'pending')`,
+        [fromUserId, toUserId]
+      );
+    } catch (error) {
+      if (error.message.includes('já') || error.message.includes('não encontrada')) throw error;
+      dbAvailable = false;
+      pool = null;
+    }
   } else {
     const users = await readJsonFile(USERS_FILE);
     const current = users[fromUserId];
@@ -588,13 +665,19 @@ async function sendFriendRequest(fromUserId, toUserId) {
 
 async function acceptFriendRequest(toUserId, fromUserId) {
   if (useDatabase()) {
-    const p = getPool();
-    const res = await p.query('SELECT 1 FROM friend_requests WHERE from_user_id = $1 AND to_user_id = $2 AND status = $3', [fromUserId, toUserId, 'pending']);
-    if (res.rows.length === 0) throw new Error('Solicitação de amizade não encontrada.');
+    try {
+      const p = getPool();
+      const res = await p.query('SELECT 1 FROM friend_requests WHERE from_user_id = $1 AND to_user_id = $2 AND status = $3', [fromUserId, toUserId, 'pending']);
+      if (res.rows.length === 0) throw new Error('Solicitação de amizade não encontrada.');
 
-    await p.query('UPDATE friend_requests SET status = $1 WHERE from_user_id = $2 AND to_user_id = $3 AND status = $4', ['accepted', fromUserId, toUserId, 'pending']);
-    await p.query('INSERT INTO friends (user_id, friend_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [toUserId, fromUserId]);
-    await p.query('INSERT INTO friends (user_id, friend_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [fromUserId, toUserId]);
+      await p.query('UPDATE friend_requests SET status = $1 WHERE from_user_id = $2 AND to_user_id = $3 AND status = $4', ['accepted', fromUserId, toUserId, 'pending']);
+      await p.query('INSERT INTO friends (user_id, friend_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [toUserId, fromUserId]);
+      await p.query('INSERT INTO friends (user_id, friend_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [fromUserId, toUserId]);
+    } catch (error) {
+      if (error.message === 'Solicitação de amizade não encontrada.') throw error;
+      dbAvailable = false;
+      pool = null;
+    }
   } else {
     const users = await readJsonFile(USERS_FILE);
     const current = users[toUserId];
@@ -622,10 +705,16 @@ async function acceptFriendRequest(toUserId, fromUserId) {
 
 async function declineFriendRequest(toUserId, fromUserId) {
   if (useDatabase()) {
-    const p = getPool();
-    const res = await p.query('SELECT 1 FROM friend_requests WHERE from_user_id = $1 AND to_user_id = $2 AND status = $3', [fromUserId, toUserId, 'pending']);
-    if (res.rows.length === 0) throw new Error('Solicitação de amizade não encontrada.');
-    await p.query('UPDATE friend_requests SET status = $1 WHERE from_user_id = $2 AND to_user_id = $3 AND status = $4', ['declined', fromUserId, toUserId, 'pending']);
+    try {
+      const p = getPool();
+      const res = await p.query('SELECT 1 FROM friend_requests WHERE from_user_id = $1 AND to_user_id = $2 AND status = $3', [fromUserId, toUserId, 'pending']);
+      if (res.rows.length === 0) throw new Error('Solicitação de amizade não encontrada.');
+      await p.query('UPDATE friend_requests SET status = $1 WHERE from_user_id = $2 AND to_user_id = $3 AND status = $4', ['declined', fromUserId, toUserId, 'pending']);
+    } catch (error) {
+      if (error.message === 'Solicitação de amizade não encontrada.') throw error;
+      dbAvailable = false;
+      pool = null;
+    }
   } else {
     const users = await readJsonFile(USERS_FILE);
     const current = users[toUserId];
@@ -646,10 +735,16 @@ async function declineFriendRequest(toUserId, fromUserId) {
 
 async function cancelFriendRequest(fromUserId, toUserId) {
   if (useDatabase()) {
-    const p = getPool();
-    const res = await p.query('SELECT 1 FROM friend_requests WHERE from_user_id = $1 AND to_user_id = $2 AND status = $3', [fromUserId, toUserId, 'pending']);
-    if (res.rows.length === 0) throw new Error('Solicitação de amizade não encontrada.');
-    await p.query('UPDATE friend_requests SET status = $1 WHERE from_user_id = $2 AND to_user_id = $3 AND status = $4', ['cancelled', fromUserId, toUserId, 'pending']);
+    try {
+      const p = getPool();
+      const res = await p.query('SELECT 1 FROM friend_requests WHERE from_user_id = $1 AND to_user_id = $2 AND status = $3', [fromUserId, toUserId, 'pending']);
+      if (res.rows.length === 0) throw new Error('Solicitação de amizade não encontrada.');
+      await p.query('UPDATE friend_requests SET status = $1 WHERE from_user_id = $2 AND to_user_id = $3 AND status = $4', ['cancelled', fromUserId, toUserId, 'pending']);
+    } catch (error) {
+      if (error.message === 'Solicitação de amizade não encontrada.') throw error;
+      dbAvailable = false;
+      pool = null;
+    }
   } else {
     const users = await readJsonFile(USERS_FILE);
     const current = users[fromUserId];
@@ -670,11 +765,17 @@ async function cancelFriendRequest(fromUserId, toUserId) {
 
 async function removeFriend(userId, friendId) {
   if (useDatabase()) {
-    const p = getPool();
-    const res = await p.query('SELECT 1 FROM friends WHERE user_id = $1 AND friend_id = $2', [userId, friendId]);
-    if (res.rows.length === 0) throw new Error('Esta conta não está na sua lista de amigos.');
-    await p.query('DELETE FROM friends WHERE user_id = $1 AND friend_id = $2', [userId, friendId]);
-    await p.query('DELETE FROM friends WHERE user_id = $1 AND friend_id = $2', [friendId, userId]);
+    try {
+      const p = getPool();
+      const res = await p.query('SELECT 1 FROM friends WHERE user_id = $1 AND friend_id = $2', [userId, friendId]);
+      if (res.rows.length === 0) throw new Error('Esta conta não está na sua lista de amigos.');
+      await p.query('DELETE FROM friends WHERE user_id = $1 AND friend_id = $2', [userId, friendId]);
+      await p.query('DELETE FROM friends WHERE user_id = $1 AND friend_id = $2', [friendId, userId]);
+    } catch (error) {
+      if (error.message === 'Esta conta não está na sua lista de amigos.') throw error;
+      dbAvailable = false;
+      pool = null;
+    }
   } else {
     const users = await readJsonFile(USERS_FILE);
     const current = users[userId];
@@ -691,6 +792,14 @@ async function removeFriend(userId, friendId) {
     target.updatedAt = new Date().toISOString();
     await writeJsonFile(USERS_FILE, users);
   }
+}
+
+/* ------------------------------------------------------------------
+   Envio de notificação interna (usado pelo server.js)
+------------------------------------------------------------------ */
+function sendToUserInternal(userId, message) {
+  // Placeholder: o server.js tem sua própria sendToUser
+  return false;
 }
 
 /* ------------------------------------------------------------------
