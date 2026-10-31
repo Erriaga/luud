@@ -3371,107 +3371,114 @@
     }
 
     function startGame() {
-      const nameInput = document.getElementById('player-name-input');
-      let startName = nameInput ? nameInput.value : '';
-      if (isOnlineGame) {
-        // Usa o primeiro nome da conta Google como nome do jogador local
-        const account = typeof accountUser !== 'undefined' ? accountUser : null;
-        startName = getFirstName(account && (account.playerName || account.displayName)) || 'Você';
-      }
-      updatePlayerName(startName);
-      onlineMatchEnded = false;
-      movementSession++;
-
-      if (activeDiceAnimation) {
-        activeDiceAnimation.cancel();
-        activeDiceAnimation = null;
-      }
-      if (activeTokenAnimation) {
-        activeTokenAnimation.cancel();
-        activeTokenAnimation = null;
-      }
-
-      // O jogador humano sempre fica na posição BOTTOM_LEFT (canto inferior esquerdo)
-      const humanPlayerKey = getHumanPlayerKey();
-      const humanColorIdx = CLOCKWISE_COLORS.indexOf(humanPlayerKey);
-      boardRotationIndex = (4 - humanColorIdx) % 4;
-
-      playerTypes = { RED: 'NONE', GREEN: 'NONE', YELLOW: 'NONE', BLUE: 'NONE' };
-      playerTypes[humanPlayerKey] = 'HUMAN';
-
-      if (isTeamMode()) {
-        // Duplas nas bases diagonais: humano + 1 CPU aliado vs 2 CPUs adversárias.
-        const partnerColor = DIAGONAL_PARTNER[humanPlayerKey];
-        playerTypes[partnerColor] = 'ALLY';
-        CLOCKWISE_COLORS.forEach(color => {
-          if (color !== humanPlayerKey && color !== partnerColor) {
-            playerTypes[color] = 'CPU';
-          }
-        });
-      } else if (isOnlineGame) {
-        // No modo online o oponente é outro humano, controlado via WebSocket
-        const opponentColor = CLOCKWISE_COLORS[(humanColorIdx + 2) % 4];
-        playerTypes[opponentColor] = 'HUMAN';
-      } else {
-        const opponentColor = CLOCKWISE_COLORS[(humanColorIdx + 2) % 4];
-        playerTypes[opponentColor] = 'CPU';
-      }
-
-      activePlayers = CLOCKWISE_COLORS.filter(c => playerTypes[c] !== 'NONE');
-      updateColorVariables();
-
-      tokensState = {
-        RED: [-1, -1, -1, -1],
-        GREEN: [-1, -1, -1, -1],
-        YELLOW: [-1, -1, -1, -1],
-        BLUE: [-1, -1, -1, -1]
-      };
-
-      playerScores = {
-        RED: 0,
-        GREEN: 0,
-        YELLOW: 0,
-        BLUE: 0
-      };
-
-      // No modo local, o jogador humano começa. No modo online, ambos os
-      // clientes precisam concordar com o turno inicial: o player 0
-      // (criador da sala, cor AZUL) começa, garantindo turno sincronizado.
-      currentTurnIndex = isOnlineGame
-        ? 0
-        : activePlayers.indexOf(humanPlayerKey);
-      hasRolled = false;
-      consecutiveSixes = 0;
-      isAnimating = false;
-      isPaused = false;
-
+      // Esconde a tela de configuração imediatamente, antes de qualquer outra coisa
       document.getElementById('setup-screen').classList.add('hidden');
       document.getElementById('win-modal').classList.add('hidden');
       document.getElementById('pause-modal').classList.add('hidden');
 
-      initBoard();
-      
-      // Rotaciona visualmente o tabuleiro para alinhar a cor escolhida ao canto inferior esquerdo
-      const boardEl = document.getElementById('ludo-board');
-      const degrees = boardRotationIndex * 90;
-      boardEl.style.transform = `rotate(${degrees}deg)`;
+      try {
+        const nameInput = document.getElementById('player-name-input');
+        let startName = nameInput ? nameInput.value : '';
+        if (isOnlineGame) {
+          // Usa o primeiro nome da conta Google como nome do jogador local
+          const account = typeof accountUser !== 'undefined' ? accountUser : null;
+          startName = getFirstName(account && (account.playerName || account.displayName)) || 'Você';
+        }
+        updatePlayerName(startName);
+        onlineMatchEnded = false;
+        movementSession++;
 
-      renderTokens();
-      updateTurnUI();
-      updateScoreboardUI();
-      gameAudio.unlock();
-      gameAudio.startMusic();
-      const greeting = playerName ? `Boa sorte, ${playerName}! ` : '';
-      logStatus(`${greeting}Partida iniciada! Sua cor (${getPlayerColor(humanPlayerKey).name}) está no Canto Inferior Esquerdo.`);
-      checkCPUTurn();
+        if (activeDiceAnimation) {
+          activeDiceAnimation.cancel();
+          activeDiceAnimation = null;
+        }
+        if (activeTokenAnimation) {
+          activeTokenAnimation.cancel();
+          activeTokenAnimation = null;
+        }
 
-      // Ativa o relógio em segundo plano (Web Worker) e invalida callbacks
-      // agendados de partidas anteriores
-      invalidateScheduledCallbacks();
-      startBackgroundClock();
-      // O botão Menu volta a ficar disponível durante a partida
-      setMenuButtonVisible(true);
-      layoutAccountArea();
+        // O jogador humano sempre fica na posição BOTTOM_LEFT (canto inferior esquerdo)
+        const humanPlayerKey = getHumanPlayerKey();
+        const humanColorIdx = CLOCKWISE_COLORS.indexOf(humanPlayerKey);
+        boardRotationIndex = (4 - humanColorIdx) % 4;
+
+        playerTypes = { RED: 'NONE', GREEN: 'NONE', YELLOW: 'NONE', BLUE: 'NONE' };
+        playerTypes[humanPlayerKey] = 'HUMAN';
+
+        if (isTeamMode()) {
+          // Duplas nas bases diagonais: humano + 1 CPU aliado vs 2 CPUs adversárias.
+          const partnerColor = DIAGONAL_PARTNER[humanPlayerKey];
+          playerTypes[partnerColor] = 'ALLY';
+          CLOCKWISE_COLORS.forEach(color => {
+            if (color !== humanPlayerKey && color !== partnerColor) {
+              playerTypes[color] = 'CPU';
+            }
+          });
+        } else if (isOnlineGame) {
+          // No modo online o oponente é outro humano, controlado via WebSocket
+          const opponentColor = CLOCKWISE_COLORS[(humanColorIdx + 2) % 4];
+          playerTypes[opponentColor] = 'HUMAN';
+        } else {
+          const opponentColor = CLOCKWISE_COLORS[(humanColorIdx + 2) % 4];
+          playerTypes[opponentColor] = 'CPU';
+        }
+
+        activePlayers = CLOCKWISE_COLORS.filter(c => playerTypes[c] !== 'NONE');
+        updateColorVariables();
+
+        tokensState = {
+          RED: [-1, -1, -1, -1],
+          GREEN: [-1, -1, -1, -1],
+          YELLOW: [-1, -1, -1, -1],
+          BLUE: [-1, -1, -1, -1]
+        };
+
+        playerScores = {
+          RED: 0,
+          GREEN: 0,
+          YELLOW: 0,
+          BLUE: 0
+        };
+
+        // No modo local, o jogador humano começa. No modo online, ambos os
+        // clientes precisam concordar com o turno inicial: o player 0
+        // (criador da sala, cor AZUL) começa, garantindo turno sincronizado.
+        currentTurnIndex = isOnlineGame
+          ? 0
+          : activePlayers.indexOf(humanPlayerKey);
+        hasRolled = false;
+        consecutiveSixes = 0;
+        isAnimating = false;
+        isPaused = false;
+
+        initBoard();
+        
+        // Rotaciona visualmente o tabuleiro para alinhar a cor escolhida ao canto inferior esquerdo
+        const boardEl = document.getElementById('ludo-board');
+        const degrees = boardRotationIndex * 90;
+        boardEl.style.transform = `rotate(${degrees}deg)`;
+
+        renderTokens();
+        updateTurnUI();
+        updateScoreboardUI();
+        gameAudio.unlock();
+        gameAudio.startMusic();
+        const greeting = playerName ? `Boa sorte, ${playerName}! ` : '';
+        logStatus(`${greeting}Partida iniciada! Sua cor (${getPlayerColor(humanPlayerKey).name}) está no Canto Inferior Esquerdo.`);
+        checkCPUTurn();
+
+        // Ativa o relógio em segundo plano (Web Worker) e invalida callbacks
+        // agendados de partidas anteriores
+        invalidateScheduledCallbacks();
+        startBackgroundClock();
+        // O botão Menu volta a ficar disponível durante a partida
+        setMenuButtonVisible(true);
+        layoutAccountArea();
+      } catch (error) {
+        console.error('[LUUD] Erro ao iniciar o jogo:', error);
+        // Garante que a tela de configuração permaneça escondida mesmo com erro
+        document.getElementById('setup-screen').classList.add('hidden');
+      }
     }
 
     function checkCPUTurn() {
