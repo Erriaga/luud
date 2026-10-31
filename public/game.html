@@ -555,11 +555,9 @@
         <div class="grid grid-cols-2 gap-3">
           <button type="button" onclick="showCpuModeSelection()" id="mode-btn-1" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
             <span class="font-bold text-sm text-slate-100">SINGLE PLAYER</span>
-            <span class="text-xs text-slate-400">1 vs 1</span>
           </button>
           <button type="button" onclick="showOnlineModeSelection()" id="mode-btn-3" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
             <span class="font-bold text-sm text-slate-100">MULTIPLAYER</span>
-            <span class="text-xs text-slate-400">2 vs 2</span>
           </button>
         </div>
       </div>
@@ -2982,10 +2980,24 @@
       document.getElementById('score-line2-dot').className = 'w-2 h-2 rounded-full shrink-0';
 
       // Linhas 3 e 4: apenas para modo ARENA (4 jogadores)
+      // No modo DUPLA (isTeamMode), o placar mostra apenas 2 linhas: "Dupla" e "CPU"
       const line3 = document.getElementById('score-line3-row');
       const line4 = document.getElementById('score-line4-row');
 
-      if (activePlayers.length === 4) {
+      if (isTeamMode()) {
+        // Modo DUPLA: apenas 2 linhas, linha 2 mostra o somatório do time adversário
+        line3.classList.add('hidden');
+        line4.classList.add('hidden');
+
+        const cpuTeamScore = (playerScores[orderedPlayers[2]] || 0) + (playerScores[orderedPlayers[3]] || 0);
+        document.getElementById('score-line2-name').innerText = 'CPU';
+        document.getElementById('score-line2-points').innerText = cpuTeamScore;
+        document.getElementById('score-line2-dot').style.backgroundColor = getPlayerColor(orderedPlayers[2]).hex;
+        document.getElementById('score-line2-dot').className = 'w-2 h-2 rounded-full shrink-0';
+
+        document.getElementById('score-line1-name').innerText = 'Dupla';
+      } else if (activePlayers.length === 4) {
+        // Modo ARENA: 4 linhas
         line3.classList.remove('hidden');
         line4.classList.remove('hidden');
 
@@ -3002,8 +3014,11 @@
         document.getElementById('score-line4-dot').style.backgroundColor = getPlayerColor(p4).hex;
         document.getElementById('score-line4-dot').className = 'w-2 h-2 rounded-full shrink-0';
       } else {
+        // Modo SOLO: 2 linhas normais
         line3.classList.add('hidden');
         line4.classList.add('hidden');
+
+        document.getElementById('score-line2-name').innerText = getPlayerDisplayName(p2) || 'Jogador 2';
       }
 
       document.getElementById('scoreboard').title = `Primeiro a marcar ${getWinningScore()} pontos vence`;
