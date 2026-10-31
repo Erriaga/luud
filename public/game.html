@@ -139,6 +139,18 @@
       animation: timer-pulse 0.7s ease-in-out infinite;
     }
 
+    /* Garante que a tela inicial de configuração cubra completamente o jogo */
+    #setup-screen {
+      width: 100vw !important;
+      height: 100vh !important;
+      min-height: 100vh !important;
+      background-color: #020617 !important;
+      z-index: 100 !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+    }
+
     @keyframes timer-pulse {
       0%, 100% { transform: scale(1); }
       50% { transform: scale(1.1); }
