@@ -1870,6 +1870,7 @@
       const teamMode = isTeamMode();
       [1, 3].forEach(count => {
         const btn = document.getElementById(`mode-btn-${count}`);
+        if (!btn) return;
         const isSelected = opponentsCount !== null && count === opponentsCount;
         btn.classList.toggle('border-white', isSelected);
         btn.classList.toggle('border-transparent', !isSelected);
