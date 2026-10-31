@@ -553,109 +553,37 @@
       <div class="space-y-2 text-center">
         <label class="text-xs font-bold uppercase tracking-wider text-slate-300">MODO DE JOGO</label>
         <div class="grid grid-cols-2 gap-3">
-          <button type="button" onclick="showCpuModeSelection()" id="mode-btn-single" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
+          <button type="button" onclick="selectOpponentsMode(1); startGame()" id="mode-btn-1" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
             <span class="font-bold text-sm text-slate-100">SINGLE PLAYER</span>
+            <span class="text-xs text-slate-400">1 vs 1</span>
           </button>
-          <button type="button" onclick="showOnlineModeSelection()" id="mode-btn-multi" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
+          <button type="button" onclick="selectOpponentsMode(3); startGame()" id="mode-btn-3" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
             <span class="font-bold text-sm text-slate-100">MULTIPLAYER</span>
+            <span class="text-xs text-slate-400">2 vs 2</span>
           </button>
         </div>
       </div>
       </div>
 
-      <!-- SELEÇÃO DO MODO CPU -->
-      <div id="cpu-mode-view" class="hidden space-y-5 sm:space-y-6 w-full">
-        <div class="space-y-2 text-center">
-          <label class="text-xs font-bold uppercase tracking-wider text-slate-300">SELECIONE O MODO CPU</label>
-          <div class="grid grid-cols-3 gap-2">
-            <button type="button" onclick="selectOpponentsMode(1); startGame()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
-              <span class="font-bold text-sm text-slate-100">SOLO</span>
-              <span class="text-xs text-slate-400">1 vs 1</span>
-            </button>
-            <button type="button" onclick="selectOpponentsMode(3); startGame()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
-              <span class="font-bold text-sm text-slate-100">DUPLA</span>
-              <span class="text-xs text-slate-400">2 vs 2</span>
-            </button>
-            <button type="button" onclick="startArenaGame(4)" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
-              <span class="font-bold text-sm text-slate-100">ARENA</span>
-              <span class="text-xs text-slate-400">Cada um por si</span>
-            </button>
-          </div>
-          <button type="button" onclick="hideCpuModeSelection()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
-            VOLTAR
+      <!-- VISÃO DE MODOS ONLINE (Jogo Rápido / Convite) -->
+      <div id="online-modes-view" class="hidden space-y-5 sm:space-y-6 w-full">
+        <p class="text-xs font-bold uppercase tracking-wider text-slate-400">ONLINE</p>
+        <div class="grid grid-cols-2 gap-3">
+          <button type="button" id="quick-match-btn" onclick="startQuickMatch()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
+            <span class="font-bold text-sm text-slate-100">JOGO RÁPIDO</span>
+            <span class="text-xs text-slate-400">Partida aleatória</span>
+          </button>
+          <button type="button" id="invite-btn" onclick="openInviteModal()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
+            <span class="font-bold text-sm text-slate-100">CONVITE</span>
+            <span class="text-xs text-slate-400">Chame um amigo</span>
           </button>
         </div>
+        <button type="button" onclick="hideOnlineModes()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
+          VOLTAR
+        </button>
       </div>
-
-      <!-- SELEÇÃO DO MODO ONLINE -->
-      <div id="online-mode-view" class="hidden space-y-5 sm:space-y-6 w-full">
-        <div class="space-y-2 text-center">
-          <label class="text-xs font-bold uppercase tracking-wider text-slate-300">SELECIONE O MODO ONLINE</label>
-          <div class="grid grid-cols-3 gap-2">
-            <button type="button" onclick="showOnlineSoloView()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
-              <span class="font-bold text-sm text-slate-100">SOLO</span>
-              <span class="text-xs text-slate-400">1 vs 1</span>
-            </button>
-            <button type="button" onclick="showOnlineDuplaView()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
-              <span class="font-bold text-sm text-slate-100">DUPLA</span>
-              <span class="text-xs text-slate-400">2 vs 2</span>
-            </button>
-            <button type="button" onclick="showOnlineArenaView()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
-              <span class="font-bold text-sm text-slate-100">ARENA</span>
-              <span class="text-xs text-slate-400">Cada um por si</span>
-            </button>
-          </div>
-          <button type="button" onclick="hideOnlineModeView()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
-            VOLTAR
-          </button>
-        </div>
-      </div>
-
-      <!-- VISÃO SOLO ONLINE (Jogo Rápido / Convite / Liga) -->
-      <div id="online-solo-view" class="hidden space-y-5 sm:space-y-6 w-full">
-        <div class="space-y-2 text-center">
-          <label class="text-xs font-bold uppercase tracking-wider text-slate-300">SOLO ONLINE</label>
-          <div class="grid grid-cols-3 gap-2">
-            <button type="button" onclick="startQuickMatch()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
-              <span class="font-bold text-sm text-slate-100">JOGO RÁPIDO</span>
-              <span class="text-xs text-slate-400">Matchmaking automático</span>
-            </button>
-            <button type="button" onclick="openInviteModal()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
-              <span class="font-bold text-sm text-slate-100">CONVITE</span>
-              <span class="text-xs text-slate-400">Criar/Entrar com código</span>
-            </button>
-            <button type="button" disabled class="p-3 border-2 border-transparent bg-slate-700 text-slate-500 transition flex flex-col items-center opacity-70 cursor-not-allowed disabled:opacity-70 disabled:cursor-not-allowed">
-              <span class="font-bold text-sm text-slate-100">LIGA</span>
-              <span class="text-xs text-slate-400">Em breve</span>
-            </button>
-          </div>
-          <button type="button" onclick="hideOnlineSoloView()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
-            VOLTAR
-          </button>
-        </div>
-      </div>
-
-      <!-- VISÃO DUPLA ONLINE (Lobby) -->
-      <div id="online-dupla-view" class="hidden space-y-5 sm:space-y-6 w-full">
-        <div class="space-y-2 text-center">
-          <label class="text-xs font-bold uppercase tracking-wider text-slate-300">DUPLA ONLINE</label>
-          <p class="text-xs text-slate-400">Em breve - Lobby de duplas</p>
-          <button type="button" onclick="hideOnlineDuplaView()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
-            VOLTAR
-          </button>
-        </div>
-      </div>
-
-      <!-- VISÃO ARENA ONLINE (Lobby) -->
-      <div id="online-arena-view" class="hidden space-y-5 sm:space-y-6 w-full">
-        <div class="space-y-2 text-center">
-          <label class="text-xs font-bold uppercase tracking-wider text-slate-300">ARENA ONLINE</label>
-          <p class="text-xs text-slate-400">Em breve - Lobby livre para todos</p>
-          <button type="button" onclick="hideOnlineArenaView()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
-            VOLTAR
-          </button>
-        </div>
-      </div>
+    </div>
+  </div>
 
   <!-- MODAL DE SALA ONLINE -->
   <div id="online-modal" class="hidden fixed inset-0 bg-slate-950/90 z-50 flex items-center justify-center p-4">
@@ -2707,8 +2635,8 @@
 
       // Atualiza o estado do botão Single Player Online baseado na sessão atual
       updateOnlineSingleButton();
-      // Garante que todas as views de seleção de modo voltem ao menu principal
-      resetAllSetupViews();
+      // Garante que a visão de modos online (Jogo Rápido/Convite) volte ao menu
+      resetOnlineModesUI();
     }
 
     function getCurrentPlayer() {
@@ -4010,114 +3938,25 @@
        JOGO RÁPIDO (fila de matchmaking), CONVITE (sala com código)
        e VOLTAR (menu principal).
     ------------------------------------------------------------- */
-    function showCpuModeSelection() {
+    function showOnlineModes() {
       const mainView = document.getElementById('setup-main-view');
-      const cpuView = document.getElementById('cpu-mode-view');
-      if (!mainView || !cpuView) return;
+      const modesView = document.getElementById('online-modes-view');
+      if (!mainView || !modesView) return;
       mainView.classList.add('hidden');
-      cpuView.classList.remove('hidden');
+      modesView.classList.remove('hidden');
+    }
+
+    function hideOnlineModes() {
+      // Volta ao menu principal da tela inicial
+      resetOnlineModesUI();
       gameAudio.playClick();
     }
 
-    function hideCpuModeSelection() {
+    function resetOnlineModesUI() {
       const mainView = document.getElementById('setup-main-view');
-      const cpuView = document.getElementById('cpu-mode-view');
-      if (!mainView || !cpuView) return;
-      mainView.classList.remove('hidden');
-      cpuView.classList.add('hidden');
-      gameAudio.playClick();
-    }
-
-    function showOnlineModeSelection() {
-      const mainView = document.getElementById('setup-main-view');
-      const onlineView = document.getElementById('online-mode-view');
-      if (!mainView || !onlineView) return;
-      mainView.classList.add('hidden');
-      onlineView.classList.remove('hidden');
-      gameAudio.playClick();
-    }
-
-    function hideOnlineModeView() {
-      const mainView = document.getElementById('setup-main-view');
-      const onlineView = document.getElementById('online-mode-view');
-      if (!mainView || !onlineView) return;
-      mainView.classList.remove('hidden');
-      onlineView.classList.add('hidden');
-      gameAudio.playClick();
-    }
-
-    function showOnlineSoloView() {
-      const onlineView = document.getElementById('online-mode-view');
-      const soloView = document.getElementById('online-solo-view');
-      if (!onlineView || !soloView) return;
-      onlineView.classList.add('hidden');
-      soloView.classList.remove('hidden');
-      gameAudio.playClick();
-    }
-
-    function hideOnlineSoloView() {
-      const onlineView = document.getElementById('online-mode-view');
-      const soloView = document.getElementById('online-solo-view');
-      if (!onlineView || !soloView) return;
-      onlineView.classList.remove('hidden');
-      soloView.classList.add('hidden');
-      gameAudio.playClick();
-    }
-
-    function showOnlineDuplaView() {
-      const onlineView = document.getElementById('online-mode-view');
-      const duplaView = document.getElementById('online-dupla-view');
-      if (!onlineView || !duplaView) return;
-      onlineView.classList.add('hidden');
-      duplaView.classList.remove('hidden');
-      gameAudio.playClick();
-    }
-
-    function hideOnlineDuplaView() {
-      const onlineView = document.getElementById('online-mode-view');
-      const duplaView = document.getElementById('online-dupla-view');
-      if (!onlineView || !duplaView) return;
-      onlineView.classList.remove('hidden');
-      duplaView.classList.add('hidden');
-      gameAudio.playClick();
-    }
-
-    function showOnlineArenaView() {
-      const onlineView = document.getElementById('online-mode-view');
-      const arenaView = document.getElementById('online-arena-view');
-      if (!onlineView || !arenaView) return;
-      onlineView.classList.add('hidden');
-      arenaView.classList.remove('hidden');
-      gameAudio.playClick();
-    }
-
-    function hideOnlineArenaView() {
-      const onlineView = document.getElementById('online-mode-view');
-      const arenaView = document.getElementById('online-arena-view');
-      if (!onlineView || !arenaView) return;
-      onlineView.classList.remove('hidden');
-      arenaView.classList.add('hidden');
-      gameAudio.playClick();
-    }
-
-    function startArenaGame(playerCount) {
-      selectOpponentsMode(playerCount);
-      startGame();
-    }
-
-    function resetAllSetupViews() {
-      const mainView = document.getElementById('setup-main-view');
-      const cpuView = document.getElementById('cpu-mode-view');
-      const onlineView = document.getElementById('online-mode-view');
-      const soloView = document.getElementById('online-solo-view');
-      const duplaView = document.getElementById('online-dupla-view');
-      const arenaView = document.getElementById('online-arena-view');
+      const modesView = document.getElementById('online-modes-view');
       if (mainView) mainView.classList.remove('hidden');
-      if (cpuView) cpuView.classList.add('hidden');
-      if (onlineView) onlineView.classList.add('hidden');
-      if (soloView) soloView.classList.add('hidden');
-      if (duplaView) duplaView.classList.add('hidden');
-      if (arenaView) arenaView.classList.add('hidden');
+      if (modesView) modesView.classList.add('hidden');
     }
 
     // Identificador único da conta Google (usado para impedir que a mesma
