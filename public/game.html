@@ -724,17 +724,17 @@
     </div>
   </div>
 
-  <!-- CABEÇALHO DO JOGO -->
-  <header id="game-header" class="relative z-40 w-full max-w-4xl flex flex-wrap items-center justify-between gap-2 py-2.5 px-3 sm:px-4 bg-slate-800/90  backdrop-blur-md mb-2 border border-slate-700 shadow-md">
-    <div class="flex items-center gap-2">
-      <img src="/assets/luud.svg" onerror="this.onerror=null;this.src='/assets/luud.png'" alt="LUUD" class="h-28 sm:h-40 w-auto select-none" draggable="false">
+  <!-- CABEÇALHO DO JOGO: logo e botões sempre na mesma linha, sem quebrar -->
+  <header id="game-header" class="relative z-40 w-full max-w-4xl flex flex-nowrap items-center justify-between gap-2 px-3 sm:px-4 py-2.5 bg-slate-800/90 backdrop-blur-md mb-2 border border-slate-700 shadow-md">
+    <div class="flex items-center gap-2 shrink-0">
+      <img src="/assets/luud.svg" onerror="this.onerror=null;this.src='/assets/luud.png'" alt="LUUD" class="h-20 sm:h-24 w-auto select-none shrink-0" draggable="false">
     </div>
 
-    <div class="flex items-center gap-2">
-      <button id="pause-menu-button" onclick="openPauseMenu()" class="flex h-10 items-center px-3.5 bg-slate-700 hover:bg-slate-600 text-xs font-bold  transition text-slate-200 border border-slate-600">
+    <div class="flex items-center gap-2 shrink-0 flex-nowrap">
+      <button id="pause-menu-button" onclick="openPauseMenu()" class="flex h-10 items-center px-3.5 bg-slate-700 hover:bg-slate-600 text-xs font-bold transition text-slate-200 border border-slate-600 shrink-0">
         ☰ Menu
       </button>
-      <div id="account-area-holder" class="flex items-center"></div>
+      <div id="account-area-holder" class="flex items-center shrink-0"></div>
     </div>
   </header>
 
@@ -3534,9 +3534,14 @@
 
         cellMap[key].forEach(({ player, idx }) => {
           const token = document.createElement('div');
+          const color = getPlayerColor(player);
           const teamClass = isHumanTeamPlayer(player) ? 'human-piece' : 'cpu-piece';
           token.id = `token-${player}-${idx}`;
-          token.className = `token ${teamClass} ${getPlayerColor(player).bg}`;
+          token.className = `token ${teamClass} ${color.bg}`;
+          // Aplica o hex real da cor via estilo inline para garantir que cada
+          // peça tenha sua cor própria, inclusive no modo online com cores
+          // customizadas do oponente (sem depender apenas de variáveis CSS).
+          token.style.backgroundColor = color.hex;
           token.innerHTML = '<div class="token-center"></div>';
           container.appendChild(token);
         });
