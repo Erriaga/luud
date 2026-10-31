@@ -704,11 +704,11 @@
     </div>
   </div>
 
-  <!-- HISTÓRICO DE PARTIDAS -->
+  <!-- HISTÓRICO -->
   <div id="history-modal" class="hidden fixed inset-0 z-[90] bg-slate-950/90 flex items-center justify-center p-4">
     <div class="bg-slate-900 border-2 border-slate-600 w-full max-w-xl shadow-2xl max-h-[85vh] overflow-y-auto">
       <div class="px-5 py-4 border-b-2 border-slate-700 flex items-center justify-between gap-3">
-        <h2 class="font-display text-xl sm:text-2xl font-black text-slate-100">HISTÓRICO DE PARTIDAS</h2>
+        <h2 class="font-display text-xl sm:text-2xl font-black text-slate-100">HISTÓRICO</h2>
         <button type="button" onclick="closeHistoryModal()" class="w-9 h-9 bg-slate-700 hover:bg-slate-600 text-slate-200 text-lg leading-none" aria-label="Fechar histórico">✕</button>
       </div>
 
@@ -865,13 +865,13 @@
           </div>
         </div>
         <div>
-          <h3 id="friends-sent-title" class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-3">Convites enviados (0)</h3>
+          <h3 id="friends-sent-title" class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-3">CONVITES (0)</h3>
           <div id="friends-sent" class="space-y-2">
             <p class="text-xs text-slate-500 text-center py-4">Nenhum convite enviado aguardando resposta.</p>
           </div>
         </div>
         <div>
-          <h3 id="friends-received-title" class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-3">Convites pendentes (0)</h3>
+          <h3 id="friends-received-title" class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-3">SOLICITAÇÕES (0)</h3>
           <div id="friends-received" class="space-y-2">
             <p class="text-xs text-slate-500 text-center py-4">Nenhum convite pendente.</p>
           </div>
@@ -1934,7 +1934,7 @@
     }
 
     /* -------------------------------------------------------------
-       HISTÓRICO DE PARTIDAS
+       HISTÓRICO
        Toda partida finalizada é registrada na conta do jogador
        (fim normal, desistência ou W.O.) via /api/matches, e pode
        ser consultada no menu da conta ou pelo botão Histórico.
@@ -2013,7 +2013,7 @@
           <div class="bg-slate-800 border-2 ${borderColor} p-3 flex items-center justify-between gap-3">
             <div class="min-w-0 text-left">
               <p class="font-brand font-black text-sm ${resultColor}">${win ? 'VITÓRIA' : 'DERROTA'}</p>
-              <p class="text-xs text-slate-300 truncate">${escapeHtmlText(modeLabel)} · vs ${escapeHtmlText(record.opponentName)}</p>
+              <p class="text-xs text-slate-300 truncate"><strong>${escapeHtmlText(modeLabel)}</strong> · vs ${escapeHtmlText(record.opponentName)}</p>
               <p class="text-[11px] text-slate-500">${whenLabel}</p>
             </div>
             <p class="font-mono text-lg text-slate-100 whitespace-nowrap">${record.playerScore} - ${record.opponentScore}</p>
@@ -2270,7 +2270,7 @@
           <div class="bg-slate-800 border-2 ${borderColor} p-3 flex items-center justify-between gap-3">
             <div class="min-w-0 text-left">
               <p class="font-brand font-black text-sm ${resultColor}">${win ? 'VITÓRIA' : 'DERROTA'}</p>
-              <p class="text-xs text-slate-300 truncate">${escapeHtmlText(modeLabel)} · vs ${escapeHtmlText(record.opponentName)}</p>
+              <p class="text-xs text-slate-300 truncate"><strong>${escapeHtmlText(modeLabel)}</strong> · vs ${escapeHtmlText(record.opponentName)}</p>
               <p class="text-[11px] text-slate-500">${whenLabel}</p>
             </div>
             <p class="font-mono text-lg text-slate-100 whitespace-nowrap">${record.playerScore} - ${record.opponentScore}</p>
@@ -2365,8 +2365,8 @@
       updateFriendsBadge();
 
       document.getElementById('friends-list-title').textContent = `Lista de amigos (${data.friends.length})`;
-      document.getElementById('friends-sent-title').textContent = `Solicitações enviadas (${data.sent.length})`;
-      document.getElementById('friends-received-title').textContent = `Convites pendentes (${data.received.length})`;
+      document.getElementById('friends-sent-title').textContent = `CONVITES (${data.sent.length})`;
+      document.getElementById('friends-received-title').textContent = `SOLICITAÇÕES (${data.received.length})`;
 
       // Coluna 1: Lista de amigos (clicável para abrir perfil)
       const list = document.getElementById('friends-list');
@@ -2422,7 +2422,7 @@
             <p class="text-sm font-bold text-slate-100 truncate">${escapeHtmlText(name)}</p>
             <p class="text-[11px] text-slate-400 truncate">${escapeHtmlText(f.email || '—')}</p>
           </div>
-          <button type="button" data-friend-action="cancel" data-friend-id="${escapeHtmlText(f.id)}" data-friend-name="${safeName}" class="text-[11px] text-red-400 hover:text-red-300 underline">Cancelar solicitação</button>
+          <button type="button" data-friend-action="cancel" data-friend-id="${escapeHtmlText(f.id)}" data-friend-name="${safeName}" class="w-7 h-7 flex-shrink-0 flex items-center justify-center bg-red-500 hover:bg-red-600 text-white font-bold text-sm rounded transition" title="Cancelar solicitação">✕</button>
         </div>`;
     }
 
@@ -2437,8 +2437,8 @@
             <p class="text-sm font-bold text-slate-100 truncate">${escapeHtmlText(name)}</p>
             <p class="text-[11px] text-slate-400 truncate">${escapeHtmlText(f.email || '—')}</p>
           </div>
-          <button type="button" data-friend-action="accept" data-friend-id="${escapeHtmlText(f.id)}" data-friend-name="${safeName}" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-1.5 rounded transition mr-2">Aceitar</button>
-          <button type="button" data-friend-action="decline" data-friend-id="${escapeHtmlText(f.id)}" data-friend-name="${safeName}" class="text-red-400 hover:bg-red-500/20 text-xs font-bold px-3 py-1.5 rounded transition">Recusar</button>
+          <button type="button" data-friend-action="accept" data-friend-id="${escapeHtmlText(f.id)}" data-friend-name="${safeName}" class="w-7 h-7 flex-shrink-0 flex items-center justify-center bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm rounded transition mr-2" title="Aceitar solicitação">✓</button>
+          <button type="button" data-friend-action="decline" data-friend-id="${escapeHtmlText(f.id)}" data-friend-name="${safeName}" class="w-7 h-7 flex-shrink-0 flex items-center justify-center bg-red-500 hover:bg-red-600 text-white font-bold text-sm rounded transition" title="Recusar solicitação">✕</button>
         </div>`;
     }
 
@@ -2484,8 +2484,8 @@
           action = `<button type="button" disabled class="text-xs font-bold px-3 py-1.5 rounded bg-slate-700/50 text-slate-500">Solicitação enviada</button>`;
           statusText = '';
         } else if (rel === 'received') {
-          action = `<button type="button" data-friend-action="accept" data-friend-id="${escapeHtmlText(acc.id)}" data-friend-name="${safeName}" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-1.5 rounded transition mr-2">Aceitar</button>
-                    <button type="button" data-friend-action="decline" data-friend-id="${escapeHtmlText(acc.id)}" data-friend-name="${safeName}" class="text-red-400 hover:bg-red-500/20 text-xs font-bold px-3 py-1.5 rounded transition">Recusar</button>`;
+          action = `<button type="button" data-friend-action="accept" data-friend-id="${escapeHtmlText(acc.id)}" data-friend-name="${safeName}" class="w-7 h-7 flex-shrink-0 flex items-center justify-center bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm rounded transition mr-2" title="Aceitar solicitação">✓</button>
+                    <button type="button" data-friend-action="decline" data-friend-id="${escapeHtmlText(acc.id)}" data-friend-name="${safeName}" class="w-7 h-7 flex-shrink-0 flex items-center justify-center bg-red-500 hover:bg-red-600 text-white font-bold text-sm rounded transition" title="Recusar solicitação">✕</button>`;
           statusText = '';
         }
 
