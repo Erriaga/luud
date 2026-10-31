@@ -865,43 +865,43 @@
         </div>
       </div>
 
-      <!-- Placar da partida em duas linhas -->
+      <!-- Placar da partida: cada linha é [● cor] Nome | Pontos -->
       <div id="scoreboard" class="bg-slate-800 border border-slate-600 transition-all duration-300 w-full max-w-md p-3">
-        <!-- Linha 1: Jogador vs Oponente -->
-        <div class="flex items-center justify-between gap-4 mb-1">
+        <!-- Linha 1: Jogador -->
+        <div class="flex items-center justify-between gap-4 mb-1.5">
           <div class="flex items-center gap-3 min-w-0">
-            <span class="w-2 h-2 rounded-full bg-red-400 shrink-0"></span>
-            <span id="score-player-name" class="max-w-[200px] truncate font-bold text-sm">Você</span>
-            <span id="score-human" class="text-amber-400 font-black text-sm">0</span>
+            <span id="score-p1-dot" class="w-2 h-2 rounded-full bg-red-400 shrink-0"></span>
+            <span id="score-p1-name" class="max-w-[150px] truncate font-bold text-sm">Jogador</span>
+            <span id="score-p1-points" class="text-amber-400 font-black text-sm">0</span>
           </div>
-          <div class="flex items-center gap-3 min-w-0 text-right">
-            <span id="score-cpu" class="text-blue-400 font-black text-sm">0</span>
-            <span id="score-cpu-label" class="truncate font-bold text-sm text-slate-400">CPU</span>
-            <span class="w-2 h-2 rounded-full bg-blue-400 shrink-0"></span>
-          </div>
+          <span class="w-2 h-2 rounded-full bg-red-400 shrink-0"></span>
         </div>
-        <!-- Linha 2: Placar separado (usado para 4 jogadores) -->
-        <div id="scoreboard-line2" class="hidden flex items-center justify-between gap-2 mt-1 pt-1 border-t border-slate-700">
-          <div class="flex items-center gap-2 min-w-0 text-xs">
-            <span class="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0"></span>
-            <span id="score-p1-name" class="truncate font-bold">J1</span>
-            <span id="score-p1" class="text-amber-400 font-black">0</span>
+        <!-- Linha 2: Oponente -->
+        <div class="flex items-center justify-between gap-4">
+          <div class="flex items-center gap-3 min-w-0">
+            <span id="score-p2-dot" class="w-2 h-2 rounded-full bg-blue-400 shrink-0"></span>
+            <span id="score-p2-name" class="max-w-[150px] truncate font-bold text-sm">Oponente</span>
+            <span id="score-p2-points" class="text-blue-400 font-black text-sm">0</span>
           </div>
-          <div class="flex items-center gap-2 min-w-0 text-xs">
-            <span class="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0"></span>
-            <span id="score-p2-name" class="truncate font-bold">J2</span>
-            <span id="score-p2" class="text-emerald-400 font-black">0</span>
+          <span class="w-2 h-2 rounded-full bg-blue-400 shrink-0"></span>
+        </div>
+        <!-- Linha 3: Jogador 3 (apenas ARENA) -->
+        <div id="score-p3-row" class="hidden flex items-center justify-between gap-4 mt-1.5">
+          <div class="flex items-center gap-3 min-w-0">
+            <span id="score-p3-dot" class="w-2 h-2 rounded-full bg-green-400 shrink-0"></span>
+            <span id="score-p3-name" class="max-w-[150px] truncate font-bold text-sm">Jogador 3</span>
+            <span id="score-p3-points" class="text-emerald-400 font-black text-sm">0</span>
           </div>
-          <div class="flex items-center gap-2 min-w-0 text-xs">
-            <span class="w-1.5 h-1.5 rounded-full bg-yellow-400 shrink-0"></span>
-            <span id="score-p3-name" class="truncate font-bold">J3</span>
-            <span id="score-p3" class="text-yellow-400 font-black">0</span>
+          <span class="w-2 h-2 rounded-full bg-green-400 shrink-0"></span>
+        </div>
+        <!-- Linha 4: Jogador 4 (apenas ARENA) -->
+        <div id="score-p4-row" class="hidden flex items-center justify-between gap-4 mt-1.5">
+          <div class="flex items-center gap-3 min-w-0">
+            <span id="score-p4-dot" class="w-2 h-2 rounded-full bg-yellow-400 shrink-0"></span>
+            <span id="score-p4-name" class="max-w-[150px] truncate font-bold text-sm">Jogador 4</span>
+            <span id="score-p4-points" class="text-yellow-400 font-black text-sm">0</span>
           </div>
-          <div class="flex items-center gap-2 min-w-0 text-xs">
-            <span class="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0"></span>
-            <span id="score-p4-name" class="truncate font-bold">J4</span>
-            <span id="score-p4" class="text-blue-400 font-black">0</span>
-          </div>
+          <span class="w-2 h-2 rounded-full bg-yellow-400 shrink-0"></span>
         </div>
       </div>
 
@@ -2957,46 +2957,42 @@
     }
 
     function updateScoreboardUI() {
-      if (isOnlineGame) {
-        // Placar online: primeiro nome do jogador local x primeiro nome do oponente
-        document.getElementById('score-player-name').innerText = playerName || 'Você';
-        document.getElementById('score-cpu-label').innerText = getFirstName(onlineOpponentName) || 'Oponente';
-        document.getElementById('score-cpu-label').style.cursor = 'pointer';
-        document.getElementById('score-cpu-label').title = 'Clique no oponente';
-        document.getElementById('score-cpu-label').onclick = openOpponentMenu;
-      } else {
-        document.getElementById('score-player-name').innerText = playerName || (isTeamMode() ? 'Dupla' : 'Jogador');
-        document.getElementById('score-cpu-label').innerText = isTeamMode() ? 'CPUs' : 'CPU';
-        document.getElementById('score-cpu-label').style.cursor = 'default';
-        document.getElementById('score-cpu-label').title = '';
-        document.getElementById('score-cpu-label').onclick = null;
-      }
-      document.getElementById('score-human').innerText = getHumanTeamScore();
-      document.getElementById('score-cpu').innerText = getCpuScore();
-      document.getElementById('scoreboard').title = `Primeiro a marcar ${getWinningScore()} pontos vence`;
+      const player1 = activePlayers[0];
+      const player2 = activePlayers[1];
+      const player3 = activePlayers[2];
+      const player4 = activePlayers[3];
 
-      // Mostrar/esconder linha 2 do placar quando houver 4 jogadores ativos
-      const line2 = document.getElementById('scoreboard-line2');
-      if (line2) {
-        if (activePlayers.length === 4) {
-          line2.classList.remove('hidden');
-          // Atualiza nomes e pontuações dos 4 jogadores
-          const p1 = activePlayers[0];
-          const p2 = activePlayers[1];
-          const p3 = activePlayers[2];
-          const p4 = activePlayers[3];
-          document.getElementById('score-p1-name').innerText = getPlayerDisplayName(p1);
-          document.getElementById('score-p1').innerText = playerScores[p1] || 0;
-          document.getElementById('score-p2-name').innerText = getPlayerDisplayName(p2);
-          document.getElementById('score-p2').innerText = playerScores[p2] || 0;
-          document.getElementById('score-p3-name').innerText = getPlayerDisplayName(p3);
-          document.getElementById('score-p3').innerText = playerScores[p3] || 0;
-          document.getElementById('score-p4-name').innerText = getPlayerDisplayName(p4);
-          document.getElementById('score-p4').innerText = playerScores[p4] || 0;
-        } else {
-          line2.classList.add('hidden');
-        }
+      // Linha 1: Jogador 1
+      document.getElementById('score-p1-name').innerText = getPlayerDisplayName(player1) || 'Jogador 1';
+      document.getElementById('score-p1-points').innerText = playerScores[player1] || 0;
+      document.getElementById('score-p1-dot').className = `w-2 h-2 rounded-full shrink-0 ${getPlayerColor(player1).bg}`;
+
+      // Linha 2: Jogador 2
+      document.getElementById('score-p2-name').innerText = getPlayerDisplayName(player2) || 'Jogador 2';
+      document.getElementById('score-p2-points').innerText = playerScores[player2] || 0;
+      document.getElementById('score-p2-dot').className = `w-2 h-2 rounded-full shrink-0 ${getPlayerColor(player2).bg}`;
+
+      // Linhas 3 e 4: apenas para modo ARENA (4 jogadores)
+      const line3 = document.getElementById('score-p3-row');
+      const line4 = document.getElementById('score-p4-row');
+
+      if (activePlayers.length === 4) {
+        line3.classList.remove('hidden');
+        line4.classList.remove('hidden');
+
+        document.getElementById('score-p3-name').innerText = getPlayerDisplayName(player3) || 'Jogador 3';
+        document.getElementById('score-p3-points').innerText = playerScores[player3] || 0;
+        document.getElementById('score-p3-dot').className = `w-2 h-2 rounded-full shrink-0 ${getPlayerColor(player3).bg}`;
+
+        document.getElementById('score-p4-name').innerText = getPlayerDisplayName(player4) || 'Jogador 4';
+        document.getElementById('score-p4-points').innerText = playerScores[player4] || 0;
+        document.getElementById('score-p4-dot').className = `w-2 h-2 rounded-full shrink-0 ${getPlayerColor(player4).bg}`;
+      } else {
+        line3.classList.add('hidden');
+        line4.classList.add('hidden');
       }
+
+      document.getElementById('scoreboard').title = `Primeiro a marcar ${getWinningScore()} pontos vence`;
     }
 
     function awardFinalPoint(player) {
