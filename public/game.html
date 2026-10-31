@@ -565,6 +565,30 @@
       </div>
       </div>
 
+      <!-- SELEÇÃO DO MODO CPU -->
+      <div id="cpu-mode-view" class="hidden space-y-5 sm:space-y-6 w-full">
+        <div class="space-y-2 text-center">
+          <label class="text-xs font-bold uppercase tracking-wider text-slate-300">SELECIONE O MODO CPU</label>
+          <div class="grid grid-cols-3 gap-2">
+            <button type="button" onclick="selectOpponentsMode(1); startGame()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
+              <span class="font-bold text-sm text-slate-100">SOLO</span>
+              <span class="text-xs text-slate-400">1 vs 1</span>
+            </button>
+            <button type="button" onclick="selectOpponentsMode(3); startGame()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
+              <span class="font-bold text-sm text-slate-100">DUPLA</span>
+              <span class="text-xs text-slate-400">2 vs 2</span>
+            </button>
+            <button type="button" onclick="startArenaGame(4)" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
+              <span class="font-bold text-sm text-slate-100">ARENA</span>
+              <span class="text-xs text-slate-400">Cada um por si</span>
+            </button>
+          </div>
+          <button type="button" onclick="hideCpuModeSelection()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
+            VOLTAR
+          </button>
+        </div>
+      </div>
+
       <!-- VISÃO DE MODOS ONLINE (Jogo Rápido / Convite) -->
       <div id="online-modes-view" class="hidden space-y-5 sm:space-y-6 w-full">
         <p class="text-xs font-bold uppercase tracking-wider text-slate-400">ONLINE</p>
