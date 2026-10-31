@@ -4543,8 +4543,8 @@
       };
 
       // O jogador ocupa o slot definido pelo servidor, mas mantém a cor
-      // personalizada escolhida: ela é aplicada sobre o slot local.
-      selectedHumanColor = localColorKey;
+      // personalizada escolhida na tela inicial. NÃO sobrescreve selectedHumanColor
+      // com a cor do slot - a cor visual vem da escolha do usuário.
       updateColorVariables();
       updateColorSelectionUI();
 
