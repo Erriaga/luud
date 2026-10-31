@@ -2989,10 +2989,12 @@
         line3.classList.add('hidden');
         line4.classList.add('hidden');
 
-        const cpuTeamScore = (playerScores[orderedPlayers[2]] || 0) + (playerScores[orderedPlayers[3]] || 0);
+        // No modo DUPLA, o jogador humano (p1) é o "Dupla" e o primeiro oponente (p4, último na ordem horária) representa o "CPU"
+        const p4 = orderedPlayers[3];
+        const cpuTeamScore = (playerScores[orderedPlayers[2]] || 0) + (playerScores[p4] || 0);
         document.getElementById('score-line2-name').innerText = 'CPU';
         document.getElementById('score-line2-points').innerText = cpuTeamScore;
-        document.getElementById('score-line2-dot').style.backgroundColor = getPlayerColor(orderedPlayers[2]).hex;
+        document.getElementById('score-line2-dot').style.backgroundColor = getPlayerColor(p4).hex;
         document.getElementById('score-line2-dot').className = 'w-2 h-2 rounded-full shrink-0';
 
         document.getElementById('score-line1-name').innerText = 'Dupla';
