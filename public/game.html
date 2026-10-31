@@ -1,6 +1,21 @@
 <!DOCTYPE html>
-</html>
-</body>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LUUD - O seu jogo de Ludo!</title>
+  <!-- Ícone da aba da página: o próprio logo da marca -->
+  <link rel="icon" href="/assets/luud.svg" type="image/svg+xml">
+  <link rel="icon" href="/assets/luud.png" type="image/png">
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Anton (display), Oswald (interface) e Fredoka (texto do jogo) -->
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Fredoka:wght@400;600;700&family=Oswald:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Google Identity Services (login Conta Google) -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+
+  <style>
+    :root {
       --red-player-color: #ef233c;
       --red-player-border: #ef233c;
       --red-player-cell-border: #cbd5e1;
@@ -548,102 +563,101 @@
       </div>
       </div>
 
-
-  <!-- SELEÇÃO DO MODO CPU -->
-  <div id="cpu-mode-view" class="hidden space-y-5 sm:space-y-6 w-full">
-    <div class="space-y-2 text-center">
-      <label class="text-xs font-bold uppercase tracking-wider text-slate-300">SELECIONE O MODO CPU</label>
-      <div class="grid grid-cols-3 gap-2">
-        <button type="button" onclick="selectOpponentsMode(1); startGame()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
-          <span class="font-bold text-sm text-slate-100">SOLO</span>
-          <span class="text-xs text-slate-400">1 vs 1</span>
-        </button>
-        <button type="button" onclick="selectOpponentsMode(3); startGame()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
-          <span class="font-bold text-sm text-slate-100">DUPLA</span>
-          <span class="text-xs text-slate-400">2 vs 2</span>
-        </button>
-        <button type="button" onclick="startArenaGame(4)" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
-          <span class="font-bold text-sm text-slate-100">ARENA</span>
-          <span class="text-xs text-slate-400">Cada um por si</span>
-        </button>
+      <!-- SELEÇÃO DO MODO CPU -->
+      <div id="cpu-mode-view" class="hidden space-y-5 sm:space-y-6 w-full">
+        <div class="space-y-2 text-center">
+          <label class="text-xs font-bold uppercase tracking-wider text-slate-300">SELECIONE O MODO CPU</label>
+          <div class="grid grid-cols-3 gap-2">
+            <button type="button" onclick="selectOpponentsMode(1); startGame()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
+              <span class="font-bold text-sm text-slate-100">SOLO</span>
+              <span class="text-xs text-slate-400">1 vs 1</span>
+            </button>
+            <button type="button" onclick="selectOpponentsMode(3); startGame()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
+              <span class="font-bold text-sm text-slate-100">DUPLA</span>
+              <span class="text-xs text-slate-400">2 vs 2</span>
+            </button>
+            <button type="button" onclick="startArenaGame(4)" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
+              <span class="font-bold text-sm text-slate-100">ARENA</span>
+              <span class="text-xs text-slate-400">Cada um por si</span>
+            </button>
+          </div>
+          <button type="button" onclick="hideCpuModeSelection()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
+            VOLTAR
+          </button>
+        </div>
       </div>
-      <button type="button" onclick="hideCpuModeSelection()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
-        VOLTAR
-      </button>
-    </div>
-  </div>
 
-  <!-- SELEÇÃO DO MODO ONLINE -->
-  <div id="online-mode-view" class="hidden space-y-5 sm:space-y-6 w-full">
-    <div class="space-y-2 text-center">
-      <label class="text-xs font-bold uppercase tracking-wider text-slate-300">SELECIONE O MODO ONLINE</label>
-      <div class="grid grid-cols-3 gap-2">
-        <button type="button" onclick="showOnlineSoloView()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
-          <span class="font-bold text-sm text-slate-100">SOLO</span>
-          <span class="text-xs text-slate-400">1 vs 1</span>
-        </button>
-        <button type="button" onclick="showOnlineDuplaView()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
-          <span class="font-bold text-sm text-slate-100">DUPLA</span>
-          <span class="text-xs text-slate-400">2 vs 2</span>
-        </button>
-        <button type="button" onclick="showOnlineArenaView()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
-          <span class="font-bold text-sm text-slate-100">ARENA</span>
-          <span class="text-xs text-slate-400">Cada um por si</span>
-        </button>
+      <!-- SELEÇÃO DO MODO ONLINE -->
+      <div id="online-mode-view" class="hidden space-y-5 sm:space-y-6 w-full">
+        <div class="space-y-2 text-center">
+          <label class="text-xs font-bold uppercase tracking-wider text-slate-300">SELECIONE O MODO ONLINE</label>
+          <div class="grid grid-cols-3 gap-2">
+            <button type="button" onclick="showOnlineSoloView()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
+              <span class="font-bold text-sm text-slate-100">SOLO</span>
+              <span class="text-xs text-slate-400">1 vs 1</span>
+            </button>
+            <button type="button" onclick="showOnlineDuplaView()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
+              <span class="font-bold text-sm text-slate-100">DUPLA</span>
+              <span class="text-xs text-slate-400">2 vs 2</span>
+            </button>
+            <button type="button" onclick="showOnlineArenaView()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
+              <span class="font-bold text-sm text-slate-100">ARENA</span>
+              <span class="text-xs text-slate-400">Cada um por si</span>
+            </button>
+          </div>
+          <button type="button" onclick="hideOnlineModeView()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
+            VOLTAR
+          </button>
+        </div>
       </div>
-      <button type="button" onclick="hideOnlineModeView()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
-        VOLTAR
-      </button>
-    </div>
-  </div>
 
-  <!-- VISÃO SOLO ONLINE (Jogo Rápido / Convite / Liga) -->
-  <div id="online-solo-view" class="hidden space-y-5 sm:space-y-6 w-full">
-    <div class="space-y-2 text-center">
-      <label class="text-xs font-bold uppercase tracking-wider text-slate-300">SOLO ONLINE</label>
-      <div class="grid grid-cols-3 gap-2">
-        <button type="button" onclick="startQuickMatch()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
-          <span class="font-bold text-sm text-slate-100">JOGO RÁPIDO</span>
-          <span class="text-xs text-slate-400">Matchmaking automático</span>
-        </button>
-        <button type="button" onclick="openInviteModal()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
-          <span class="font-bold text-sm text-slate-100">CONVITE</span>
-          <span class="text-xs text-slate-400">Criar/Entrar com código</span>
-        </button>
-        <button type="button" disabled class="p-3 border-2 border-transparent bg-slate-700 text-slate-500 transition flex flex-col items-center opacity-70 cursor-not-allowed disabled:opacity-70 disabled:cursor-not-allowed">
-          <span class="font-bold text-sm text-slate-100">LIGA</span>
-          <span class="text-xs text-slate-400">Em breve</span>
-        </button>
+      <!-- VISÃO SOLO ONLINE (Jogo Rápido / Convite / Liga) -->
+      <div id="online-solo-view" class="hidden space-y-5 sm:space-y-6 w-full">
+        <div class="space-y-2 text-center">
+          <label class="text-xs font-bold uppercase tracking-wider text-slate-300">SOLO ONLINE</label>
+          <div class="grid grid-cols-3 gap-2">
+            <button type="button" onclick="startQuickMatch()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
+              <span class="font-bold text-sm text-slate-100">JOGO RÁPIDO</span>
+              <span class="text-xs text-slate-400">Matchmaking automático</span>
+            </button>
+            <button type="button" onclick="openInviteModal()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
+              <span class="font-bold text-sm text-slate-100">CONVITE</span>
+              <span class="text-xs text-slate-400">Criar/Entrar com código</span>
+            </button>
+            <button type="button" disabled class="p-3 border-2 border-transparent bg-slate-700 text-slate-500 transition flex flex-col items-center opacity-70 cursor-not-allowed disabled:opacity-70 disabled:cursor-not-allowed">
+              <span class="font-bold text-sm text-slate-100">LIGA</span>
+              <span class="text-xs text-slate-400">Em breve</span>
+            </button>
+          </div>
+          <button type="button" onclick="hideOnlineSoloView()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
+            VOLTAR
+          </button>
+        </div>
       </div>
-      <button type="button" onclick="hideOnlineSoloView()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
-        VOLTAR
-      </button>
-    </div>
-  </div>
 
-  <!-- VISÃO DUPLA ONLINE (Lobby) -->
-  <div id="online-dupla-view" class="hidden space-y-5 sm:space-y-6 w-full">
-    <div class="space-y-2 text-center">
-      <label class="text-xs font-bold uppercase tracking-wider text-slate-300">DUPLA ONLINE</label>
-      <p class="text-xs text-slate-400">Em breve - Lobby de duplas</p>
-      <button type="button" onclick="hideOnlineDuplaView()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
-        VOLTAR
-      </button>
-    </div>
-  </div>
+      <!-- VISÃO DUPLA ONLINE (Lobby) -->
+      <div id="online-dupla-view" class="hidden space-y-5 sm:space-y-6 w-full">
+        <div class="space-y-2 text-center">
+          <label class="text-xs font-bold uppercase tracking-wider text-slate-300">DUPLA ONLINE</label>
+          <p class="text-xs text-slate-400">Em breve - Lobby de duplas</p>
+          <button type="button" onclick="hideOnlineDuplaView()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
+            VOLTAR
+          </button>
+        </div>
+      </div>
 
-  <!-- VISÃO ARENA ONLINE (Lobby) -->
-  <div id="online-arena-view" class="hidden space-y-5 sm:space-y-6 w-full">
-    <div class="space-y-2 text-center">
-      <label class="text-xs font-bold uppercase tracking-wider text-slate-300">ARENA ONLINE</label>
-      <p class="text-xs text-slate-400">Em breve - Lobby livre para todos</p>
-      <button type="button" onclick="hideOnlineArenaView()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
-        VOLTAR
-      </button>
-    </div>
-  </div>
+      <!-- VISÃO ARENA ONLINE (Lobby) -->
+      <div id="online-arena-view" class="hidden space-y-5 sm:space-y-6 w-full">
+        <div class="space-y-2 text-center">
+          <label class="text-xs font-bold uppercase tracking-wider text-slate-300">ARENA ONLINE</label>
+          <p class="text-xs text-slate-400">Em breve - Lobby livre para todos</p>
+          <button type="button" onclick="hideOnlineArenaView()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
+            VOLTAR
+          </button>
+        </div>
+      </div>
 
-  <!-- MODAL DE SALA ONLINE -->
+      <!-- MODAL DE SALA ONLINE -->
   <div id="online-modal" class="hidden fixed inset-0 bg-slate-950/90 z-50 flex items-center justify-center p-4">
     <div class="bg-slate-800 border border-slate-700 p-6 sm:p-8 max-w-md w-full text-center space-y-5 shadow-2xl">
       <h2 id="online-modal-title" class="font-display text-2xl font-black text-slate-100">Convite</h2>
@@ -2693,7 +2707,7 @@
 
       // Atualiza o estado do botão Single Player Online baseado na sessão atual
       updateOnlineSingleButton();
-      // Garante que a visão de modos online (Jogo Rápido/Convite) volte ao menu
+      // Garante que todas as views de seleção de modo voltem ao menu principal
       resetAllSetupViews();
     }
 
@@ -3996,8 +4010,6 @@
        JOGO RÁPIDO (fila de matchmaking), CONVITE (sala com código)
        e VOLTAR (menu principal).
     ------------------------------------------------------------- */
-    function showOnlineModes() {
-
     function showCpuModeSelection() {
       const mainView = document.getElementById('setup-main-view');
       const cpuView = document.getElementById('cpu-mode-view');
