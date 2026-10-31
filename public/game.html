@@ -282,14 +282,14 @@
       cursor: pointer;
     }
 
-    /* Peças Perfeitamente Circulares - preenchimento sólido com cor do jogador */
+    /* Peças Perfeitamente Circulares - preenchimento sólido com cor do jogador, sem contorno preto */
     .token {
       width: 82%;
       height: 82%;
       aspect-ratio: 1 / 1;
       border-radius: 50%;
-      border: 3.5px solid #0f172a;
-      box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.9), 0 4px 10px rgba(0, 0, 0, 0.55);
+      border: none;
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.9), 0 4px 10px rgba(0, 0, 0, 0.45);
       transition: transform 0.2s ease-in-out;
       cursor: pointer;
       touch-action: manipulation;
@@ -308,14 +308,12 @@
     }
 
     .token.human-piece {
-      border-color: #ffffff;
       outline: 2px solid rgba(255, 255, 255, 0.95);
       outline-offset: 1px;
       box-shadow: 0 0 0 2px #0f172a, 0 4px 10px rgba(0, 0, 0, 0.6);
     }
 
     .token.cpu-piece {
-      border-color: #0f172a;
       outline: 2px solid rgba(15, 23, 42, 0.95);
       outline-offset: 1px;
       box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9), 0 4px 10px rgba(0, 0, 0, 0.55);
@@ -794,7 +792,7 @@
 
       <!-- Placar da partida (fica acima e fora da caixa de turno e dado) -->
       <div id="scoreboard" class="w-full flex items-center justify-center gap-2 px-3 py-1.5 bg-slate-800 border border-slate-600 transition-all duration-300 text-slate-100 font-bold text-xs sm:text-sm whitespace-nowrap">
-        <span id="score-player-name" class="max-w-[38vw] lg:max-w-[140px] truncate">Jogador</span>
+        <span id="score-player-name" class="max-w-[38vw] lg:max-w-[140px] truncate">Você</span>
         <span id="score-human">0</span>
         <span class="text-slate-500">-</span>
         <span id="score-cpu">0</span>
@@ -3550,7 +3548,6 @@
           token.className = `token ${teamClass} ${color.bg}`;
           // Preenchimento sólido com a cor real do jogador (garante peças distintas no online)
           token.style.backgroundColor = color.hex;
-          token.style.borderColor = '#0f172a';
           token.style.color = color.hex;
           token.innerHTML = '<div class="token-center"></div>';
           container.appendChild(token);
