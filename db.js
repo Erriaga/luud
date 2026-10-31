@@ -486,7 +486,7 @@ async function listMatchRecords(userId) {
     try {
       const p = getPool();
       const result = await p.query(
-        `SELECT id, finished_at, mode, result, player_score AS "playerScore", opponent_score AS "opponentScore", opponent_name AS "opponentName" FROM matches WHERE user_id = $1 ORDER BY finished_at DESC LIMIT 50`,
+        `SELECT id, finished_at AS "finishedAt", mode, result, player_score AS "playerScore", opponent_score AS "opponentScore", opponent_name AS "opponentName" FROM matches WHERE user_id = $1 ORDER BY finished_at DESC LIMIT 50`,
         [userId]
       );
       return { matches: result.rows };
@@ -515,7 +515,10 @@ async function getFriends(userId) {
          FROM friends f 
          JOIN users u ON u.id = f.friend_id 
          WHERE f.user_id = $1 
-         ORDER BY u.player_name ASC, u.display_name ASC`,
+         ORDER BY 
+           split_part(u.player_name, ' ', 1) ASC,
+           split_part(u.player_name, ' ', 2) ASC,
+           u.email ASC`,
         [userId]
       );
       return result.rows.map(normalizeUserFromDb);
@@ -532,7 +535,17 @@ async function getFriends(userId) {
   return current.friends
     .map(id => users[id] ? normalizeUser(users[id]) : null)
     .filter(Boolean)
-    .sort((a, b) => (a.playerName || a.displayName || a.email).localeCompare(b.playerName || b.displayName || b.email));
+    .sort((a, b) => {
+      const getFirstName = (name) => (name || '').split(' ')[0] || '';
+      const getLastName = (name) => (name || '').split(' ').slice(1).join(' ') || '';
+      const firstA = getFirstName(a.playerName || a.displayName);
+      const firstB = getFirstName(b.playerName || b.displayName);
+      if (firstA !== firstB) return firstA.localeCompare(firstB);
+      const lastA = getLastName(a.playerName || a.displayName);
+      const lastB = getLastName(b.playerName || b.displayName);
+      if (lastA !== lastB) return lastA.localeCompare(lastB);
+      return (a.email || '').localeCompare(b.email || '');
+    });
 }
 
 async function getSentRequests(userId) {
