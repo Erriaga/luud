@@ -488,7 +488,7 @@
 <body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col items-center justify-between p-2 sm:p-4">
 
   <!-- TELA INICIAL DE CONFIGURAÇÃO -->
-  <div id="setup-screen" class="fixed inset-0 bg-slate-950 z-50 flex items-center justify-center overflow-y-auto p-4">
+  <div id="setup-screen" class="fixed inset-0 bg-slate-950/95 z-50 flex items-center justify-center overflow-y-auto p-4">
     <div class="bg-slate-800 border border-slate-700 p-4 sm:p-6 max-w-md w-full shadow-2xl text-center space-y-5 sm:space-y-6 my-auto">
       <div class="flex flex-col items-center gap-1">
         <img src="/assets/luud.svg" onerror="this.onerror=null;this.src='/assets/luud.png'" alt="LUUD" class="w-64 sm:w-80 h-auto select-none" draggable="false">
@@ -549,79 +549,59 @@
         </div>
       </div>
 
-      <!-- Escolha do Modo de Jogo -->
-      <div id="mode-selection-view" class="space-y-5 sm:space-y-6 w-full">
-        <div class="space-y-2 text-center">
-          <label class="text-xs font-bold uppercase tracking-wider text-slate-300">MODO DE JOGO</label>
-          <div class="grid grid-cols-2 gap-3">
-            <button type="button" onclick="showCpuModeSelection()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
-              <span class="font-bold text-sm text-slate-100">JOGAR VS CPU</span>
-              <span class="text-xs text-slate-400">MODO SOLO</span>
-            </button>
-            <button type="button" onclick="showOnlineConfig()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
-              <span class="font-bold text-sm text-slate-100">JOGAR ONLINE</span>
-              <span class="text-xs text-slate-400">MULTIPLAYER</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Seleção do Modo CPU -->
-      <div id="cpu-mode-view" class="hidden space-y-5 sm:space-y-6 w-full">
-        <div class="space-y-2 text-center">
-          <label class="text-xs font-bold uppercase tracking-wider text-slate-300">SELECIONE O MODO CPU</label>
-          <div class="grid grid-cols-3 gap-2">
-            <button type="button" onclick="selectOpponentsMode(1); startGame()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
-              <span class="font-bold text-sm text-slate-100">1 VS 1</span>
-            </button>
-            <button type="button" onclick="selectOpponentsMode(3); startGame()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
-              <span class="font-bold text-sm text-slate-100">1 VS 3</span>
-            </button>
-            <button type="button" onclick="selectOpponentsMode(3); startGame()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
-              <span class="font-bold text-sm text-slate-100">2 VS 2</span>
-            </button>
-          </div>
-          <button type="button" onclick="hideCpuModeSelection()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
-            VOLTAR
+      <!-- Escolha do Número de Oponentes (CPU) -->
+      <div class="space-y-2 text-center">
+        <label class="text-xs font-bold uppercase tracking-wider text-slate-300">MODO DE JOGO</label>
+        <p class="text-xs font-bold uppercase tracking-wider text-slate-400">vs CPU</p>
+        <div class="grid grid-cols-2 gap-3">
+          <button type="button" onclick="selectOpponentsMode(1); startGame()" id="mode-btn-1" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
+            <span class="font-bold text-sm text-slate-100">SINGLE PLAYER</span>
+            <span class="text-xs text-slate-400">1 vs 1</span>
+          </button>
+          <button type="button" onclick="selectOpponentsMode(3); startGame()" id="mode-btn-3" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
+            <span class="font-bold text-sm text-slate-100">MULTIPLAYER</span>
+            <span class="text-xs text-slate-400">2 vs 2</span>
           </button>
         </div>
       </div>
 
-      <!-- Configuração Online -->
-      <div id="online-config-view" class="hidden space-y-5 sm:space-y-6 w-full">
-        <div class="space-y-2 text-center">
-          <label class="text-xs font-bold uppercase tracking-wider text-slate-300">CONFIGURAÇÃO ONLINE</label>
-          <div class="flex gap-1">
-            <button type="button" onclick="selectOnlineMode('1v1')" id="online-tab-1v1" class="flex-1 py-2 border-b-2 border-transparent bg-slate-700 hover:bg-slate-600 text-xs font-bold transition text-slate-300">
-              1 VS 1
-            </button>
-            <button type="button" onclick="selectOnlineMode('1v3')" id="online-tab-1v3" class="flex-1 py-2 border-b-2 border-transparent bg-slate-700 hover:bg-slate-600 text-xs font-bold transition text-slate-500">
-              1 VS 3
-            </button>
-            <button type="button" onclick="selectOnlineMode('2v2')" id="online-tab-2v2" class="flex-1 py-2 border-b-2 border-transparent bg-slate-700 hover:bg-slate-600 text-xs font-bold transition text-slate-500">
-              2 VS 2
-            </button>
-          </div>
-          <p class="text-xs font-bold uppercase tracking-wider text-slate-400 mt-4">SELECIONE O TIPO DE PARTIDA</p>
-          <div class="grid grid-cols-3 gap-2">
-            <button type="button" onclick="startQuickMatch()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
-              <span class="font-bold text-sm text-slate-100">JOGO RÁPIDO</span>
-              <span class="text-xs text-slate-400">Partida aleatória</span>
-            </button>
-            <button type="button" onclick="openInviteModal()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
-              <span class="font-bold text-sm text-slate-100">POR CONVITE</span>
-              <span class="text-xs text-slate-400">Chame um amigo</span>
-            </button>
-            <button type="button" disabled class="p-3 border-2 border-transparent bg-slate-700 text-slate-500 transition flex flex-col items-center opacity-70 cursor-not-allowed disabled:opacity-70 disabled:cursor-not-allowed">
-              <span class="font-bold text-sm text-slate-100">CLASSIFICATÓRIA</span>
-              <span class="text-xs text-slate-400">EM BREVE</span>
-            </button>
-          </div>
-          <button type="button" onclick="hideOnlineConfig()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
-            VOLTAR
+      <div class="space-y-2 text-center">
+        <p class="text-xs font-bold uppercase tracking-wider text-slate-400">ONLINE</p>
+        <div class="grid grid-cols-3 gap-1">
+          <button type="button" id="online-single-btn" onclick="showOnlineModes()" class="p-3 border-2 border-transparent bg-slate-700 text-slate-500 transition flex flex-col items-center opacity-70 cursor-not-allowed disabled:opacity-70 disabled:cursor-not-allowed">
+            <span class="font-bold text-sm text-slate-100">SINGLE PLAYER</span>
+            <span class="text-xs text-slate-400">FAZER LOGIN</span>
+          </button>
+          <button type="button" disabled class="p-3 border-2 border-transparent bg-slate-700 text-slate-500 transition flex flex-col items-center opacity-70 cursor-not-allowed">
+            <span class="font-bold text-sm text-slate-100">MULTIPLAYER</span>
+            <span class="text-xs text-slate-400">EM BREVE</span>
+          </button>
+          <button type="button" disabled class="p-3 border-2 border-transparent bg-yellow-500 text-slate-900 transition flex flex-col items-center opacity-90 cursor-not-allowed">
+            <span class="font-bold text-sm text-slate-900">CLASSIFICATÓRIA</span>
+            <span class="text-xs text-slate-400">EM BREVE</span>
           </button>
         </div>
       </div>
+      </div>
+
+      <!-- VISÃO DE MODOS ONLINE (Jogo Rápido / Convite) -->
+      <div id="online-modes-view" class="hidden space-y-5 sm:space-y-6 w-full">
+        <p class="text-xs font-bold uppercase tracking-wider text-slate-400">ONLINE</p>
+        <div class="grid grid-cols-2 gap-3">
+          <button type="button" id="quick-match-btn" onclick="startQuickMatch()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
+            <span class="font-bold text-sm text-slate-100">JOGO RÁPIDO</span>
+            <span class="text-xs text-slate-400">Partida aleatória</span>
+          </button>
+          <button type="button" id="invite-btn" onclick="openInviteModal()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
+            <span class="font-bold text-sm text-slate-100">CONVITE</span>
+            <span class="text-xs text-slate-400">Chame um amigo</span>
+          </button>
+        </div>
+        <button type="button" onclick="hideOnlineModes()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
+          VOLTAR
+        </button>
+      </div>
+    </div>
   </div>
 
   <!-- MODAL DE SALA ONLINE -->
@@ -1870,7 +1850,6 @@
       const teamMode = isTeamMode();
       [1, 3].forEach(count => {
         const btn = document.getElementById(`mode-btn-${count}`);
-        if (!btn) return;
         const isSelected = opponentsCount !== null && count === opponentsCount;
         btn.classList.toggle('border-white', isSelected);
         btn.classList.toggle('border-transparent', !isSelected);
@@ -3371,114 +3350,107 @@
     }
 
     function startGame() {
-      // Esconde a tela de configuração imediatamente, antes de qualquer outra coisa
+      const nameInput = document.getElementById('player-name-input');
+      let startName = nameInput ? nameInput.value : '';
+      if (isOnlineGame) {
+        // Usa o primeiro nome da conta Google como nome do jogador local
+        const account = typeof accountUser !== 'undefined' ? accountUser : null;
+        startName = getFirstName(account && (account.playerName || account.displayName)) || 'Você';
+      }
+      updatePlayerName(startName);
+      onlineMatchEnded = false;
+      movementSession++;
+
+      if (activeDiceAnimation) {
+        activeDiceAnimation.cancel();
+        activeDiceAnimation = null;
+      }
+      if (activeTokenAnimation) {
+        activeTokenAnimation.cancel();
+        activeTokenAnimation = null;
+      }
+
+      // O jogador humano sempre fica na posição BOTTOM_LEFT (canto inferior esquerdo)
+      const humanPlayerKey = getHumanPlayerKey();
+      const humanColorIdx = CLOCKWISE_COLORS.indexOf(humanPlayerKey);
+      boardRotationIndex = (4 - humanColorIdx) % 4;
+
+      playerTypes = { RED: 'NONE', GREEN: 'NONE', YELLOW: 'NONE', BLUE: 'NONE' };
+      playerTypes[humanPlayerKey] = 'HUMAN';
+
+      if (isTeamMode()) {
+        // Duplas nas bases diagonais: humano + 1 CPU aliado vs 2 CPUs adversárias.
+        const partnerColor = DIAGONAL_PARTNER[humanPlayerKey];
+        playerTypes[partnerColor] = 'ALLY';
+        CLOCKWISE_COLORS.forEach(color => {
+          if (color !== humanPlayerKey && color !== partnerColor) {
+            playerTypes[color] = 'CPU';
+          }
+        });
+      } else if (isOnlineGame) {
+        // No modo online o oponente é outro humano, controlado via WebSocket
+        const opponentColor = CLOCKWISE_COLORS[(humanColorIdx + 2) % 4];
+        playerTypes[opponentColor] = 'HUMAN';
+      } else {
+        const opponentColor = CLOCKWISE_COLORS[(humanColorIdx + 2) % 4];
+        playerTypes[opponentColor] = 'CPU';
+      }
+
+      activePlayers = CLOCKWISE_COLORS.filter(c => playerTypes[c] !== 'NONE');
+      updateColorVariables();
+
+      tokensState = {
+        RED: [-1, -1, -1, -1],
+        GREEN: [-1, -1, -1, -1],
+        YELLOW: [-1, -1, -1, -1],
+        BLUE: [-1, -1, -1, -1]
+      };
+
+      playerScores = {
+        RED: 0,
+        GREEN: 0,
+        YELLOW: 0,
+        BLUE: 0
+      };
+
+      // No modo local, o jogador humano começa. No modo online, ambos os
+      // clientes precisam concordar com o turno inicial: o player 0
+      // (criador da sala, cor AZUL) começa, garantindo turno sincronizado.
+      currentTurnIndex = isOnlineGame
+        ? 0
+        : activePlayers.indexOf(humanPlayerKey);
+      hasRolled = false;
+      consecutiveSixes = 0;
+      isAnimating = false;
+      isPaused = false;
+
       document.getElementById('setup-screen').classList.add('hidden');
       document.getElementById('win-modal').classList.add('hidden');
       document.getElementById('pause-modal').classList.add('hidden');
 
-      try {
-        const nameInput = document.getElementById('player-name-input');
-        let startName = nameInput ? nameInput.value : '';
-        if (isOnlineGame) {
-          // Usa o primeiro nome da conta Google como nome do jogador local
-          const account = typeof accountUser !== 'undefined' ? accountUser : null;
-          startName = getFirstName(account && (account.playerName || account.displayName)) || 'Você';
-        }
-        updatePlayerName(startName);
-        onlineMatchEnded = false;
-        movementSession++;
+      initBoard();
+      
+      // Rotaciona visualmente o tabuleiro para alinhar a cor escolhida ao canto inferior esquerdo
+      const boardEl = document.getElementById('ludo-board');
+      const degrees = boardRotationIndex * 90;
+      boardEl.style.transform = `rotate(${degrees}deg)`;
 
-        if (activeDiceAnimation) {
-          activeDiceAnimation.cancel();
-          activeDiceAnimation = null;
-        }
-        if (activeTokenAnimation) {
-          activeTokenAnimation.cancel();
-          activeTokenAnimation = null;
-        }
+      renderTokens();
+      updateTurnUI();
+      updateScoreboardUI();
+      gameAudio.unlock();
+      gameAudio.startMusic();
+      const greeting = playerName ? `Boa sorte, ${playerName}! ` : '';
+      logStatus(`${greeting}Partida iniciada! Sua cor (${getPlayerColor(humanPlayerKey).name}) está no Canto Inferior Esquerdo.`);
+      checkCPUTurn();
 
-        // O jogador humano sempre fica na posição BOTTOM_LEFT (canto inferior esquerdo)
-        const humanPlayerKey = getHumanPlayerKey();
-        const humanColorIdx = CLOCKWISE_COLORS.indexOf(humanPlayerKey);
-        boardRotationIndex = (4 - humanColorIdx) % 4;
-
-        playerTypes = { RED: 'NONE', GREEN: 'NONE', YELLOW: 'NONE', BLUE: 'NONE' };
-        playerTypes[humanPlayerKey] = 'HUMAN';
-
-        if (isTeamMode()) {
-          // Duplas nas bases diagonais: humano + 1 CPU aliado vs 2 CPUs adversárias.
-          const partnerColor = DIAGONAL_PARTNER[humanPlayerKey];
-          playerTypes[partnerColor] = 'ALLY';
-          CLOCKWISE_COLORS.forEach(color => {
-            if (color !== humanPlayerKey && color !== partnerColor) {
-              playerTypes[color] = 'CPU';
-            }
-          });
-        } else if (isOnlineGame) {
-          // No modo online o oponente é outro humano, controlado via WebSocket
-          const opponentColor = CLOCKWISE_COLORS[(humanColorIdx + 2) % 4];
-          playerTypes[opponentColor] = 'HUMAN';
-        } else {
-          const opponentColor = CLOCKWISE_COLORS[(humanColorIdx + 2) % 4];
-          playerTypes[opponentColor] = 'CPU';
-        }
-
-        activePlayers = CLOCKWISE_COLORS.filter(c => playerTypes[c] !== 'NONE');
-        updateColorVariables();
-
-        tokensState = {
-          RED: [-1, -1, -1, -1],
-          GREEN: [-1, -1, -1, -1],
-          YELLOW: [-1, -1, -1, -1],
-          BLUE: [-1, -1, -1, -1]
-        };
-
-        playerScores = {
-          RED: 0,
-          GREEN: 0,
-          YELLOW: 0,
-          BLUE: 0
-        };
-
-        // No modo local, o jogador humano começa. No modo online, ambos os
-        // clientes precisam concordar com o turno inicial: o player 0
-        // (criador da sala, cor AZUL) começa, garantindo turno sincronizado.
-        currentTurnIndex = isOnlineGame
-          ? 0
-          : activePlayers.indexOf(humanPlayerKey);
-        hasRolled = false;
-        consecutiveSixes = 0;
-        isAnimating = false;
-        isPaused = false;
-
-        initBoard();
-        
-        // Rotaciona visualmente o tabuleiro para alinhar a cor escolhida ao canto inferior esquerdo
-        const boardEl = document.getElementById('ludo-board');
-        const degrees = boardRotationIndex * 90;
-        boardEl.style.transform = `rotate(${degrees}deg)`;
-
-        renderTokens();
-        updateTurnUI();
-        updateScoreboardUI();
-        gameAudio.unlock();
-        gameAudio.startMusic();
-        const greeting = playerName ? `Boa sorte, ${playerName}! ` : '';
-        logStatus(`${greeting}Partida iniciada! Sua cor (${getPlayerColor(humanPlayerKey).name}) está no Canto Inferior Esquerdo.`);
-        checkCPUTurn();
-
-        // Ativa o relógio em segundo plano (Web Worker) e invalida callbacks
-        // agendados de partidas anteriores
-        invalidateScheduledCallbacks();
-        startBackgroundClock();
-        // O botão Menu volta a ficar disponível durante a partida
-        setMenuButtonVisible(true);
-        layoutAccountArea();
-      } catch (error) {
-        console.error('[LUUD] Erro ao iniciar o jogo:', error);
-        // Garante que a tela de configuração permaneça escondida mesmo com erro
-        document.getElementById('setup-screen').classList.add('hidden');
-      }
+      // Ativa o relógio em segundo plano (Web Worker) e invalida callbacks
+      // agendados de partidas anteriores
+      invalidateScheduledCallbacks();
+      startBackgroundClock();
+      // O botão Menu volta a ficar disponível durante a partida
+      setMenuButtonVisible(true);
+      layoutAccountArea();
     }
 
     function checkCPUTurn() {
@@ -4002,56 +3974,8 @@
     function resetOnlineModesUI() {
       const mainView = document.getElementById('setup-main-view');
       const modesView = document.getElementById('online-modes-view');
-      const cpuView = document.getElementById('cpu-mode-view');
-      const onlineConfigView = document.getElementById('online-config-view');
       if (mainView) mainView.classList.remove('hidden');
       if (modesView) modesView.classList.add('hidden');
-      if (cpuView) cpuView.classList.add('hidden');
-      if (onlineConfigView) onlineConfigView.classList.add('hidden');
-    }
-
-    function showCpuModeSelection() {
-      const mainView = document.getElementById('setup-main-view');
-      const cpuView = document.getElementById('cpu-mode-view');
-      if (!mainView || !cpuView) return;
-      mainView.classList.add('hidden');
-      cpuView.classList.remove('hidden');
-      gameAudio.playClick();
-    }
-
-    function hideCpuModeSelection() {
-      resetOnlineModesUI();
-      gameAudio.playClick();
-    }
-
-    function showOnlineConfig() {
-      const mainView = document.getElementById('setup-main-view');
-      const onlineConfigView = document.getElementById('online-config-view');
-      if (!mainView || !onlineConfigView) return;
-      mainView.classList.add('hidden');
-      onlineConfigView.classList.remove('hidden');
-      selectOnlineMode('1v1');
-      gameAudio.playClick();
-    }
-
-    function hideOnlineConfig() {
-      resetOnlineModesUI();
-      gameAudio.playClick();
-    }
-
-    function selectOnlineMode(mode) {
-      const tabs = ['1v1', '1v3', '2v2'];
-      tabs.forEach(m => {
-        const btn = document.getElementById(`online-tab-${m}`);
-        if (!btn) return;
-        if (m === mode) {
-          btn.classList.remove('text-slate-500');
-          btn.classList.add('text-slate-300', 'border-amber-500');
-        } else {
-          btn.classList.remove('text-slate-300', 'border-amber-500');
-          btn.classList.add('text-slate-500');
-        }
-      });
     }
 
     // Identificador único da conta Google (usado para impedir que a mesma
