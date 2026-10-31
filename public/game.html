@@ -1913,27 +1913,13 @@
       const setup = document.getElementById('setup-screen');
       if (!area || !setup) return;
 
-      // Garante que o botão de conta está sempre visível
-      area.style.display = 'flex';
-      area.style.visibility = 'visible';
-      area.style.opacity = '1';
-
       if (!setup.classList.contains('hidden')) {
         area.classList.add('absolute', 'top-3', 'right-3', 'sm:top-4', 'sm:right-4', 'z-[85]');
         area.classList.remove('relative');
-        // Força posicionamento fixo relativo à viewport
-        area.style.position = 'fixed';
-        area.style.top = '0.75rem';
-        area.style.right = '0.75rem';
-        area.style.zIndex = '85';
         setup.appendChild(area);
       } else {
         area.classList.add('relative');
         area.classList.remove('absolute', 'top-3', 'right-3', 'sm:top-4', 'sm:right-4', 'z-[85]');
-        area.style.position = '';
-        area.style.top = '';
-        area.style.right = '';
-        area.style.zIndex = '';
         const holder = document.getElementById('account-area-holder');
         if (holder && area.parentElement !== holder) holder.appendChild(area);
       }
@@ -2409,19 +2395,17 @@
 
     // Clica na foto, nome ou email do amigo para abrir o perfil dele
     function friendRow(f) {
-      const fullName = f.playerName || f.displayName || f.email;
+      const name = f.playerName || f.displayName || f.email;
+      const safeName = String(name).replace(/"/g, '&quot;');
       const safePicture = escapeHtmlText(f.picture || '');
       const isOnline = f.online === true;
       const statusColor = isOnline ? 'text-emerald-400' : 'text-slate-400';
       const statusText = isOnline ? 'Online' : 'Offline';
-      // Extrai o primeiro nome (antes do primeiro espaço) ou o prefixo do email
-      const displayName = fullName.includes(" ") ? fullName.split(" ")[0] : (fullName.includes("@") ? fullName.split("@")[0] : fullName);
-      const safeNameForOnclick = escapeHtmlText(fullName);
       return `
-        <div class="bg-slate-800 border border-slate-700 p-2.5 flex items-center gap-3 cursor-pointer" onclick="openFriendProfile({ id: '${escapeHtmlText(f.id)}', playerName: '${safeNameForOnclick}', email: '${escapeHtmlText(f.email || '—')}', picture: '${safePicture}' })">
+        <div class="bg-slate-800 border border-slate-700 p-2.5 flex items-center gap-3 cursor-pointer" onclick="openFriendProfile({ id: '${escapeHtmlText(f.id)}', playerName: '${safeName}', email: '${escapeHtmlText(f.email || '—')}', picture: '${safePicture}' })">
           <img src="${safePicture}" alt="Foto" class="w-8 h-8 rounded-full object-cover bg-slate-700 border border-slate-600" onerror="this.onerror=null;this.src='/assets/avatar.svg'">
           <div class="min-w-0 flex-1">
-            <p class="text-sm font-bold text-slate-100 truncate">${escapeHtmlText(displayName)}</p>
+            <p class="text-sm font-bold text-slate-100 truncate">${escapeHtmlText(name)}</p>
             <p class="text-[11px] ${statusColor} truncate">${statusText}</p>
           </div>
         </div>`;
@@ -2429,15 +2413,13 @@
 
     // Solicitações que você enviou e ainda não foram respondidas
     function sentRow(f) {
-      const fullName = f.playerName || f.displayName || f.email;
-      const safeName = String(fullName).replace(/"/g, '"');
-      // Extrai o primeiro nome (antes do primeiro espaço) ou o prefixo do email
-      const displayName = fullName.includes(" ") ? fullName.split(" ")[0] : (fullName.includes("@") ? fullName.split("@")[0] : fullName);
+      const name = f.playerName || f.displayName || f.email;
+      const safeName = String(name).replace(/"/g, '&quot;');
       return `
         <div class="bg-slate-800 border border-slate-700 p-2.5 flex items-center gap-3">
           <img src="${escapeHtmlText(f.picture || '')}" alt="Foto" class="w-8 h-8 rounded-full object-cover bg-slate-700 border border-slate-600" onerror="this.onerror=null;this.src='/assets/avatar.svg'">
           <div class="min-w-0 flex-1">
-            <p class="text-sm font-bold text-slate-100 truncate">${escapeHtmlText(displayName)}</p>
+            <p class="text-sm font-bold text-slate-100 truncate">${escapeHtmlText(name)}</p>
             <p class="text-[11px] text-slate-400 truncate">${escapeHtmlText(f.email || '—')}</p>
           </div>
           <button type="button" data-friend-action="cancel" data-friend-id="${escapeHtmlText(f.id)}" data-friend-name="${safeName}" class="w-7 h-7 flex-shrink-0 flex items-center justify-center bg-red-500 hover:bg-red-600 text-white font-bold text-sm rounded transition" title="Cancelar solicitação">✕</button>
@@ -2446,15 +2428,13 @@
 
     // Solicitações que você recebeu e ainda não respondeu
     function receivedRow(f) {
-      const fullName = f.playerName || f.displayName || f.email;
-      const safeName = String(fullName).replace(/"/g, '"');
-      // Extrai o primeiro nome (antes do primeiro espaço) ou o prefixo do email
-      const displayName = fullName.includes(" ") ? fullName.split(" ")[0] : (fullName.includes("@") ? fullName.split("@")[0] : fullName);
+      const name = f.playerName || f.displayName || f.email;
+      const safeName = String(name).replace(/"/g, '&quot;');
       return `
         <div class="bg-slate-800 border border-slate-700 p-2.5 flex items-center gap-3">
           <img src="${escapeHtmlText(f.picture || '')}" alt="Foto" class="w-8 h-8 rounded-full object-cover bg-slate-700 border border-slate-600" onerror="this.onerror=null;this.src='/assets/avatar.svg'">
           <div class="min-w-0 flex-1">
-            <p class="text-sm font-bold text-slate-100 truncate">${escapeHtmlText(displayName)}</p>
+            <p class="text-sm font-bold text-slate-100 truncate">${escapeHtmlText(name)}</p>
             <p class="text-[11px] text-slate-400 truncate">${escapeHtmlText(f.email || '—')}</p>
           </div>
           <button type="button" data-friend-action="accept" data-friend-id="${escapeHtmlText(f.id)}" data-friend-name="${safeName}" class="w-7 h-7 flex-shrink-0 flex items-center justify-center bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm rounded transition mr-2" title="Aceitar solicitação">✓</button>
@@ -2489,10 +2469,8 @@
 
         const acc = data.account;
         const rel = data.relation;
-        const fullName = acc.playerName || acc.displayName || acc.email;
-        const safeName = String(fullName).replace(/\"/g, '"');
-        // Extrai o primeiro nome (antes do primeiro espaço) ou o prefixo do email
-        const displayName = fullName.includes(" ") ? fullName.split(" ")[0] : (fullName.includes("@") ? fullName.split("@")[0] : fullName);;');
+        const name = acc.playerName || acc.displayName || acc.email;
+        const safeName = String(name).replace(/"/g, '&quot;');
 
         let action = '';
         let statusText = '';
@@ -2515,7 +2493,7 @@
           <div class="bg-slate-800 border border-slate-700 p-3 flex items-center gap-3">
             <img src="${escapeHtmlText(acc.picture || '')}" alt="Foto" class="w-10 h-10 rounded-full object-cover bg-slate-700 border border-slate-600" onerror="this.onerror=null;this.src='/assets/avatar.svg'">
             <div class="min-w-0">
-              <p class="text-sm font-bold text-slate-100 truncate">${escapeHtmlText(displayName)}</p>
+              <p class="text-sm font-bold text-slate-100 truncate">${escapeHtmlText(name)}</p>
               <p class="text-[11px] text-slate-400 truncate">${escapeHtmlText(acc.email || '—')}</p>
             </div>
             <div>${action}</div>
