@@ -3549,7 +3549,9 @@
           // Preenchimento sólido com a cor real do jogador (garante peças distintas no online)
           token.style.backgroundColor = color.hex;
           token.style.color = color.hex;
-          token.innerHTML = '<div class="token-center"></div>';
+          // Centro da peça: branco se a cor for escura, preto se a cor for clara
+          const centerColor = isLightColor(color.hex) ? '#0f172a' : '#ffffff';
+          token.innerHTML = `<div class="token-center" style="background:${centerColor};border-color:rgba(15,23,42,0.35);"></div>`;
           container.appendChild(token);
         });
 
