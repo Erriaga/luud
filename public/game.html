@@ -2661,6 +2661,8 @@
       updateOnlineSingleButton();
       // Garante que a visão de modos online (Jogo Rápido/Convite) volte ao menu
       resetOnlineModesUI();
+      // Garante que a visão de modo CPU volte ao menu
+      hideCpuModeSelection();
     }
 
     function getCurrentPlayer() {
@@ -3981,6 +3983,29 @@
       const modesView = document.getElementById('online-modes-view');
       if (mainView) mainView.classList.remove('hidden');
       if (modesView) modesView.classList.add('hidden');
+    }
+
+    function showCpuModeSelection() {
+      const mainView = document.getElementById('setup-main-view');
+      const cpuView = document.getElementById('cpu-mode-view');
+      if (!mainView || !cpuView) return;
+      mainView.classList.add('hidden');
+      cpuView.classList.remove('hidden');
+      gameAudio.playClick();
+    }
+
+    function hideCpuModeSelection() {
+      const mainView = document.getElementById('setup-main-view');
+      const cpuView = document.getElementById('cpu-mode-view');
+      if (!mainView || !cpuView) return;
+      mainView.classList.remove('hidden');
+      cpuView.classList.add('hidden');
+      gameAudio.playClick();
+    }
+
+    function startArenaGame(playerCount) {
+      selectOpponentsMode(playerCount);
+      startGame();
     }
 
     // Identificador único da conta Google (usado para impedir que a mesma
