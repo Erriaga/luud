@@ -3371,7 +3371,6 @@
     }
 
     function startGame() {
-      console.log('[DEBUG] startGame called');
       const nameInput = document.getElementById('player-name-input');
       let startName = nameInput ? nameInput.value : '';
       if (isOnlineGame) {
@@ -3449,10 +3448,8 @@
       document.getElementById('setup-screen').classList.add('hidden');
       document.getElementById('win-modal').classList.add('hidden');
       document.getElementById('pause-modal').classList.add('hidden');
-      console.log('[DEBUG] setup-screen hidden');
 
       initBoard();
-      console.log('[DEBUG] initBoard done');
       
       // Rotaciona visualmente o tabuleiro para alinhar a cor escolhida ao canto inferior esquerdo
       const boardEl = document.getElementById('ludo-board');
