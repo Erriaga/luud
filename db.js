@@ -98,7 +98,7 @@ async function ensureDatabaseSchema() {
         player_score INTEGER NOT NULL DEFAULT 0,
         opponent_score INTEGER NOT NULL DEFAULT 0,
         opponent_name TEXT NOT NULL DEFAULT 'Oponente',
-        finished_at TIMESTAMP DEFAULT NOW()
+        finished_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
 
@@ -120,6 +120,19 @@ async function ensureDatabaseSchema() {
         created_at TIMESTAMP DEFAULT NOW()
       );
     `);
+
+    // Migra bancos antigos: finished_at era TIMESTAMP (sem fuso), o que desloca a data da partida
+    try {
+      await p.query(`
+        DO $$ BEGIN
+          IF (SELECT data_type FROM information_schema.columns WHERE table_name = 'matches' AND column_name = 'finished_at') = 'timestamp without time zone' THEN
+            ALTER TABLE matches ALTER COLUMN finished_at TYPE TIMESTAMPTZ USING finished_at AT TIME ZONE 'UTC';
+          END IF;
+        END $$;
+      `);
+    } catch (migrationError) {
+      console.warn('Não foi possível migrar matches.finished_at:', migrationError.message);
+    }
 
     await p.query(`CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);`);
     await p.query(`CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);`);
@@ -468,17 +481,18 @@ async function createMatchRecord(userId, record) {
         `DELETE FROM matches WHERE user_id = $1 AND id NOT IN (SELECT id FROM matches WHERE user_id = $1 ORDER BY finished_at DESC LIMIT 100)`,
         [userId]
       );
+      return;
     } catch (error) {
       dbAvailable = false;
       pool = null;
     }
-  } else {
-    const matches = await readJsonFile(MATCHES_FILE);
-    const history = matches[userId] || [];
-    history.unshift(record);
-    matches[userId] = history.slice(0, 100);
-    await writeJsonFile(MATCHES_FILE, matches);
   }
+
+  const matches = await readJsonFile(MATCHES_FILE);
+  const history = matches[userId] || [];
+  history.unshift(record);
+  matches[userId] = history.slice(0, 100);
+  await writeJsonFile(MATCHES_FILE, matches);
 }
 
 async function listMatchRecords(userId) {
