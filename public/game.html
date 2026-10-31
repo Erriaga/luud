@@ -2018,16 +2018,19 @@
     function layoutAccountArea() {
       const area = document.getElementById('account-area');
       const setup = document.getElementById('setup-screen');
+      const holder = document.getElementById('account-area-holder');
       if (!area || !setup) return;
 
+      // Se o area já está dentro do setup, não adiciona novamente (evita duplicação)
       if (!setup.classList.contains('hidden')) {
         area.classList.add('absolute', 'top-3', 'right-3', 'sm:top-4', 'sm:right-4', 'z-[85]');
         area.classList.remove('relative');
-        setup.appendChild(area);
+        if (area.parentElement !== setup) {
+          setup.appendChild(area);
+        }
       } else {
         area.classList.add('relative');
         area.classList.remove('absolute', 'top-3', 'right-3', 'sm:top-4', 'sm:right-4', 'z-[85]');
-        const holder = document.getElementById('account-area-holder');
         if (holder && area.parentElement !== holder) holder.appendChild(area);
       }
     }
