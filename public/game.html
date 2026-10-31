@@ -624,9 +624,9 @@
               <span class="font-bold text-sm text-slate-100">CONVITE</span>
               <span class="text-xs text-slate-400">Criar/Entrar com código</span>
             </button>
-            <button type="button" disabled class="p-3 border-2 border-transparent bg-slate-700 text-slate-500 transition flex flex-col items-center opacity-70 cursor-not-allowed disabled:opacity-70 disabled:cursor-not-allowed">
-              <span class="font-bold text-sm text-slate-100">LIGA</span>
-              <span class="text-xs text-slate-400">Em breve</span>
+            <button type="button" disabled class="p-3 border-2 border-transparent bg-amber-500 text-black transition flex flex-col items-center opacity-100 cursor-not-allowed">
+              <span class="font-bold text-sm text-black">LIGA</span>
+              <span class="text-xs text-slate-900">Em breve</span>
             </button>
           </div>
           <button type="button" onclick="hideOnlineSoloView()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
@@ -3442,7 +3442,7 @@
       const player = getCurrentPlayer();
       const winningTeam = getWinningTeam();
       if (winningTeam) {
-        const humanWon = winningTeam === 'HUMAN';
+        const humanWon = winningTeam === 'HUMAN' || winningTeam === getHumanPlayerKey();
         const winTitle = document.getElementById('win-title');
 
         // A partida online terminou normalmente: desconexões seguintes
@@ -3452,10 +3452,45 @@
         document.getElementById('win-countdown').classList.add('hidden');
 
         stopTurnTimer();
-        winTitle.innerText = humanWon ? 'V I T Ó R I A' : 'D E R R O T A';
-        winTitle.className = `win-title font-display font-black ${humanWon ? 'text-amber-400' : 'text-red-500'}`;
-        document.getElementById('win-subtitle').classList.add('hidden');
-        document.getElementById('win-score').innerText = `${getHumanTeamScore()} - ${getCpuScore()}`;
+
+        // Modo ARENA: cada jogador por si, mostrar placar de todos os 4
+        if (!isTeamMode() && !isOnlineGame && activePlayers.length === 4) {
+          winTitle.innerText = humanWon ? 'V I T Ó R I A' : 'D E R R O T A';
+          winTitle.className = `win-title font-display font-black ${humanWon ? 'text-amber-400' : 'text-red-500'}`;
+          document.getElementById('win-subtitle').classList.add('hidden');
+          
+          // Montar placar final com todos os 4 jogadores
+          const humanColorIdx = CLOCKWISE_COLORS.indexOf(getHumanPlayerKey());
+          const orderedPlayers = [];
+          for (let i = 0; i < 4; i++) {
+            const colorKey = CLOCKWISE_COLORS[(humanColorIdx + i) % 4];
+            if (activePlayers.includes(colorKey)) {
+              orderedPlayers.push(colorKey);
+            }
+          }
+          
+          let arenaPlacar = '';
+          orderedPlayers.forEach((colorKey, idx) => {
+            const color = getPlayerColor(colorKey);
+            const name = colorKey === getHumanPlayerKey() ? 'Você' : `CPU (${color.name})`;
+            const points = playerScores[colorKey] || 0;
+            arenaPlacar += `<div class="flex items-center justify-between gap-4 mb-1">
+              <div class="flex items-center gap-3">
+                <span class="w-2 h-2 rounded-full shrink-0" style="background-color:${color.hex}"></span>
+                <span class="font-bold text-sm">${name}</span>
+              </div>
+              <span class="font-black text-sm">${points}</span>
+            </div>`;
+          });
+          document.getElementById('win-score').innerHTML = arenaPlacar;
+        } else {
+          // Modo SOLO ou DUPLA: placar tradicional
+          winTitle.innerText = humanWon ? 'V I T Ó R I A' : 'D E R R O T A';
+          winTitle.className = `win-title font-display font-black ${humanWon ? 'text-amber-400' : 'text-red-500'}`;
+          document.getElementById('win-subtitle').classList.add('hidden');
+          document.getElementById('win-score').innerText = `${getHumanTeamScore()} - ${getCpuScore()}`;
+        }
+        
         document.getElementById('win-modal').classList.remove('hidden');
 
         if (humanWon) {
@@ -3493,6 +3528,17 @@
 
     function getWinningTeam() {
       const target = getWinningScore();
+
+      // Modo ARENA: cada jogador por si, primeiro a atingir o target vence
+      if (!isTeamMode() && !isOnlineGame && activePlayers.length === 4) {
+        for (const colorKey of activePlayers) {
+          if (playerScores[colorKey] >= target) {
+            return colorKey; // Retorna a chave da cor do vencedor
+          }
+        }
+        return null;
+      }
+
       if (getHumanTeamScore() >= target) return 'HUMAN';
       if (getCpuScore() >= target) return 'CPU';
       return null;
