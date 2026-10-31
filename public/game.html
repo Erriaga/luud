@@ -755,7 +755,7 @@
         <span>Amigos</span>
         <span id="friends-badge" class="hidden w-5 h-5 bg-red-500 text-white text-[10px] rounded-full flex items-center justify-center font-bold group-hover:opacity-100 transition-opacity">1</span>
       </button>
-      <button type="button" onclick="openHistoryModal()" class="w-full px-4 py-3 text-left text-sm text-slate-100 hover:bg-slate-700 transition">Histórico de partidas</button>
+      <button type="button" onclick="openHistoryModal()" class="w-full px-4 py-3 text-left text-sm text-slate-100 hover:bg-slate-700 transition">Histórico</button>
       <button type="button" onclick="logoutAccount()" class="w-full px-4 py-3 text-left text-sm text-red-300 hover:bg-slate-700 transition">Sair</button>
     </div>
   </div>
@@ -897,7 +897,7 @@
         </div>
       </div>
 
-      <p class="text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">Histórico de partidas</p>
+      <p class="text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">Histórico</p>
       <div id="friend-profile-matches" class="space-y-2">
         <p class="text-sm text-slate-400 text-center py-6">Carregando partidas...</p>
       </div>
@@ -1913,27 +1913,13 @@
       const setup = document.getElementById('setup-screen');
       if (!area || !setup) return;
 
-      // Garante que o botão de conta está sempre visível
-      area.style.display = 'flex';
-      area.style.visibility = 'visible';
-      area.style.opacity = '1';
-
       if (!setup.classList.contains('hidden')) {
         area.classList.add('absolute', 'top-3', 'right-3', 'sm:top-4', 'sm:right-4', 'z-[85]');
         area.classList.remove('relative');
-        // Força posicionamento fixo relativo à viewport
-        area.style.position = 'fixed';
-        area.style.top = '0.75rem';
-        area.style.right = '0.75rem';
-        area.style.zIndex = '85';
         setup.appendChild(area);
       } else {
         area.classList.add('relative');
         area.classList.remove('absolute', 'top-3', 'right-3', 'sm:top-4', 'sm:right-4', 'z-[85]');
-        area.style.position = '';
-        area.style.top = '';
-        area.style.right = '';
-        area.style.zIndex = '';
         const holder = document.getElementById('account-area-holder');
         if (holder && area.parentElement !== holder) holder.appendChild(area);
       }
@@ -1954,10 +1940,19 @@
        ser consultada no menu da conta ou pelo botão Histórico.
     ------------------------------------------------------------- */
     const MATCH_MODE_LABELS = {
-      quick: 'Jogo Rápido',
-      invite: 'Convite',
-      local: 'Local vs CPU'
+      quick: 'JOGO RÁPIDO',
+      invite: 'CONVITE',
+      local: 'SINGLE PLAYER',
+      multiplayer: 'MULTIPLAYER'
     };
+
+    // Data da partida: dd/mm/aaaa às hh:mm (fuso do navegador); ignora datas inválidas
+    function formatMatchDate(value) {
+      const when = new Date(value);
+      if (!value || Number.isNaN(when.getTime())) return '—';
+      return when.toLocaleDateString('pt-BR') + ' às ' +
+        when.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    }
 
     function escapeHtmlText(text) {
       return String(text).replace(/[&<>"']/g, ch => ({
@@ -2016,9 +2011,7 @@
 
       list.innerHTML = records.map(record => {
         const win = record.result === 'win';
-        const when = new Date(record.finishedAt);
-        const whenLabel = when.toLocaleDateString('pt-BR') + ' às ' +
-          when.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        const whenLabel = formatMatchDate(record.finishedAt);
         const modeLabel = MATCH_MODE_LABELS[record.mode] || record.mode;
         const resultColor = win ? 'text-emerald-400' : 'text-red-400';
         const borderColor = win ? 'border-emerald-700' : 'border-red-700';
@@ -2274,9 +2267,7 @@
       }
       list.innerHTML = records.map(record => {
         const win = record.result === 'win';
-        const when = new Date(record.finishedAt);
-        const whenLabel = when.toLocaleDateString('pt-BR') + ' às ' +
-          when.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        const whenLabel = formatMatchDate(record.finishedAt);
         const modeLabel = MATCH_MODE_LABELS[record.mode] || record.mode;
         const resultColor = win ? 'text-emerald-400' : 'text-red-400';
         const borderColor = win ? 'border-emerald-700' : 'border-red-700';
@@ -2363,6 +2354,40 @@
       document.getElementById('friends-modal').classList.add('hidden');
     }
 
+    // Nome exibido para amigos: se o apelido for apenas o prefixo da conta Google
+    // (ex.: prof.rh19), mostra o primeiro nome da conta (ex.: Raphael).
+    function friendFullName(f) {
+      const email = String(f.email || '');
+      const prefix = email.split('@')[0].toLowerCase();
+      const nick = String(f.playerName || '').trim();
+      const disp = String(f.displayName || '').trim();
+      const nickIsPrefix = !nick || nick.toLowerCase() === prefix;
+      if (nickIsPrefix && disp && disp.toLowerCase() !== prefix) return disp;
+      return nick || disp || email;
+    }
+
+    function friendLabel(f) {
+      const full = friendFullName(f);
+      const nick = String(f.playerName || '').trim();
+      const prefix = String(f.email || '').split('@')[0].toLowerCase();
+      const nickIsPrefix = !nick || nick.toLowerCase() === prefix;
+      return nickIsPrefix ? (full.split(/\s+/)[0] || full) : nick;
+    }
+
+    // Ordem alfabética por nome, depois sobrenome; empate: conta Google
+    function compareFriends(a, b) {
+      const collator = new Intl.Collator('pt-BR', { sensitivity: 'base' });
+      const split = (f) => {
+        const parts = friendFullName(f).trim().split(/\s+/);
+        return [parts[0] || '', parts.slice(1).join(' ')];
+      };
+      const [firstA, lastA] = split(a);
+      const [firstB, lastB] = split(b);
+      return collator.compare(firstA, firstB)
+        || collator.compare(lastA, lastB)
+        || collator.compare(String(a.email || ''), String(b.email || ''));
+    }
+
     async function renderFriends() {
       const data = await fetch('/api/friends')
         .then(r => r.ok ? r.json() : null)
@@ -2387,7 +2412,7 @@
       if (data.friends.length === 0) {
         list.innerHTML = '<p class="text-xs text-slate-500 text-center py-4">Nenhum amigo ainda.</p>';
       } else {
-        list.innerHTML = data.friends.map(friendRow).join('');
+        list.innerHTML = data.friends.slice().sort(compareFriends).map(friendRow).join('');
       }
 
       // Coluna 2: Solicitações enviadas (você enviou, aguardando resposta)
@@ -2395,7 +2420,7 @@
       if (data.sent.length === 0) {
         sent.innerHTML = '<p class="text-xs text-slate-500 text-center py-4">Nenhuma solicitação enviada aguardando resposta.</p>';
       } else {
-        sent.innerHTML = data.sent.map(sentRow).join('');
+        sent.innerHTML = data.sent.slice().sort(compareFriends).map(sentRow).join('');
       }
 
       // Coluna 3: Convites pendentes (você recebeu, aguardando sua resposta)
@@ -2403,25 +2428,23 @@
       if (data.received.length === 0) {
         received.innerHTML = '<p class="text-xs text-slate-500 text-center py-4">Nenhum convite pendente.</p>';
       } else {
-        received.innerHTML = data.received.map(receivedRow).join('');
+        received.innerHTML = data.received.slice().sort(compareFriends).map(receivedRow).join('');
       }
     }
 
     // Clica na foto, nome ou email do amigo para abrir o perfil dele
     function friendRow(f) {
-      const fullName = f.playerName || f.displayName || f.email;
+      const name = friendLabel(f);
+      const safeName = String(name).replace(/"/g, '&quot;');
       const safePicture = escapeHtmlText(f.picture || '');
       const isOnline = f.online === true;
       const statusColor = isOnline ? 'text-emerald-400' : 'text-slate-400';
       const statusText = isOnline ? 'Online' : 'Offline';
-      // Extrai o primeiro nome (antes do primeiro espaço) ou o prefixo do email
-      const displayName = fullName.includes(" ") ? fullName.split(" ")[0] : (fullName.includes("@") ? fullName.split("@")[0] : fullName);
-      const safeNameForOnclick = escapeHtmlText(fullName);
       return `
-        <div class="bg-slate-800 border border-slate-700 p-2.5 flex items-center gap-3 cursor-pointer" onclick="openFriendProfile({ id: '${escapeHtmlText(f.id)}', playerName: '${safeNameForOnclick}', email: '${escapeHtmlText(f.email || '—')}', picture: '${safePicture}' })">
+        <div class="bg-slate-800 border border-slate-700 p-2.5 flex items-center gap-3 cursor-pointer" onclick="openFriendProfile({ id: '${escapeHtmlText(f.id)}', playerName: '${safeName}', email: '${escapeHtmlText(f.email || '—')}', picture: '${safePicture}' })">
           <img src="${safePicture}" alt="Foto" class="w-8 h-8 rounded-full object-cover bg-slate-700 border border-slate-600" onerror="this.onerror=null;this.src='/assets/avatar.svg'">
           <div class="min-w-0 flex-1">
-            <p class="text-sm font-bold text-slate-100 truncate">${escapeHtmlText(displayName)}</p>
+            <p class="text-sm font-bold text-slate-100 truncate">${escapeHtmlText(name)}</p>
             <p class="text-[11px] ${statusColor} truncate">${statusText}</p>
           </div>
         </div>`;
@@ -2429,36 +2452,32 @@
 
     // Solicitações que você enviou e ainda não foram respondidas
     function sentRow(f) {
-      const fullName = f.playerName || f.displayName || f.email;
-      const safeName = String(fullName).replace(/"/g, '"');
-      // Extrai o primeiro nome (antes do primeiro espaço) ou o prefixo do email
-      const displayName = fullName.includes(" ") ? fullName.split(" ")[0] : (fullName.includes("@") ? fullName.split("@")[0] : fullName);
+      const name = friendLabel(f);
+      const safeName = String(name).replace(/"/g, '&quot;');
       return `
         <div class="bg-slate-800 border border-slate-700 p-2.5 flex items-center gap-3">
           <img src="${escapeHtmlText(f.picture || '')}" alt="Foto" class="w-8 h-8 rounded-full object-cover bg-slate-700 border border-slate-600" onerror="this.onerror=null;this.src='/assets/avatar.svg'">
           <div class="min-w-0 flex-1">
-            <p class="text-sm font-bold text-slate-100 truncate">${escapeHtmlText(displayName)}</p>
+            <p class="text-sm font-bold text-slate-100 truncate">${escapeHtmlText(name)}</p>
             <p class="text-[11px] text-slate-400 truncate">${escapeHtmlText(f.email || '—')}</p>
           </div>
-          <button type="button" data-friend-action="cancel" data-friend-id="${escapeHtmlText(f.id)}" data-friend-name="${safeName}" class="w-7 h-7 flex-shrink-0 flex items-center justify-center bg-red-500 hover:bg-red-600 text-white font-bold text-sm rounded transition" title="Cancelar solicitação">✕</button>
+          <button type="button" data-friend-action="cancel" data-friend-id="${escapeHtmlText(f.id)}" data-friend-name="${safeName}" class="w-7 h-7 flex-shrink-0 flex items-center justify-center bg-red-500 hover:bg-red-600 text-white font-bold text-sm transition" title="Cancelar solicitação">✕</button>
         </div>`;
     }
 
     // Solicitações que você recebeu e ainda não respondeu
     function receivedRow(f) {
-      const fullName = f.playerName || f.displayName || f.email;
-      const safeName = String(fullName).replace(/"/g, '"');
-      // Extrai o primeiro nome (antes do primeiro espaço) ou o prefixo do email
-      const displayName = fullName.includes(" ") ? fullName.split(" ")[0] : (fullName.includes("@") ? fullName.split("@")[0] : fullName);
+      const name = friendLabel(f);
+      const safeName = String(name).replace(/"/g, '&quot;');
       return `
         <div class="bg-slate-800 border border-slate-700 p-2.5 flex items-center gap-3">
           <img src="${escapeHtmlText(f.picture || '')}" alt="Foto" class="w-8 h-8 rounded-full object-cover bg-slate-700 border border-slate-600" onerror="this.onerror=null;this.src='/assets/avatar.svg'">
           <div class="min-w-0 flex-1">
-            <p class="text-sm font-bold text-slate-100 truncate">${escapeHtmlText(displayName)}</p>
+            <p class="text-sm font-bold text-slate-100 truncate">${escapeHtmlText(name)}</p>
             <p class="text-[11px] text-slate-400 truncate">${escapeHtmlText(f.email || '—')}</p>
           </div>
-          <button type="button" data-friend-action="accept" data-friend-id="${escapeHtmlText(f.id)}" data-friend-name="${safeName}" class="w-7 h-7 flex-shrink-0 flex items-center justify-center bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm rounded transition mr-2" title="Aceitar solicitação">✓</button>
-          <button type="button" data-friend-action="decline" data-friend-id="${escapeHtmlText(f.id)}" data-friend-name="${safeName}" class="w-7 h-7 flex-shrink-0 flex items-center justify-center bg-red-500 hover:bg-red-600 text-white font-bold text-sm rounded transition" title="Recusar solicitação">✕</button>
+          <button type="button" data-friend-action="accept" data-friend-id="${escapeHtmlText(f.id)}" data-friend-name="${safeName}" class="w-7 h-7 flex-shrink-0 flex items-center justify-center bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm transition mr-2" title="Aceitar solicitação">✓</button>
+          <button type="button" data-friend-action="decline" data-friend-id="${escapeHtmlText(f.id)}" data-friend-name="${safeName}" class="w-7 h-7 flex-shrink-0 flex items-center justify-center bg-red-500 hover:bg-red-600 text-white font-bold text-sm transition" title="Recusar solicitação">✕</button>
         </div>`;
     }
 
@@ -2489,10 +2508,8 @@
 
         const acc = data.account;
         const rel = data.relation;
-        const fullName = acc.playerName || acc.displayName || acc.email;
-        const safeName = String(fullName).replace(/\"/g, '"');
-        // Extrai o primeiro nome (antes do primeiro espaço) ou o prefixo do email
-        const displayName = fullName.includes(" ") ? fullName.split(" ")[0] : (fullName.includes("@") ? fullName.split("@")[0] : fullName);;');
+        const name = friendLabel(acc);
+        const safeName = String(name).replace(/"/g, '&quot;');
 
         let action = '';
         let statusText = '';
@@ -2506,8 +2523,8 @@
           action = `<button type="button" disabled class="text-xs font-bold px-3 py-1.5 rounded bg-slate-700/50 text-slate-500">Solicitação enviada</button>`;
           statusText = '';
         } else if (rel === 'received') {
-          action = `<button type="button" data-friend-action="accept" data-friend-id="${escapeHtmlText(acc.id)}" data-friend-name="${safeName}" class="w-7 h-7 flex-shrink-0 flex items-center justify-center bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm rounded transition mr-2" title="Aceitar solicitação">✓</button>
-                    <button type="button" data-friend-action="decline" data-friend-id="${escapeHtmlText(acc.id)}" data-friend-name="${safeName}" class="w-7 h-7 flex-shrink-0 flex items-center justify-center bg-red-500 hover:bg-red-600 text-white font-bold text-sm rounded transition" title="Recusar solicitação">✕</button>`;
+          action = `<button type="button" data-friend-action="accept" data-friend-id="${escapeHtmlText(acc.id)}" data-friend-name="${safeName}" class="w-7 h-7 flex-shrink-0 flex items-center justify-center bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm transition mr-2" title="Aceitar solicitação">✓</button>
+                    <button type="button" data-friend-action="decline" data-friend-id="${escapeHtmlText(acc.id)}" data-friend-name="${safeName}" class="w-7 h-7 flex-shrink-0 flex items-center justify-center bg-red-500 hover:bg-red-600 text-white font-bold text-sm transition" title="Recusar solicitação">✕</button>`;
           statusText = '';
         }
 
@@ -2515,7 +2532,7 @@
           <div class="bg-slate-800 border border-slate-700 p-3 flex items-center gap-3">
             <img src="${escapeHtmlText(acc.picture || '')}" alt="Foto" class="w-10 h-10 rounded-full object-cover bg-slate-700 border border-slate-600" onerror="this.onerror=null;this.src='/assets/avatar.svg'">
             <div class="min-w-0">
-              <p class="text-sm font-bold text-slate-100 truncate">${escapeHtmlText(displayName)}</p>
+              <p class="text-sm font-bold text-slate-100 truncate">${escapeHtmlText(name)}</p>
               <p class="text-[11px] text-slate-400 truncate">${escapeHtmlText(acc.email || '—')}</p>
             </div>
             <div>${action}</div>
@@ -3269,7 +3286,7 @@
 
         // Registra o resultado no histórico da conta
         postMatchRecord(
-          isOnlineGame ? onlineMatchType : 'local',
+          isOnlineGame ? onlineMatchType : (opponentsCount === 1 ? 'local' : 'multiplayer'),
           humanWon ? 'win' : 'loss',
           getHumanTeamScore(),
           getCpuScore(),
