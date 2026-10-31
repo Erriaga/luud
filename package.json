@@ -5,17 +5,14 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js",
-    "postinstall": "npm rebuild ws bufferutil utf-8-validate --build-from-source"
+    "dev": "node --watch server.js"
   },
   "engines": {
     "node": "20.x"
   },
   "private": true,
   "dependencies": {
-    "ws": "8.14.2",
-    "bufferutil": "^4.0.8",
-    "utf-8-validate": "^6.0.4",
+    "ws": "^8.18.0",
     "pg": "^8.11.0"
   }
 }
