@@ -2,7 +2,7 @@ services:
   - type: web
     name: luud
     env: node
-    buildCommand: npm install --no-optional
+    buildCommand: npm install
     startCommand: node server.js
     envVars:
       - key: NODE_ENV
