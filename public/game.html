@@ -2396,15 +2396,15 @@
     // Clica na foto, nome ou email do amigo para abrir o perfil dele
     function friendRow(f) {
       const fullName = f.playerName || f.displayName || f.email;
-      const safeName = String(fullName).replace(/"/g, '"');
       const safePicture = escapeHtmlText(f.picture || '');
       const isOnline = f.online === true;
       const statusColor = isOnline ? 'text-emerald-400' : 'text-slate-400';
       const statusText = isOnline ? 'Online' : 'Offline';
       // Extrai o primeiro nome (antes do primeiro espaço) ou o prefixo do email
       const displayName = fullName.includes(" ") ? fullName.split(" ")[0] : (fullName.includes("@") ? fullName.split("@")[0] : fullName);
+      const safeNameForOnclick = escapeHtmlText(fullName);
       return `
-        <div class="bg-slate-800 border border-slate-700 p-2.5 flex items-center gap-3 cursor-pointer" onclick="openFriendProfile({ id: '${escapeHtmlText(f.id)}', playerName: '${safeName}', email: '${escapeHtmlText(f.email || '—')}', picture: '${safePicture}' })">
+        <div class="bg-slate-800 border border-slate-700 p-2.5 flex items-center gap-3 cursor-pointer" onclick="openFriendProfile({ id: '${escapeHtmlText(f.id)}', playerName: '${safeNameForOnclick}', email: '${escapeHtmlText(f.email || '—')}', picture: '${safePicture}' })">
           <img src="${safePicture}" alt="Foto" class="w-8 h-8 rounded-full object-cover bg-slate-700 border border-slate-600" onerror="this.onerror=null;this.src='/assets/avatar.svg'">
           <div class="min-w-0 flex-1">
             <p class="text-sm font-bold text-slate-100 truncate">${escapeHtmlText(displayName)}</p>
