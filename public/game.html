@@ -3597,6 +3597,13 @@
         // No modo online o oponente é outro humano, controlado via WebSocket
         const opponentColor = CLOCKWISE_COLORS[(humanColorIdx + 2) % 4];
         playerTypes[opponentColor] = 'HUMAN';
+      } else if (opponentsCount === 4) {
+        // Modo ARENA: cada jogador por si, 4 jogadores ativos
+        CLOCKWISE_COLORS.forEach(color => {
+          if (color !== humanPlayerKey) {
+            playerTypes[color] = 'CPU';
+          }
+        });
       } else {
         const opponentColor = CLOCKWISE_COLORS[(humanColorIdx + 2) % 4];
         playerTypes[opponentColor] = 'CPU';
