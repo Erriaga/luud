@@ -755,7 +755,7 @@
         <span>Amigos</span>
         <span id="friends-badge" class="hidden w-5 h-5 bg-red-500 text-white text-[10px] rounded-full flex items-center justify-center font-bold group-hover:opacity-100 transition-opacity">1</span>
       </button>
-      <button type="button" onclick="openHistoryModal()" class="w-full px-4 py-3 text-left text-sm text-slate-100 hover:bg-slate-700 transition">Histórico de partidas</button>
+      <button type="button" onclick="openHistoryModal()" class="w-full px-4 py-3 text-left text-sm text-slate-100 hover:bg-slate-700 transition">Histórico</button>
       <button type="button" onclick="logoutAccount()" class="w-full px-4 py-3 text-left text-sm text-red-300 hover:bg-slate-700 transition">Sair</button>
     </div>
   </div>
@@ -897,7 +897,7 @@
         </div>
       </div>
 
-      <p class="text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">Histórico de partidas</p>
+      <p class="text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">Histórico</p>
       <div id="friend-profile-matches" class="space-y-2">
         <p class="text-sm text-slate-400 text-center py-6">Carregando partidas...</p>
       </div>
@@ -1940,10 +1940,19 @@
        ser consultada no menu da conta ou pelo botão Histórico.
     ------------------------------------------------------------- */
     const MATCH_MODE_LABELS = {
-      quick: 'Jogo Rápido',
-      invite: 'Convite',
-      local: 'Local vs CPU'
+      quick: 'JOGO RÁPIDO',
+      invite: 'CONVITE',
+      local: 'SINGLE PLAYER',
+      multiplayer: 'MULTIPLAYER'
     };
+
+    // Data da partida: dd/mm/aaaa às hh:mm (fuso do navegador); ignora datas inválidas
+    function formatMatchDate(value) {
+      const when = new Date(value);
+      if (!value || Number.isNaN(when.getTime())) return '—';
+      return when.toLocaleDateString('pt-BR') + ' às ' +
+        when.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    }
 
     function escapeHtmlText(text) {
       return String(text).replace(/[&<>"']/g, ch => ({
@@ -1951,11 +1960,11 @@
       })[ch]);
     }
 
-    function postMatchRecord(mode, result, playerScore, opponentScore, opponentName) {
+    async function postMatchRecord(mode, result, playerScore, opponentScore, opponentName) {
       if (typeof accountUser === 'undefined' || !accountUser) return;
 
       try {
-        fetch('/api/matches', {
+        await fetch('/api/matches', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ mode, result, playerScore, opponentScore, opponentName })
@@ -2002,9 +2011,7 @@
 
       list.innerHTML = records.map(record => {
         const win = record.result === 'win';
-        const when = new Date(record.finishedAt);
-        const whenLabel = when.toLocaleDateString('pt-BR') + ' às ' +
-          when.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        const whenLabel = formatMatchDate(record.finishedAt);
         const modeLabel = MATCH_MODE_LABELS[record.mode] || record.mode;
         const resultColor = win ? 'text-emerald-400' : 'text-red-400';
         const borderColor = win ? 'border-emerald-700' : 'border-red-700';
@@ -2122,14 +2129,29 @@
         } else if (rel === 'sent') {
           actions.appendChild(disabledItem('Solicitação enviada'));
         } else if (rel === 'received') {
-          actions.appendChild(menuItem('Aceitar amigo', '', () => {
+          const acceptBtn = document.createElement('button');
+          acceptBtn.type = 'button';
+          acceptBtn.className = 'w-7 h-7 flex-shrink-0 flex items-center justify-center bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm transition mr-2';
+          acceptBtn.title = 'Aceitar solicitação';
+          acceptBtn.textContent = '✓';
+          acceptBtn.onclick = (event) => {
+            event.stopPropagation();
             closeOpponentMenu();
             respondFriendRequest(prof.id, true);
-          }));
-          actions.appendChild(menuItem('Recusar', 'text-red-400 hover:bg-red-500/20', () => {
+          };
+          actions.appendChild(acceptBtn);
+
+          const declineBtn = document.createElement('button');
+          declineBtn.type = 'button';
+          declineBtn.className = 'w-7 h-7 flex-shrink-0 flex items-center justify-center bg-red-500 hover:bg-red-600 text-white font-bold text-sm transition';
+          declineBtn.title = 'Recusar solicitação';
+          declineBtn.textContent = '✕';
+          declineBtn.onclick = (event) => {
+            event.stopPropagation();
             closeOpponentMenu();
             respondFriendRequest(prof.id, false);
-          }));
+          };
+          actions.appendChild(declineBtn);
         } else {
           actions.appendChild(menuItem('+ Adicionar amigo', 'bg-blue-600 hover:bg-blue-500 text-white', () => {
             closeOpponentMenu();
@@ -2260,9 +2282,7 @@
       }
       list.innerHTML = records.map(record => {
         const win = record.result === 'win';
-        const when = new Date(record.finishedAt);
-        const whenLabel = when.toLocaleDateString('pt-BR') + ' às ' +
-          when.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        const whenLabel = formatMatchDate(record.finishedAt);
         const modeLabel = MATCH_MODE_LABELS[record.mode] || record.mode;
         const resultColor = win ? 'text-emerald-400' : 'text-red-400';
         const borderColor = win ? 'border-emerald-700' : 'border-red-700';
@@ -2349,6 +2369,40 @@
       document.getElementById('friends-modal').classList.add('hidden');
     }
 
+    // Nome exibido para amigos: se o apelido for apenas o prefixo da conta Google
+    // (ex.: prof.rh19), mostra o primeiro nome da conta (ex.: Raphael).
+    function friendFullName(f) {
+      const email = String(f.email || '');
+      const prefix = email.split('@')[0].toLowerCase();
+      const nick = String(f.playerName || '').trim();
+      const disp = String(f.displayName || '').trim();
+      const nickIsPrefix = !nick || nick.toLowerCase() === prefix;
+      if (nickIsPrefix && disp && disp.toLowerCase() !== prefix) return disp;
+      return nick || disp || email;
+    }
+
+    function friendLabel(f) {
+      const full = friendFullName(f);
+      const nick = String(f.playerName || '').trim();
+      const prefix = String(f.email || '').split('@')[0].toLowerCase();
+      const nickIsPrefix = !nick || nick.toLowerCase() === prefix;
+      return nickIsPrefix ? (full.split(/\s+/)[0] || full) : nick;
+    }
+
+    // Ordem alfabética por nome, depois sobrenome; empate: conta Google
+    function compareFriends(a, b) {
+      const collator = new Intl.Collator('pt-BR', { sensitivity: 'base' });
+      const split = (f) => {
+        const parts = friendFullName(f).trim().split(/\s+/);
+        return [parts[0] || '', parts.slice(1).join(' ')];
+      };
+      const [firstA, lastA] = split(a);
+      const [firstB, lastB] = split(b);
+      return collator.compare(firstA, firstB)
+        || collator.compare(lastA, lastB)
+        || collator.compare(String(a.email || ''), String(b.email || ''));
+    }
+
     async function renderFriends() {
       const data = await fetch('/api/friends')
         .then(r => r.ok ? r.json() : null)
@@ -2373,7 +2427,7 @@
       if (data.friends.length === 0) {
         list.innerHTML = '<p class="text-xs text-slate-500 text-center py-4">Nenhum amigo ainda.</p>';
       } else {
-        list.innerHTML = data.friends.map(friendRow).join('');
+        list.innerHTML = data.friends.slice().sort(compareFriends).map(friendRow).join('');
       }
 
       // Coluna 2: Solicitações enviadas (você enviou, aguardando resposta)
@@ -2381,7 +2435,7 @@
       if (data.sent.length === 0) {
         sent.innerHTML = '<p class="text-xs text-slate-500 text-center py-4">Nenhuma solicitação enviada aguardando resposta.</p>';
       } else {
-        sent.innerHTML = data.sent.map(sentRow).join('');
+        sent.innerHTML = data.sent.slice().sort(compareFriends).map(sentRow).join('');
       }
 
       // Coluna 3: Convites pendentes (você recebeu, aguardando sua resposta)
@@ -2389,13 +2443,13 @@
       if (data.received.length === 0) {
         received.innerHTML = '<p class="text-xs text-slate-500 text-center py-4">Nenhum convite pendente.</p>';
       } else {
-        received.innerHTML = data.received.map(receivedRow).join('');
+        received.innerHTML = data.received.slice().sort(compareFriends).map(receivedRow).join('');
       }
     }
 
     // Clica na foto, nome ou email do amigo para abrir o perfil dele
     function friendRow(f) {
-      const name = f.playerName || f.displayName || f.email;
+      const name = friendLabel(f);
       const safeName = String(name).replace(/"/g, '&quot;');
       const safePicture = escapeHtmlText(f.picture || '');
       const isOnline = f.online === true;
@@ -2413,7 +2467,7 @@
 
     // Solicitações que você enviou e ainda não foram respondidas
     function sentRow(f) {
-      const name = f.playerName || f.displayName || f.email;
+      const name = friendLabel(f);
       const safeName = String(name).replace(/"/g, '&quot;');
       return `
         <div class="bg-slate-800 border border-slate-700 p-2.5 flex items-center gap-3">
@@ -2422,13 +2476,13 @@
             <p class="text-sm font-bold text-slate-100 truncate">${escapeHtmlText(name)}</p>
             <p class="text-[11px] text-slate-400 truncate">${escapeHtmlText(f.email || '—')}</p>
           </div>
-          <button type="button" data-friend-action="cancel" data-friend-id="${escapeHtmlText(f.id)}" data-friend-name="${safeName}" class="w-7 h-7 flex-shrink-0 flex items-center justify-center bg-red-500 hover:bg-red-600 text-white font-bold text-sm rounded transition" title="Cancelar solicitação">✕</button>
+          <button type="button" data-friend-action="cancel" data-friend-id="${escapeHtmlText(f.id)}" data-friend-name="${safeName}" class="w-7 h-7 flex-shrink-0 flex items-center justify-center bg-red-500 hover:bg-red-600 text-white font-bold text-sm transition" title="Cancelar solicitação">✕</button>
         </div>`;
     }
 
     // Solicitações que você recebeu e ainda não respondeu
     function receivedRow(f) {
-      const name = f.playerName || f.displayName || f.email;
+      const name = friendLabel(f);
       const safeName = String(name).replace(/"/g, '&quot;');
       return `
         <div class="bg-slate-800 border border-slate-700 p-2.5 flex items-center gap-3">
@@ -2437,8 +2491,8 @@
             <p class="text-sm font-bold text-slate-100 truncate">${escapeHtmlText(name)}</p>
             <p class="text-[11px] text-slate-400 truncate">${escapeHtmlText(f.email || '—')}</p>
           </div>
-          <button type="button" data-friend-action="accept" data-friend-id="${escapeHtmlText(f.id)}" data-friend-name="${safeName}" class="w-7 h-7 flex-shrink-0 flex items-center justify-center bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm rounded transition mr-2" title="Aceitar solicitação">✓</button>
-          <button type="button" data-friend-action="decline" data-friend-id="${escapeHtmlText(f.id)}" data-friend-name="${safeName}" class="w-7 h-7 flex-shrink-0 flex items-center justify-center bg-red-500 hover:bg-red-600 text-white font-bold text-sm rounded transition" title="Recusar solicitação">✕</button>
+          <button type="button" data-friend-action="accept" data-friend-id="${escapeHtmlText(f.id)}" data-friend-name="${safeName}" class="w-7 h-7 flex-shrink-0 flex items-center justify-center bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm transition mr-2" title="Aceitar solicitação">✓</button>
+          <button type="button" data-friend-action="decline" data-friend-id="${escapeHtmlText(f.id)}" data-friend-name="${safeName}" class="w-7 h-7 flex-shrink-0 flex items-center justify-center bg-red-500 hover:bg-red-600 text-white font-bold text-sm transition" title="Recusar solicitação">✕</button>
         </div>`;
     }
 
@@ -2469,7 +2523,7 @@
 
         const acc = data.account;
         const rel = data.relation;
-        const name = acc.playerName || acc.displayName || acc.email;
+        const name = friendLabel(acc);
         const safeName = String(name).replace(/"/g, '&quot;');
 
         let action = '';
@@ -2484,8 +2538,8 @@
           action = `<button type="button" disabled class="text-xs font-bold px-3 py-1.5 rounded bg-slate-700/50 text-slate-500">Solicitação enviada</button>`;
           statusText = '';
         } else if (rel === 'received') {
-          action = `<button type="button" data-friend-action="accept" data-friend-id="${escapeHtmlText(acc.id)}" data-friend-name="${safeName}" class="w-7 h-7 flex-shrink-0 flex items-center justify-center bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm rounded transition mr-2" title="Aceitar solicitação">✓</button>
-                    <button type="button" data-friend-action="decline" data-friend-id="${escapeHtmlText(acc.id)}" data-friend-name="${safeName}" class="w-7 h-7 flex-shrink-0 flex items-center justify-center bg-red-500 hover:bg-red-600 text-white font-bold text-sm rounded transition" title="Recusar solicitação">✕</button>`;
+          action = `<button type="button" data-friend-action="accept" data-friend-id="${escapeHtmlText(acc.id)}" data-friend-name="${safeName}" class="w-7 h-7 flex-shrink-0 flex items-center justify-center bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm transition mr-2" title="Aceitar solicitação">✓</button>
+                    <button type="button" data-friend-action="decline" data-friend-id="${escapeHtmlText(acc.id)}" data-friend-name="${safeName}" class="w-7 h-7 flex-shrink-0 flex items-center justify-center bg-red-500 hover:bg-red-600 text-white font-bold text-sm transition" title="Recusar solicitação">✕</button>`;
           statusText = '';
         }
 
@@ -3180,9 +3234,9 @@
 
         if (session !== movementSession) return;
         checkCapture(player, tokensState[player][tokenIdx]);
-        finishMove();
+        await finishMove();
       } catch (error) {
-        if (session === movementSession) finishMove();
+        if (session === movementSession) await finishMove();
       }
     }
 
@@ -3216,7 +3270,7 @@
       if (captured) gameAudio.playCapture();
     }
 
-    function finishMove() {
+    async function finishMove() {
       renderTokens();
       isAnimating = false;
 
@@ -3246,8 +3300,8 @@
         }
 
         // Registra o resultado no histórico da conta
-        postMatchRecord(
-          isOnlineGame ? onlineMatchType : 'local',
+        await postMatchRecord(
+          isOnlineGame ? onlineMatchType : (opponentsCount === 1 ? 'local' : 'multiplayer'),
           humanWon ? 'win' : 'loss',
           getHumanTeamScore(),
           getCpuScore(),
@@ -4031,7 +4085,7 @@
       showResignationScreen(false, 'local', 'CPU');
     }
 
-    function showResignationScreen(humanWon, matchMode, opponentName) {
+    async function showResignationScreen(humanWon, matchMode, opponentName) {
       matchMode = matchMode || 'local';
       opponentName = opponentName || 'Oponente';
       stopTurnTimer();
@@ -4061,7 +4115,7 @@
       document.getElementById('win-modal').classList.remove('hidden');
 
       // Registra o resultado por desistência no histórico da conta
-      postMatchRecord(matchMode, humanWon ? 'win' : 'loss', humanWon ? 4 : 0, humanWon ? 0 : 4, opponentName);
+      await postMatchRecord(matchMode, humanWon ? 'win' : 'loss', humanWon ? 4 : 0, humanWon ? 0 : 4, opponentName);
 
       if (humanWon) gameAudio.playVictory();
       else gameAudio.playDefeat();
