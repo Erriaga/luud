@@ -657,7 +657,10 @@
                   <button type="button" onclick="duplaPickColor('#00a86b')" class="w-6 h-6 rounded-full border-2 border-slate-600" style="background-color:#00a86b;" data-hex="#00a86b"></button>
                   <button type="button" onclick="duplaPickColor('#ffcc00')" class="w-6 h-6 rounded-full border-2 border-slate-600" style="background-color:#ffcc00;" data-hex="#ffcc00"></button>
                   <button type="button" onclick="duplaPickColor('#0096ff')" class="w-6 h-6 rounded-full border-2 border-slate-600" style="background-color:#0096ff;" data-hex="#0096ff"></button>
-                  <button type="button" onclick="duplaPickColor('#d946ef')" class="w-6 h-6 rounded-full border-2 border-slate-600" style="background-color:#d946ef;" data-hex="#d946ef"></button>
+                  <button type="button" onclick="duplaPickColor('#f97316')" class="w-6 h-6 rounded-full border-2 border-slate-600" style="background-color:#f97316;" data-hex="#f97316"></button>
+                  <button type="button" onclick="duplaPickCustomColor()" class="w-6 h-6 rounded-full border-2 border-slate-600 bg-white" data-hex="#ffffff" title="Escolher cor personalizada">
+                    <input type="color" id="dupla-custom-color-picker" value="#ffffff" class="w-full h-full cursor-pointer opacity-0" onchange="duplaPickColor(this.value)">
+                  </button>
                 </div>
               </div>
             </div>
@@ -4393,8 +4396,10 @@
     let duplaTeamName = 'Dupla';
     let duplaTeamColor = '#ef233c'; // vermelho por padrão
     let duplaDuplaColors = ['#ef233c', '#00a86b', '#ffcc00', '#0096ff'];
+    let duplaCustomColor = '#f97316';
     let duplaMatchmakingTimer = null;
     let duplaMatchmakingSeconds = 0;
+    let duplaCustomColor = '#f97316'; // cor personalizada padrão (laranja)
 
     async function loadDuplaFriends() {
       try {
@@ -4429,28 +4434,15 @@
     async function duplaInviteFriend(targetId, targetName, targetPicture) {
       if (duplaMembers.length >= 1) return; // só 1 amigo na dupla
       try {
-        // Envia convite de lobby para o amigo
-        const response = await fetch('/api/online/dupla/invite', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            targetId,
-            teamName: duplaTeamName,
-            teamColor: duplaTeamColor
-          })
-        });
-        if (!response.ok) {
-          const error = await response.json().catch(() => ({}));
-          document.getElementById('dupla-invite-status').textContent = error.error || 'Não foi possível enviar convite.';
-          return;
-        }
+        // Envia convite de lobby para o amigo via WebSocket
+        sendOnline({ type: 'dupla-invite', targetId, teamName: duplaTeamName, teamColor: duplaTeamColor });
         duplaMembers.push({ id: targetId, name: targetName, picture: targetPicture });
         renderDuplaMembers();
         document.getElementById('dupla-invite-status').textContent = 'Convite enviado!';
         setTimeout(() => { document.getElementById('dupla-invite-status').textContent = ''; }, 3000);
         loadDuplaFriends();
       } catch (error) {
-        document.getElementById('dupla-invite-status').textContent = 'Erro de rede.';
+        document.getElementById('dupla-invite-status').textContent = 'Erro ao enviar convite.';
       }
     }
 
@@ -4493,6 +4485,7 @@
     function duplaRemoveMember(index) {
       duplaMembers.splice(index, 1);
       renderDuplaMembers();
+      loadDuplaFriends();
     }
 
     function duplaOpenFriendList() {
@@ -4503,18 +4496,13 @@
       }
     }
 
-    function duplaRemoveMember(index) {
-      duplaMembers.splice(index, 1);
-      renderDuplaMembers();
-      loadDuplaFriends();
-    }
-
     function renderDuplaMembers() {
       const list = document.getElementById('dupla-members');
       list.innerHTML = '';
       // sempre mostra o jogador local primeiro
+      const humanPlayerKey = getHumanPlayerKey();
       const members = [
-        { id: 'me', name: 'Você', picture: '/assets/avatar.svg', isMe: true },
+        { id: 'me', name: humanPlayerKey || 'Você', picture: '/assets/avatar.svg', isMe: true },
         ...duplaMembers
       ];
       members.forEach((m, idx) => {
@@ -4548,6 +4536,11 @@
       });
     }
 
+    function duplaPickCustomColor() {
+      const picker = document.getElementById('dupla-custom-color-picker');
+      picker.click();
+    }
+
     function initDuplaColorPicker() {
       const container = document.getElementById('dupla-color-picker');
       duplaDuplaColors.forEach(hex => {
@@ -4558,6 +4551,12 @@
         btn.onclick = () => duplaPickColor(hex);
         container.appendChild(btn);
       });
+      // Adiciona o botão de cor personalizada
+      const btn = document.createElement('button');
+      btn.className = 'w-6 h-6 rounded-full border-2 border-slate-600 bg-white';
+      btn.dataset.hex = duplaCustomColor;
+      btn.onclick = duplaPickCustomColor;
+      container.appendChild(btn);
     }
 
     async function duplaSearchMatch() {
