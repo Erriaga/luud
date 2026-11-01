@@ -156,6 +156,12 @@ async function loadAccountSession() {
 
     updateAccountUI(data.user);
 
+    // Identifica a conexão WebSocket com esta conta (convites de partida,
+    // solicitações de amizade e status online para os amigos)
+    if (typeof identifyOnlineConnection === 'function') {
+      identifyOnlineConnection(data.user.id);
+    }
+
     const gameNameInput = document.getElementById('player-name-input');
     if (gameNameInput && !gameNameInput.value && data.user.playerName) {
       gameNameInput.value = data.user.playerName;

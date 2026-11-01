@@ -648,20 +648,20 @@
             <div class="space-y-3">
               <div class="flex items-center justify-between">
                 <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Nome da dupla</span>
-                <input id="dupla-team-name" type="text" maxlength="20" value="Dupla" class="bg-slate-900 border border-slate-600 px-3 py-1.5 text-xs rounded text-slate-100 focus:border-slate-400 w-32" />
+                <input id="dupla-team-name" type="text" maxlength="20" value="Dupla" oninput="duplaEditTeamName()" class="bg-slate-900 border border-slate-600 px-3 py-1.5 text-xs rounded text-slate-100 focus:border-slate-400 w-32" />
               </div>
               <div class="flex items-center gap-3">
                 <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Cor da dupla</span>
                 <div class="flex gap-2" id="dupla-color-picker">
-                  <button type="button" onclick="duplaPickColor('#ef233c')" class="w-6 h-6 rounded-full border-2 border-slate-600" style="background-color:#ef233c;" data-hex="#ef233c"></button>
-                  <button type="button" onclick="duplaPickColor('#00a86b')" class="w-6 h-6 rounded-full border-2 border-slate-600" style="background-color:#00a86b;" data-hex="#00a86b"></button>
-                  <button type="button" onclick="duplaPickColor('#ffcc00')" class="w-6 h-6 rounded-full border-2 border-slate-600" style="background-color:#ffcc00;" data-hex="#ffcc00"></button>
-                  <button type="button" onclick="duplaPickColor('#0096ff')" class="w-6 h-6 rounded-full border-2 border-slate-600" style="background-color:#0096ff;" data-hex="#0096ff"></button>
-                  <button type="button" onclick="duplaPickColor('#f97316')" class="w-6 h-6 rounded-full border-2 border-slate-600" style="background-color:#f97316;" data-hex="#f97316"></button>
-                  <button type="button" onclick="duplaPickCustomColor()" class="w-6 h-6 rounded-full border-2 border-slate-600 bg-white" data-hex="#ffffff" title="Escolher cor personalizada">
-                    <input type="color" id="dupla-custom-color-picker" value="#ffffff" class="w-full h-full cursor-pointer opacity-0" onchange="duplaPickColor(this.value)">
+                  <button type="button" onclick="duplaPickColor('#ef233c', 'Vermelho')" class="dupla-color-btn w-6 h-6 rounded-full border-2 border-slate-600" style="background-color:#ef233c;" data-hex="#ef233c" title="Vermelho"></button>
+                  <button type="button" onclick="duplaPickColor('#00a86b', 'Verde')" class="dupla-color-btn w-6 h-6 rounded-full border-2 border-slate-600" style="background-color:#00a86b;" data-hex="#00a86b" title="Verde"></button>
+                  <button type="button" onclick="duplaPickColor('#ffcc00', 'Amarelo')" class="dupla-color-btn w-6 h-6 rounded-full border-2 border-slate-600" style="background-color:#ffcc00;" data-hex="#ffcc00" title="Amarelo"></button>
+                  <button type="button" onclick="duplaPickColor('#0096ff', 'Azul')" class="dupla-color-btn w-6 h-6 rounded-full border-2 border-slate-600" style="background-color:#0096ff;" data-hex="#0096ff" title="Azul"></button>
+                  <button type="button" onclick="duplaPickCustomColor()" class="dupla-color-btn w-6 h-6 rounded-full border-2 border-slate-600 bg-white" data-hex="#ffffff" title="Quinta cor: escolha uma cor personalizada">
+                    <input type="color" id="dupla-custom-color-picker" value="#ffffff" class="w-full h-full cursor-pointer opacity-0" onchange="duplaPickColor(this.value, identifyColorName(this.value))">
                   </button>
                 </div>
+                <span id="dupla-color-label" class="text-[10px] text-slate-400 whitespace-nowrap">Vermelho</span>
               </div>
             </div>
           </div>
@@ -670,7 +670,7 @@
           <div class="bg-slate-800 border border-slate-600 p-4 rounded-lg shadow-md">
             <div class="flex items-center justify-between">
               <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Convidar amigo</span>
-              <button type="button" onclick="duplaOpenFriendList()" class="w-6 h-6 bg-slate-600 hover:bg-slate-500 text-white font-bold text-xs">+</button>
+              <button type="button" onclick="duplaOpenFriendList()" title="Convidar amigo" aria-label="Convidar amigo" class="w-6 h-6 flex items-center justify-center bg-slate-600 hover:bg-slate-500 text-white font-bold text-xs">+</button>
             </div>
             <div id="dupla-friends-list-view" class="hidden space-y-1 max-h-40 overflow-y-auto">
               <!-- lista de amigos online será mostrada aqui -->
@@ -745,13 +745,14 @@
         <div class="bg-slate-800 border border-slate-600 p-6 rounded-lg shadow-2xl w-full max-w-sm text-center">
           <div class="space-y-4">
             <div class="flex items-center gap-2 mb-2">
-              <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Convite de Dupla</span>
+              <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Convite de Partida</span>
+              <span id="dupla-invite-match-type" class="ml-auto text-[10px] font-bold uppercase tracking-wider bg-slate-900 border border-slate-600 px-2 py-1 text-slate-200">DUPLA • 2 vs 2</span>
             </div>
             <div class="flex items-center gap-3">
               <img id="dupla-invite-from-picture" src="/assets/avatar.svg" class="w-10 h-10 rounded-full object-cover" onerror="this.onerror=null;this.src='/assets/avatar.svg'">
               <div class="text-left">
                 <span class="text-sm font-bold text-slate-100" id="dupla-invite-from-name">Jogador</span>
-                <span class="text-[10px] text-slate-500">convidou você para uma dupla</span>
+                <span class="text-[10px] text-slate-500">convidou você para uma partida</span>
               </div>
             </div>
             <div class="flex items-center gap-2 mt-2">
@@ -763,10 +764,11 @@
               <span id="dupla-invite-team-color" class="w-4 h-4 rounded-full border border-slate-600" style="background-color:#ef233c;"></span>
             </div>
             <div class="flex justify-center gap-4 mt-4">
-              <button type="button" onclick="acceptDuplaInvite()" class="w-1/2 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded">Aceitar</button>
-              <button type="button" onclick="declineDuplaInvite()" class="w-1/2 py-2 bg-slate-600 hover:bg-slate-500 text-white font-bold rounded">Recusar</button>
+              <button type="button" onclick="acceptDuplaInvite()" class="w-1/2 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold">Aceitar</button>
+              <button type="button" onclick="declineDuplaInvite()" class="w-1/2 py-2 bg-slate-600 hover:bg-slate-500 text-white font-bold">Recusar</button>
             </div>
             <input type="hidden" id="dupla-invite-from-id">
+            <input type="hidden" id="dupla-invite-invite-id">
             <input type="hidden" id="dupla-invite-team-color-value">
           </div>
         </div>
@@ -1657,7 +1659,20 @@
       const humanHex = usingCustomColor ? customColorHex : PLAYER_COLORS[humanPlayer].hex;
       const humanName = usingCustomColor ? customColorName : PLAYER_COLORS[humanPlayer].name;
 
-      if (isTeamMode()) {
+      if (isOnlineTeamMode()) {
+        // Partida online 2 vs 2: cada time usa a cor escolhida no lobby
+        const myTeam = onlineTeamInfo(onlineTeamIndex);
+        const rivalTeam = onlineTeamInfo(onlineTeamIndex === 0 ? 1 : 0);
+        PLAYERS.forEach(player => {
+          const team = onlineTeamForColor(player);
+          const source = team === onlineTeamIndex ? myTeam : rivalTeam;
+          assignments[player] = {
+            hex: source.color,
+            name: source.name || (source.colorName || PLAYER_COLORS[player].name),
+            custom: true
+          };
+        });
+      } else if (isTeamMode()) {
         const partner = DIAGONAL_PARTNER[humanPlayer];
         const preferredOpponentThemes = humanPlayer === 'RED' || humanPlayer === 'YELLOW'
           ? ['BLUE', 'GREEN', 'RED']
@@ -2032,7 +2047,47 @@
     }
 
     function isTeamMode() {
-      return opponentsCount === 3;
+      return opponentsCount === 3 || isOnlineTeamMode();
+    }
+
+    // Partida online de dupla (2 vs 2) com quatro jogadores humanos
+    function isOnlineTeamMode() {
+      return Boolean(isOnlineGame && onlineTeamMode);
+    }
+
+    // Time (0 ou 1) do jogador dono da cor informada
+    function onlineTeamForColor(player) {
+      if (!onlineSlotColors.length) return null;
+      const index = onlineSlotColors.indexOf(player);
+      if (index === -1) return null;
+      const entry = onlineRoster.find(item => Number(item.slot) === index);
+      return entry ? Number(entry.team) : null;
+    }
+
+    // Dados do time (nome e cor) na partida de dupla online
+    function onlineTeamInfo(teamIndex) {
+      const entry = onlineRoster.find(item => Number(item.team) === Number(teamIndex));
+      return {
+        name: entry ? (entry.teamName || 'Dupla') : 'Dupla',
+        color: entry ? (entry.teamColor || '#ef233c') : '#ef233c',
+        colorName: entry ? (entry.teamColorName || '') : ''
+      };
+    }
+
+    // Jogador da partida de dupla que usa a cor informada
+    function onlineRosterEntryForColor(player) {
+      if (!onlineSlotColors.length) return null;
+      const index = onlineSlotColors.indexOf(player);
+      if (index === -1) return null;
+      return onlineRoster.find(item => Number(item.slot) === index) || null;
+    }
+
+    // Nome do jogador que está no slot informado (2 vs 2 online).
+    // Sem o roster, cai no nome do oponente do modo 1 vs 1.
+    function getOnlinePlayerNameBySlot(slot) {
+      const entry = onlineRoster.find(item => Number(item.slot) === Number(slot));
+      if (entry) return entry.name || entry.playerName || 'Jogador';
+      return getFirstName(onlineOpponentName) || 'Oponente';
     }
 
     function getWinningScore() {
@@ -2048,6 +2103,11 @@
     }
 
     function areSameTeam(playerA, playerB) {
+      if (isOnlineTeamMode()) {
+        const teamA = onlineTeamForColor(playerA);
+        const teamB = onlineTeamForColor(playerB);
+        return teamA !== null && teamA === teamB;
+      }
       if (!isTeamMode()) return playerA === playerB;
       return isHumanTeamPlayer(playerA) === isHumanTeamPlayer(playerB);
     }
@@ -2057,6 +2117,14 @@
     }
 
     function getPlayerDisplayName(player) {
+      // Na partida online de dupla, mostra o apelido de cada jogador
+      if (isOnlineTeamMode()) {
+        const entry = onlineRosterEntryForColor(player);
+        if (entry) {
+          const base = entry.name || entry.playerName || 'Jogador';
+          return player === getHumanPlayerKey() ? `${base} (você)` : base;
+        }
+      }
       if (isOnlineGame && player !== getHumanPlayerKey()) return getFirstName(onlineOpponentName) || 'Oponente';
       if (playerTypes[player] === 'HUMAN') return playerName || 'Você';
       if (playerTypes[player] === 'ALLY') return playerName ? `Aliado de ${playerName}` : 'Aliado';
@@ -2850,6 +2918,10 @@
       onlinePlayerIdx = null;
       onlineOpponentName = null;
       onlineOpponentColor = null;
+      onlineRoster = [];
+      onlineTeamIndex = 0;
+      onlineTeamMode = false;
+      onlineSlotColors = [];
 
       // Restaura a escolha de cor feita na tela inicial antes da partida
       // online (o slot usado na partida era definido pelo servidor)
@@ -3056,6 +3128,12 @@
     }
 
     function getHumanTeamScore() {
+      // No modo online de dupla (2 vs 2), conta a soma dos pontos do meu time
+      if (isOnlineTeamMode()) {
+        return activePlayers.reduce((total, player) => {
+          return total + (onlineTeamForColor(player) === onlineTeamIndex ? (playerScores[player] || 0) : 0);
+        }, 0);
+      }
       // No modo online, apenas os pontos do jogador local contam para o placar
       if (isOnlineGame) return playerScores[getHumanPlayerKey()] || 0;
       return activePlayers.reduce((total, player) => {
@@ -3064,6 +3142,13 @@
     }
 
     function getCpuScore() {
+      // No modo online de dupla (2 vs 2), conta a soma dos pontos do time rival
+      if (isOnlineTeamMode()) {
+        return activePlayers.reduce((total, player) => {
+          const team = onlineTeamForColor(player);
+          return total + (team !== null && team !== onlineTeamIndex ? (playerScores[player] || 0) : 0);
+        }, 0);
+      }
       // No modo online, o slot do oponente mostra os pontos do jogador remoto
       if (isOnlineGame) {
         const opponentKey = activePlayers.find(player => player !== getHumanPlayerKey());
@@ -3106,7 +3191,24 @@
       const line3 = document.getElementById('score-line3-row');
       const line4 = document.getElementById('score-line4-row');
 
-      if (isTeamMode()) {
+      if (isOnlineTeamMode()) {
+        // Partida online 2 vs 2: placar com os dois times (nome e cor do lobby)
+        line3.classList.add('hidden');
+        line4.classList.add('hidden');
+
+        const myTeam = onlineTeamInfo(onlineTeamIndex);
+        const rivalTeam = onlineTeamInfo(onlineTeamIndex === 0 ? 1 : 0);
+
+        document.getElementById('score-line1-name').innerText = myTeam.name || 'Dupla';
+        document.getElementById('score-line1-points').innerText = getHumanTeamScore();
+        document.getElementById('score-line1-dot').style.backgroundColor = myTeam.color;
+        document.getElementById('score-line1-dot').className = 'w-2 h-2 rounded-full shrink-0';
+
+        document.getElementById('score-line2-name').innerText = rivalTeam.name || 'Dupla adversária';
+        document.getElementById('score-line2-points').innerText = getCpuScore();
+        document.getElementById('score-line2-dot').style.backgroundColor = rivalTeam.color;
+        document.getElementById('score-line2-dot').className = 'w-2 h-2 rounded-full shrink-0';
+      } else if (isTeamMode()) {
         // Modo DUPLA: apenas 2 linhas, linha 2 mostra o somatório do time adversário
         line3.classList.add('hidden');
         line4.classList.add('hidden');
@@ -3706,7 +3808,15 @@
       playerTypes = { RED: 'NONE', GREEN: 'NONE', YELLOW: 'NONE', BLUE: 'NONE' };
       playerTypes[humanPlayerKey] = 'HUMAN';
 
-      if (isTeamMode()) {
+      if (isOnlineTeamMode()) {
+        // Partida online 2 vs 2: o jogador local, o parceiro (em outra aba)
+        // e os dois adversários são todos humanos controlados por WebSocket
+        CLOCKWISE_COLORS.forEach(color => {
+          if (color !== humanPlayerKey) {
+            playerTypes[color] = 'HUMAN';
+          }
+        });
+      } else if (isTeamMode()) {
         // Duplas nas bases diagonais: humano + 1 CPU aliado vs 2 CPUs adversárias.
         const partnerColor = DIAGONAL_PARTNER[humanPlayerKey];
         playerTypes[partnerColor] = 'ALLY';
@@ -3909,8 +4019,13 @@
     let quickMatchTimerInterval = null; // cronômetro da fila do Jogo Rápido
     let matchFoundInterval = null; // contagem regressiva do aviso "PARTIDA ENCONTRADA"
     let pendingQuickStart = null; // jogadores da partida encontrada, aguardando o aviso terminar
+    let pendingGameStarter = null; // função que inicia a partida ao fim do aviso
     let abandonCountdownInterval = null;
     let onlineOpponentProfile = null; // perfil completo do oponente (id, e-mail, foto)
+    let onlineRoster = []; // jogadores da partida de dupla (2 vs 2)
+    let onlineTeamIndex = 0; // time do jogador local na partida de dupla
+    let onlineTeamMode = false; // partida online 2 vs 2 (4 jogadores)
+    let onlineSlotColors = []; // cor de cada slot da partida de dupla
     let opponentMenuOpen = false; // menu do oponente aberto no placar
     let friendConfirmTarget = null; // { id, name } aguardando confirmação de remoção
     let pendingFriendRequestsCount = 0; // solicitações de amizade recebidas não lidas
@@ -3992,6 +4107,14 @@
       }
     }
 
+    // Identifica a conexão WebSocket com a conta logada.
+    // Necessário para receber convites de partida, solicitações de
+    // amizade e para que os amigos vejam o status online.
+    function identifyOnlineConnection(userId) {
+      if (!userId) return;
+      sendOnline({ type: 'identify', uid: userId });
+    }
+
     function sendOnlineRaw(payload) {
       if (onlineWs && onlineWs.readyState === WebSocket.OPEN) {
         onlineWs.send(JSON.stringify(payload));
@@ -4057,6 +4180,7 @@
           // começa o jogo quando a contagem regressiva chegar ao fim
           if (matchFoundInterval) {
             pendingQuickStart = data.players;
+            pendingGameStarter = null;
             return;
           }
           onlineQueued = false;
@@ -4109,9 +4233,9 @@
 
         case 'pass_turn':
           if (!isOnlineGame) return;
-          // O oponente passou a vez (sem movimentos, 3 seis ou tempo esgotado):
-          // avança o turno aqui também para manter os dois clientes sincronizados
-          logStatus(`${getFirstName(onlineOpponentName) || 'Oponente'} passou a vez.`);
+          // O jogador passou a vez (sem movimentos, 3 seis ou tempo esgotado):
+          // avança o turno aqui também para manter os clientes sincronizados
+          logStatus(`${getOnlinePlayerNameBySlot(data.from)} passou a vez.`);
           document.getElementById('dice-instruction').textContent = 'Toque para rolar';
           nextTurn();
           break;
@@ -4158,6 +4282,57 @@
           if (!document.getElementById('friends-modal').classList.contains('hidden')) {
             renderFriends();
           }
+          break;
+
+        case 'dupla_invite':
+          // Convite de partida de dupla recebido: mostra tipo de partida,
+          // quem convidou e os botões de aceitar/recusar
+          showDuplaInvite(data);
+          break;
+
+        case 'dupla_invite_result':
+          // Resposta do amigo ao convite (aceito ou recusado)
+          if (data.status === 'declined') {
+            setDuplaStatus('O convite foi recusado.', 'text-amber-400');
+          } else if (data.status === 'accepted') {
+            setDuplaStatus('Convite aceito! O amigo entrou no lobby.', 'text-emerald-400');
+          } else if (data.status === 'offline') {
+            setDuplaStatus('Não foi possível enviar convite: o amigo está offline.', 'text-red-400');
+          } else if (data.message) {
+            setDuplaStatus(data.message);
+          }
+          break;
+
+        case 'dupla_lobby':
+          // Lobby sincronizado pelo servidor (jogadores presentes + criador)
+          applyDuplaLobby(data.lobby);
+          break;
+
+        case 'dupla_queued':
+          duplaQueued = true;
+          setDuplaStatus(data.message || 'Na fila: procurando uma dupla adversária...', 'text-emerald-400');
+          break;
+
+        case 'dupla_queue_error':
+          duplaQueued = false;
+          stopDuplaMatchmakingTimer();
+          setDuplaStatus(data.error || 'Não foi possível entrar na fila.', 'text-red-400');
+          break;
+
+        case 'dupla_match_found':
+          // Partida de dupla encontrada: todos os jogadores recebem a mensagem
+          // e começam juntos ao fim da contagem regressiva
+          duplaQueued = false;
+          stopDuplaMatchmakingTimer();
+          setDuplaStatus('Partida encontrada!', 'text-emerald-400');
+          pendingQuickStart = null;
+          pendingGameStarter = () => startOnlineDuplaGame(data);
+          showMatchFoundNotice();
+          break;
+
+        case 'dupla_match_started_elsewhere':
+          // A partida começou em outra aba deste mesmo usuário
+          setDuplaStatus(data.message || 'A partida começou em outra aba.', 'text-amber-400');
           break;
 
         case 'error':
@@ -4278,10 +4453,16 @@
     }
 
     function startPendingQuickGame() {
+      const starter = pendingGameStarter;
       const players = pendingQuickStart;
       pendingQuickStart = null;
+      pendingGameStarter = null;
       onlineQueued = false;
       closeOnlineModal();
+      if (typeof starter === 'function') {
+        starter();
+        return;
+      }
       if (players) {
         startOnlineGame(players);
       }
@@ -4359,6 +4540,8 @@
       initDuplaColorPicker();
       renderDuplaMembers();
       loadDuplaFriends();
+      // Pede ao servidor o estado atual do lobby (jogadores presentes e criador)
+      sendOnline({ type: 'dupla_lobby_request' });
       gameAudio.playClick();
     }
 
@@ -4391,214 +4574,310 @@
 
     /* ================================================================
        LOBBY DUPLA ONLINE - 2 vs 2
+       O lobby é mantido pelo servidor: quem cria o lobby é o "dono"
+       (host) e os amigos entram depois de aceitar o convite.
        ================================================================ */
-    let duplaMembers = []; // array de {id, name, picture}
+    // As 4 cores fixas da dupla. A 5ª opção é a cor personalizada.
+    const DUPLA_PRESET_COLORS = [
+      { hex: '#ef233c', name: 'Vermelho' },
+      { hex: '#00a86b', name: 'Verde' },
+      { hex: '#ffcc00', name: 'Amarelo' },
+      { hex: '#0096ff', name: 'Azul' }
+    ];
+    let duplaLobbyRoster = [];      // [{ id, name, picture, isHost }] - jogadores no lobby
+    let duplaMembers = [];          // membros do lobby (sem o dono)
     let duplaTeamName = 'Dupla';
-    let duplaTeamColor = '#ef233c'; // vermelho por padrão
-    let duplaDuplaColors = ['#ef233c', '#00a86b', '#ffcc00', '#0096ff'];
-    let duplaCustomColor = '#f97316';
+    let duplaTeamColor = '#ef233c'; // cor da dupla (vermelho por padrão)
+    let duplaTeamColorName = 'Vermelho';
+    let duplaLobbyHostId = null;    // id de quem criou o lobby
     let duplaMatchmakingTimer = null;
     let duplaMatchmakingSeconds = 0;
-    let duplaCustomColor = '#f97316'; // cor personalizada padrão (laranja)
+    let duplaQueued = false;        // está na fila buscando partida
+    let pendingDuplaInvite = null;  // convite recebido (aguardando resposta)
+
+    // Perfil do usuário logado (usado na lista "Sua dupla")
+    function currentAccountProfile() {
+      const account = (typeof accountUser !== 'undefined' && accountUser) ? accountUser : null;
+      if (!account) return null;
+      return {
+        id: getAccountUid(),
+        name: account.playerName || account.displayName || 'Você',
+        picture: account.picture || account.avatarUrl || '/assets/avatar.svg'
+      };
+    }
+
+    function setDuplaStatus(message, tone) {
+      const el = document.getElementById('dupla-invite-status');
+      if (!el) return;
+      el.textContent = message || '';
+      el.className = 'text-xs text-center mt-2 ' + (tone || 'text-slate-400');
+    }
 
     async function loadDuplaFriends() {
+      const list = document.getElementById('dupla-friends-list-view');
+      if (!list) return;
       try {
         const response = await fetch('/api/friends');
         const data = await response.json();
         const friends = data.friends || [];
-        const list = document.getElementById('dupla-friends-list-view');
         list.innerHTML = '';
+        if (!friends.length) {
+          list.innerHTML = '<p class="text-xs text-slate-500 p-2">Você ainda não tem amigos na lista.</p>';
+          return;
+        }
         friends.forEach(f => {
           const alreadyMember = duplaMembers.some(m => m.id === f.id);
-          const onlineStatus = f.online ? 'Online' : 'Offline';
-          const statusColor = f.online ? 'text-emerald-400' : 'text-slate-500';
-          const div = document.createElement('div');
-          div.className = 'flex items-center justify-between p-2 bg-slate-900 border border-slate-700 rounded hover:bg-slate-800 cursor-pointer ' + (alreadyMember ? 'bg-slate-700' : '');
-          div.innerHTML = `
-            <div class="flex items-center gap-3">
-              <img src="${f.picture || '/assets/avatar.svg'}" class="w-6 h-6 rounded-full object-cover" onerror="this.onerror=null;this.src='/assets/avatar.svg'">
-              <div class="flex-1 min-w-0">
-                <span class="text-sm text-slate-100 truncate">${friendLabel(f)}</span>
-                <span class="text-[10px] ${statusColor}">${onlineStatus}</span>
+          const isOnline = f.online === true;
+          const statusText = isOnline ? 'Online' : 'Offline';
+          const statusClass = isOnline ? 'text-emerald-400' : 'text-slate-500';
+          const row = document.createElement('div');
+          row.className = 'flex items-center justify-between gap-2 p-2 bg-slate-900 border border-slate-700';
+          row.innerHTML = `
+            <div class="flex items-center gap-3 min-w-0">
+              <img src="${escapeHtmlText(f.picture || '/assets/avatar.svg')}" class="w-8 h-8 rounded-full object-cover shrink-0" onerror="this.onerror=null;this.src='/assets/avatar.svg'" alt="">
+              <div class="flex flex-col min-w-0">
+                <span class="text-sm text-slate-100 truncate">${escapeHtmlText(friendLabel(f))}</span>
+                <span class="text-[10px] ${statusClass}">${statusText}</span>
               </div>
             </div>
-            ${alreadyMember ? '<span class="text-xs text-emerald-400 font-bold">Na dupla</span>' : `<button type="button" onclick="duplaInviteFriend('${f.id}', '${friendLabel(f)}', '${f.picture || ''}')" class="text-xs bg-slate-600 hover:bg-slate-500 text-white px-2 py-1 rounded">Convidar</button>`}
+            ${alreadyMember
+              ? '<span class="text-xs text-emerald-400 font-bold shrink-0">Na dupla</span>'
+              : `<button type="button" onclick="duplaInviteFriend('${escapeHtmlText(f.id)}')" ${isOnline ? '' : 'disabled title="O amigo está offline"'} class="w-7 h-7 shrink-0 flex items-center justify-center bg-slate-600 hover:bg-slate-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-bold text-base leading-none" title="Convidar para a dupla">+</button>`}
           `;
-          list.appendChild(div);
+          list.appendChild(row);
         });
       } catch (error) {
-        document.getElementById('dupla-invite-status').textContent = 'Erro ao carregar amigos.';
+        list.innerHTML = '<p class="text-xs text-red-400 p-2">Erro ao carregar amigos.</p>';
       }
     }
 
-    async function duplaInviteFriend(targetId, targetName, targetPicture) {
-      if (duplaMembers.length >= 1) return; // só 1 amigo na dupla
-      try {
-        // Envia convite de lobby para o amigo via WebSocket
-        sendOnline({ type: 'dupla-invite', targetId, teamName: duplaTeamName, teamColor: duplaTeamColor });
-        duplaMembers.push({ id: targetId, name: targetName, picture: targetPicture });
-        renderDuplaMembers();
-        document.getElementById('dupla-invite-status').textContent = 'Convite enviado!';
-        setTimeout(() => { document.getElementById('dupla-invite-status').textContent = ''; }, 3000);
-        loadDuplaFriends();
-      } catch (error) {
-        document.getElementById('dupla-invite-status').textContent = 'Erro ao enviar convite.';
+    function duplaInviteFriend(targetId) {
+      if (!targetId) return;
+      if (duplaMembers.length >= 1) {
+        setDuplaStatus('A dupla já está completa (2/2).');
+        return;
       }
+      sendOnline({
+        type: 'dupla_invite',
+        targetId: targetId,
+        teamName: duplaTeamName,
+        teamColor: duplaTeamColor,
+        teamColorName: duplaTeamColorName
+      });
+      setDuplaStatus('Convite enviado! Aguardando resposta...');
     }
 
-    // Função chamada quando recebe um convite de dupla via WebSocket
-    function showDuplaInvite(fromId, fromName, fromPicture, teamName, teamColor) {
+    // Convite recebido via WebSocket: abre a tela com o tipo de partida,
+    // quem convidou e os botões de aceitar/recusar
+    function showDuplaInvite(payload) {
+      const data = payload || {};
+      pendingDuplaInvite = data;
       const modal = document.getElementById('dupla-invite-modal');
-      document.getElementById('dupla-invite-from-picture').src = fromPicture || '/assets/avatar.svg';
-      document.getElementById('dupla-invite-from-name').textContent = fromName;
-      document.getElementById('dupla-invite-team-name').textContent = teamName;
-      document.getElementById('dupla-invite-team-color').style.backgroundColor = teamColor;
-      document.getElementById('dupla-invite-from-id').value = fromId;
-      document.getElementById('dupla-invite-team-color-value').value = teamColor;
+      if (!modal) return;
+      document.getElementById('dupla-invite-from-picture').src = data.fromPicture || '/assets/avatar.svg';
+      document.getElementById('dupla-invite-from-name').textContent = data.fromName || 'Jogador';
+      document.getElementById('dupla-invite-match-type').textContent = data.matchTypeLabel || 'DUPLA • 2 vs 2';
+      document.getElementById('dupla-invite-team-name').textContent = data.teamName || 'Dupla';
+      document.getElementById('dupla-invite-team-color').style.backgroundColor = data.teamColor || '#ef233c';
+      document.getElementById('dupla-invite-from-id').value = data.fromId || '';
+      document.getElementById('dupla-invite-invite-id').value = data.inviteId || '';
+      document.getElementById('dupla-invite-team-color-value').value = data.teamColor || '#ef233c';
       modal.classList.remove('hidden');
     }
 
     function acceptDuplaInvite() {
-      const fromId = document.getElementById('dupla-invite-from-id').value;
-      const teamName = document.getElementById('dupla-invite-team-name').textContent;
-      const teamColor = document.getElementById('dupla-invite-team-color-value').value;
-      const fromPicture = document.getElementById('dupla-invite-from-picture').src;
+      if (!pendingDuplaInvite) return;
+      sendOnline({
+        type: 'dupla_invite_response',
+        inviteId: pendingDuplaInvite.inviteId,
+        accept: true
+      });
       hideDuplaInviteModal();
-      
-      duplaMembers.push({ id: fromId, name: fromName, picture: fromPicture });
-      duplaTeamName = teamName;
-      duplaTeamColor = teamColor;
-      renderDuplaMembers();
-      loadDuplaFriends();
-      document.getElementById('dupla-invite-status').textContent = 'Convite aceito!';
-      setTimeout(() => { document.getElementById('dupla-invite-status').textContent = ''; }, 3000);
+      setDuplaStatus('Convite aceito! Entrando no lobby...');
     }
 
     function declineDuplaInvite() {
+      if (!pendingDuplaInvite) return;
+      sendOnline({
+        type: 'dupla_invite_response',
+        inviteId: pendingDuplaInvite.inviteId,
+        accept: false
+      });
       hideDuplaInviteModal();
     }
 
     function hideDuplaInviteModal() {
-      document.getElementById('dupla-invite-modal').classList.add('hidden');
+      pendingDuplaInvite = null;
+      const modal = document.getElementById('dupla-invite-modal');
+      if (modal) modal.classList.add('hidden');
     }
 
-    function duplaRemoveMember(index) {
-      duplaMembers.splice(index, 1);
-      renderDuplaMembers();
-      loadDuplaFriends();
+    // O dono do lobby pode remover um membro
+    function duplaRemoveMember(memberId) {
+      if (!memberId) return;
+      sendOnline({ type: 'dupla_lobby_remove', memberId: memberId });
     }
 
     function duplaOpenFriendList() {
       const list = document.getElementById('dupla-friends-list-view');
+      if (!list) return;
       list.classList.toggle('hidden');
       if (!list.classList.contains('hidden')) {
         loadDuplaFriends();
       }
     }
 
+    // Atualiza a lista "SUA DUPLA" com os jogadores presentes no lobby
     function renderDuplaMembers() {
       const list = document.getElementById('dupla-members');
+      if (!list) return;
+      const me = currentAccountProfile();
+      let roster = Array.isArray(duplaLobbyRoster) ? duplaLobbyRoster.slice() : [];
+
+      // Enquanto o servidor não sincroniza o lobby, mostra o próprio jogador
+      if (!roster.length && me) {
+        roster = [{ id: me.id, name: me.name, picture: me.picture, isHost: true }];
+      }
+
       list.innerHTML = '';
-      // sempre mostra o jogador local primeiro
-      const humanPlayerKey = getHumanPlayerKey();
-      const members = [
-        { id: 'me', name: humanPlayerKey || 'Você', picture: '/assets/avatar.svg', isMe: true },
-        ...duplaMembers
-      ];
-      members.forEach((m, idx) => {
-        const div = document.createElement('div');
-        div.className = 'flex items-center justify-between p-2 bg-slate-900 border border-slate-600 rounded';
-        div.innerHTML = `
-          <div class="flex items-center gap-3">
-            <img src="${m.picture}" class="w-6 h-6 rounded-full object-cover" onerror="this.onerror=null;this.src='/assets/avatar.svg'">
-            <span class="text-sm text-slate-100 truncate">${m.name}</span>
+      roster.forEach(m => {
+        const isMe = Boolean(me && m.id === me.id);
+        const isHost = Boolean(m.isHost);
+        const isOnline = m.online !== false;
+        const row = document.createElement('div');
+        row.className = 'flex items-center justify-between gap-2 p-2 bg-slate-900 border border-slate-600';
+        row.innerHTML = `
+          <div class="flex items-center gap-3 min-w-0">
+            <img src="${escapeHtmlText(m.picture || '/assets/avatar.svg')}" class="w-8 h-8 rounded-full object-cover shrink-0" onerror="this.onerror=null;this.src='/assets/avatar.svg'" alt="">
+            <div class="flex flex-col min-w-0">
+              <span class="text-sm text-slate-100 truncate">${escapeHtmlText(m.name || 'Jogador')}${isMe ? ' (você)' : ''}</span>
+              <span class="text-[10px] ${isOnline ? 'text-emerald-400' : 'text-slate-500'}">${isOnline ? 'Online' : 'Offline'}${isHost ? ' • Criador do lobby' : ''}</span>
+            </div>
           </div>
-          ${!m.isMe ? `<button type="button" onclick="duplaRemoveMember(${idx - 1})" class="text-xs text-red-400 hover:text-red-300">Remover</button>` : ''}
+          ${!isHost && !isMe && isDuplaLobbyHost() ? `<button type="button" onclick="duplaRemoveMember('${escapeHtmlText(m.id)}')" class="text-xs text-red-400 hover:text-red-300 shrink-0">Remover</button>` : ''}
         `;
-        list.appendChild(div);
+        list.appendChild(row);
       });
-      document.getElementById('dupla-team-size').textContent = members.length + '/2';
-      // Permitir buscar partida mesmo sozinho
-      document.getElementById('dupla-search-btn').disabled = false;
+
+      const sizeEl = document.getElementById('dupla-team-size');
+      if (sizeEl) sizeEl.textContent = roster.length + '/2';
+
+      // Dá para buscar partida mesmo estando sozinho no lobby
+      const searchBtn = document.getElementById('dupla-search-btn');
+      if (searchBtn && !duplaQueued) searchBtn.disabled = false;
+    }
+
+    function isDuplaLobbyHost() {
+      const me = currentAccountProfile();
+      if (!me) return false;
+      if (!duplaLobbyHostId) return true;
+      return duplaLobbyHostId === me.id;
+    }
+
+    // Recebe o lobby sincronizado pelo servidor
+    function applyDuplaLobby(lobby) {
+      if (!lobby) return;
+      const me = currentAccountProfile();
+      duplaLobbyHostId = lobby.hostId || null;
+      if (lobby.teamName) duplaTeamName = lobby.teamName;
+      if (lobby.teamColor) {
+        duplaTeamColor = lobby.teamColor;
+        duplaTeamColorName = lobby.teamColorName || identifyColorName(lobby.teamColor);
+      }
+      duplaLobbyRoster = Array.isArray(lobby.members) ? lobby.members.map(m => ({
+        id: m.id,
+        name: m.name || 'Jogador',
+        picture: m.picture || '/assets/avatar.svg',
+        isHost: Boolean(m.isHost),
+        online: m.online !== false
+      })) : [];
+      duplaMembers = duplaLobbyRoster.filter(m => !me || m.id !== me.id);
+      updateDuplaColorPickerUI();
+      renderDuplaMembers();
+      loadDuplaFriends();
     }
 
     function duplaEditTeamName() {
       const input = document.getElementById('dupla-team-name');
-      duplaTeamName = input.value || 'Dupla';
+      duplaTeamName = (input && input.value.trim()) || 'Dupla';
     }
 
-    function duplaPickColor(hex) {
-      duplaTeamColor = hex;
-      // atualizar visual dos botões de cor
-      document.querySelectorAll('#dupla-color-picker button').forEach(btn => {
-        btn.classList.toggle('ring-2', btn.dataset.hex === hex);
-        btn.classList.toggle('ring-white', btn.dataset.hex === hex);
-      });
+    function duplaPickColor(hex, colorName) {
+      const normalized = normalizeHexColor(hex);
+      if (!normalized) return;
+      duplaTeamColor = normalized;
+      duplaTeamColorName = colorName || identifyColorName(normalized);
+      updateDuplaColorPickerUI();
     }
 
     function duplaPickCustomColor() {
       const picker = document.getElementById('dupla-custom-color-picker');
-      picker.click();
+      if (picker) picker.click();
+    }
+
+    // Mantém o destaque da cor selecionada (sem criar botões duplicados)
+    function updateDuplaColorPickerUI() {
+      document.querySelectorAll('#dupla-color-picker .dupla-color-btn').forEach(btn => {
+        const selected = btn.dataset.hex === duplaTeamColor;
+        btn.classList.toggle('ring-2', selected);
+        btn.classList.toggle('ring-white', selected);
+      });
+      const label = document.getElementById('dupla-color-label');
+      if (label) label.textContent = duplaTeamColorName;
+      const picker = document.getElementById('dupla-custom-color-picker');
+      if (picker) picker.value = duplaTeamColor;
     }
 
     function initDuplaColorPicker() {
-      const container = document.getElementById('dupla-color-picker');
-      duplaDuplaColors.forEach(hex => {
-        const btn = document.createElement('button');
-        btn.className = 'w-6 h-6 rounded-full border-2 border-slate-600 ' + (hex === duplaTeamColor ? 'ring-2 ring-white' : '');
-        btn.style.backgroundColor = hex;
-        btn.dataset.hex = hex;
-        btn.onclick = () => duplaPickColor(hex);
-        container.appendChild(btn);
-      });
-      // Adiciona o botão de cor personalizada
-      const btn = document.createElement('button');
-      btn.className = 'w-6 h-6 rounded-full border-2 border-slate-600 bg-white';
-      btn.dataset.hex = duplaCustomColor;
-      btn.onclick = duplaPickCustomColor;
-      container.appendChild(btn);
+      // Os botões já existem no HTML: aqui só sincroniza o estado inicial
+      updateDuplaColorPickerUI();
     }
 
-    async function duplaSearchMatch() {
-      if (duplaMembers.length < 1) return;
+    function stopDuplaMatchmakingTimer() {
+      if (duplaMatchmakingTimer) {
+        clearInterval(duplaMatchmakingTimer);
+        duplaMatchmakingTimer = null;
+      }
       const btn = document.getElementById('dupla-search-btn');
+      if (btn) {
+        btn.textContent = 'BUSCAR PARTIDA';
+        btn.disabled = false;
+      }
+    }
+
+    function duplaSearchMatch() {
+      const btn = document.getElementById('dupla-search-btn');
+      if (!btn) return;
+
+      if (duplaQueued) {
+        // Cancelar a busca
+        sendOnline({ type: 'dupla_leave_queue' });
+        duplaQueued = false;
+        stopDuplaMatchmakingTimer();
+        setDuplaStatus('Busca cancelada.');
+        return;
+      }
+
+      // É possível buscar partida mesmo sozinho: a dupla completa
+      // (2/2) ou incompleta (1/2) entra na fila do servidor.
       btn.disabled = true;
       btn.textContent = 'BUSCAR PARTIDA...';
       duplaMatchmakingSeconds = 0;
+      stopDuplaMatchmakingTimer();
+      btn.textContent = 'BUSCAR PARTIDA...';
+      btn.disabled = true;
       duplaMatchmakingTimer = setInterval(() => {
         duplaMatchmakingSeconds++;
         btn.textContent = `BUSCAR PARTIDA... (${duplaMatchmakingSeconds}s)`;
       }, 1000);
-      try {
-        const response = await fetch('/api/online/dupla/queue', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            teamName: duplaTeamName,
-            teamColor: duplaTeamColor,
-            members: duplaMembers.map(m => m.id)
-          })
-        });
-        if (!response.ok) {
-          const error = await response.json().catch(() => ({}));
-          document.getElementById('dupla-invite-status').textContent = error.error || 'Erro na fila.';
-          btn.disabled = false;
-          btn.textContent = 'BUSCAR PARTIDA';
-          clearInterval(duplaMatchmakingTimer);
-          return;
-        }
-        const data = await response.json();
-        document.getElementById('dupla-invite-status').textContent = 'Partida encontrada!';
-        setTimeout(() => {
-          clearInterval(duplaMatchmakingTimer);
-          startOnlineDuplaGame(data);
-        }, 1000);
-      } catch (error) {
-        document.getElementById('dupla-invite-status').textContent = 'Erro de rede.';
-        btn.disabled = false;
-        btn.textContent = 'BUSCAR PARTIDA';
-        clearInterval(duplaMatchmakingTimer);
-      }
+
+      sendOnline({
+        type: 'dupla_queue',
+        teamName: duplaTeamName,
+        teamColor: duplaTeamColor,
+        teamColorName: duplaTeamColorName
+      });
+      setDuplaStatus('Procurando uma dupla adversária...');
     }
 
     /* ================================================================
@@ -4715,13 +4994,72 @@
       }
     }
 
+    // Inicia a partida de dupla online (1 vs 1 com duplas de um jogador
+    // ou 2 vs 2 com quatro jogadores)
     function startOnlineDuplaGame(data) {
-      // inicializar partida dupla online
+      const roster = Array.isArray(data.players) ? data.players : [];
+      const mySlot = Number(data.slot);
+      const myEntry = roster.find(player => Number(player.slot) === mySlot);
+      if (!myEntry) {
+        setDuplaStatus('Não foi possível iniciar a partida.', 'text-red-400');
+        return;
+      }
+
+      const soloMatch = Boolean(data.solo);
+
+      onlineRoster = roster;
+      onlinePlayerIdx = mySlot;
+      onlineTeamIndex = Number(myEntry.team);
+      onlineTeamMode = !soloMatch;
+      onlineMatchType = 'dupla';
       isOnlineGame = true;
-      opponentsCount = 2; // 2 vs 2
-      // ... lógica de inicialização da partida dupla
+      opponentsCount = soloMatch ? 1 : 3;
+
+      // Slot de cor: no 1 vs 1 os slots são diagonais (AZUL/VERDE);
+      // no 2 vs 2 são os quatro slots na ordem horária
+      onlineSlotColors = soloMatch ? ['BLUE', 'GREEN'] : CLOCKWISE_COLORS.slice();
+      const localColorKey = onlineSlotColors[mySlot] || 'BLUE';
+
+      // Guarda a escolha de cor da tela inicial para restaurar ao sair da partida
+      preOnlineColorState = {
+        selectedHumanColor,
+        usingCustomColor,
+        customColorHex,
+        customColorName
+      };
+
+      // A cor escolhida no lobby da dupla vira a cor do time no tabuleiro
+      selectedHumanColor = localColorKey;
+      customColorHex = myEntry.teamColor || '#ef233c';
+      customColorName = myEntry.teamColorName || identifyColorName(customColorHex);
+      usingCustomColor = !soloMatch ? false : true;
+
+      if (soloMatch) {
+        const opponent = roster.find(player => Number(player.slot) !== mySlot);
+        onlineOpponentName = opponent ? (opponent.name || 'Dupla adversária') : 'Dupla adversária';
+        onlineOpponentProfile = opponent ? {
+          id: opponent.id,
+          name: opponent.name,
+          email: '',
+          picture: opponent.picture || '',
+          playerName: opponent.name
+        } : null;
+        if (opponent) {
+          onlineOpponentColor = {
+            hex: opponent.teamColor || '#0096ff',
+            name: opponent.teamColorName || identifyColorName(opponent.teamColor || '#0096ff'),
+            custom: true
+          };
+        }
+      } else {
+        const rival = roster.find(player => Number(player.team) !== onlineTeamIndex);
+        onlineOpponentName = rival ? (rival.teamName || 'Dupla adversária') : 'Dupla adversária';
+      }
+
+      updateColorVariables();
+      updateColorSelectionUI();
+
       hideOnlineDuplaView();
-      // iniciar jogo
       startGame();
     }
 
@@ -5091,7 +5429,7 @@
         // durante a animação), não marca o dado como rolado
         if (isOnlineGame && getCurrentPlayer() !== getHumanPlayerKey()) {
           hasRolled = true;
-          const opponentName = getFirstName(onlineOpponentName) || 'Oponente';
+          const opponentName = getOnlinePlayerNameBySlot(from);
           document.getElementById('dice-instruction').textContent = `${opponentName} tirou ${value}!`;
           logStatus(`${opponentName} tirou ${value} no dado!`);
         }
@@ -5214,12 +5552,9 @@
           if (typeof updateAccountUI === 'function') updateAccountUI(data.user);
 
           // Identifica esta conexão WebSocket para receber notificações em tempo real
-          // (solicitações de amizade, etc.) mesmo sem estar numa sala de jogo.
-          if (onlineWs && onlineWs.readyState === WebSocket.OPEN) {
-            onlineWs.send(JSON.stringify({ type: 'identify', uid: data.user.id }));
-          } else if (onlineWs && onlineWs.readyState === WebSocket.CONNECTING) {
-            onlineSendQueue.push({ type: 'identify', uid: data.user.id });
-          }
+          // (solicitações de amizade, convites de partida, etc.) mesmo sem estar
+          // numa sala de jogo.
+          identifyOnlineConnection(data.user.id);
 
           const nameInput = document.getElementById('player-name-input');
           if (nameInput && !nameInput.value) {
@@ -5322,6 +5657,7 @@
       }
     };
   </script>
-  <script src="/auth.js" defer></script>
+  <!-- A versão no link evita que o navegador use um auth.js antigo em cache -->
+  <script src="/auth.js?v=20261101" defer></script>
 </body>
 </html>

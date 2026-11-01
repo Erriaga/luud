@@ -30,6 +30,22 @@ const userConnections = new Map();
 // Fila do Jogo Rápido: [{ ws, uid, name }]
 const matchmakingQueue = [];
 
+/* -------------------------------------------------------------
+   LOBBY DE DUPLA ONLINE (2 vs 2)
+   - O lobby fica no servidor: quem cria é o host (dono).
+   - Os amigos entram depois de aceitar o convite.
+   - A fila aceita duplas incompletas (o usuário pode buscar sozinho).
+------------------------------------------------------------- */
+// hostUid -> { hostId, teamName, teamColor, teamColorName, members: [{ id, name, picture, playerName }] }
+const duplaLobbies = new Map();
+// Convites pendentes: inviteId -> { id, fromUid, toUid, teamName, teamColor, teamColorName, createdAt }
+const duplaPendingInvites = new Map();
+// Fila de duplas: [{ ws, uid, name, teamName, teamColor, teamColorName, players: [...] }]
+const duplaQueue = [];
+// Limpeza dos lobbies cuyo dono ficou offline: hostUid -> timeout
+const duplaLobbyCleanupTimers = new Map();
+const DUPLA_LOBBY_CLEANUP_MS = 2 * 60 * 1000;
+
 function generateRoomCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let code = '';
@@ -137,13 +153,15 @@ function detachFromRoom(ws, notifyOpponent = true) {
   room.ready[playerIdx] = false;
 
   if (notifyOpponent) {
-    const opponent = room.players[otherPlayerIndex(playerIdx)];
-    if (opponent && opponent.readyState === 1) {
-      sendTo(opponent, { type: 'opponent_disconnected' });
-    }
+    // avisa todos os outros jogadores que ficaram na sala (1 vs 1 ou 2 vs 2)
+    room.players.forEach(other => {
+      if (other && other !== ws && other.readyState === 1) {
+        sendTo(other, { type: 'opponent_disconnected' });
+      }
+    });
   }
 
-  if (!room.players[0] && !room.players[1]) {
+  if (!room.players.some(player => player)) {
     rooms.delete(roomCode);
   }
 }
@@ -210,6 +228,296 @@ async function startQuickMatchRoom(a, b) {
   sendTo(b.ws, { type: 'room_created', room: code, player: 1, name: room.names[1], quick: true, opponentProfile: profileA });
   sendTo(a.ws, { type: 'room_ready', players });
   sendTo(b.ws, { type: 'room_ready', players });
+}
+
+/* -------------------------------------------------------------
+   LOBBY DE DUPLA ONLINE - funções auxiliares
+------------------------------------------------------------- */
+function sanitizeTeamName(value) {
+  return String(value || '')
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 20) || 'Dupla';
+}
+
+function sanitizeTeamColor(value) {
+  const hex = String(value || '').trim().toLowerCase();
+  return /^#[0-9a-f]{6}$/.test(hex) ? hex : '#ef233c';
+}
+
+function sanitizeColorName(value) {
+  return String(value || '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 24);
+}
+
+function getUserSockets(userId) {
+  const set = userConnections.get(userId);
+  if (!set) return [];
+  return Array.from(set).filter(ws => ws.readyState === 1);
+}
+
+function findUserSocket(userId) {
+  return getUserSockets(userId)[0] || null;
+}
+
+async function getLobbyMemberProfile(userId, fallbackName) {
+  const profile = await db.getUserProfile(userId);
+  const name = (profile && (profile.playerName || profile.name)) || fallbackName || 'Jogador';
+  return {
+    id: userId,
+    name,
+    picture: (profile && profile.picture) || '',
+    playerName: name
+  };
+}
+
+// Perfil do membro com a conexão usada por ele (para saber em qual aba ele está)
+async function getLobbyMemberWithSocket(userId, fallbackName, socket) {
+  const profile = await getLobbyMemberProfile(userId, fallbackName);
+  profile.ws = socket || null;
+  return profile;
+}
+
+function buildDuplaLobbyPayload(lobby) {
+  return {
+    type: 'dupla_lobby',
+    lobby: {
+      hostId: lobby.hostId,
+      teamName: lobby.teamName,
+      teamColor: lobby.teamColor,
+      teamColorName: lobby.teamColorName,
+      members: lobby.members.map(member => ({
+        id: member.id,
+        name: member.name,
+        picture: member.picture,
+        playerName: member.playerName,
+        isHost: member.id === lobby.hostId,
+        online: Boolean(member.ws && member.ws.readyState === 1)
+      }))
+    }
+  };
+}
+
+function broadcastDuplaLobby(lobby) {
+  const payload = buildDuplaLobbyPayload(lobby);
+  sendToUser(lobby.hostId, payload);
+  lobby.members.forEach(member => {
+    if (member.id !== lobby.hostId) sendToUser(member.id, payload);
+  });
+}
+
+// Envia o lobby atual (se existir) para o usuário
+function sendDuplaLobbyToUser(userId) {
+  if (!userId) return;
+  for (const lobby of duplaLobbies.values()) {
+    if (lobby.hostId === userId || lobby.members.some(member => member.id === userId)) {
+      sendToUser(userId, buildDuplaLobbyPayload(lobby));
+      return;
+    }
+  }
+}
+
+// Encerra o lobby do dono que ficou offline (se ele não voltar a tempo)
+function scheduleDuplaLobbyCleanup(hostUid) {
+  clearDuplaLobbyCleanup(hostUid);
+  const timer = setTimeout(() => {
+    duplaLobbyCleanupTimers.delete(hostUid);
+    const lobby = duplaLobbies.get(hostUid);
+    if (!lobby) return;
+    const host = lobby.members.find(member => member.id === hostUid);
+    if (host && host.ws && host.ws.readyState === 1) return; // o dono voltou
+    duplaLobbies.delete(hostUid);
+    lobby.members.forEach(member => {
+      if (member.id !== hostUid) {
+        sendToUser(member.id, {
+          type: 'dupla_lobby_left',
+          message: 'O criador do lobby saiu. O lobby foi encerrado.'
+        });
+      }
+    });
+  }, DUPLA_LOBBY_CLEANUP_MS);
+  if (typeof timer.unref === 'function') timer.unref();
+  duplaLobbyCleanupTimers.set(hostUid, timer);
+}
+
+function clearDuplaLobbyCleanup(hostUid) {
+  const timer = duplaLobbyCleanupTimers.get(hostUid);
+  if (timer) {
+    clearTimeout(timer);
+    duplaLobbyCleanupTimers.delete(hostUid);
+  }
+}
+
+async function ensureDuplaLobby(hostUid, teamName, teamColor, teamColorName, socket) {
+  let lobby = duplaLobbies.get(hostUid);
+  if (!lobby) {
+    const host = await getLobbyMemberWithSocket(hostUid, null, socket);
+    lobby = {
+      hostId: hostUid,
+      teamName: sanitizeTeamName(teamName),
+      teamColor: sanitizeTeamColor(teamColor),
+      teamColorName: sanitizeColorName(teamColorName),
+      members: [host]
+    };
+    duplaLobbies.set(hostUid, lobby);
+    return lobby;
+  }
+  if (teamName) lobby.teamName = sanitizeTeamName(teamName);
+  if (teamColor) lobby.teamColor = sanitizeTeamColor(teamColor);
+  if (teamColorName) lobby.teamColorName = sanitizeColorName(teamColorName);
+  // Mantém a aba do dono do lobby conectada
+  const host = lobby.members.find(member => member.id === hostUid);
+  if (host && socket && (!host.ws || host.ws.readyState !== 1)) host.ws = socket;
+  return lobby;
+}
+
+function removeFromDuplaQueue(ws) {
+  const index = duplaQueue.findIndex(entry => entry.ws === ws);
+  if (index === -1) return false;
+  duplaQueue.splice(index, 1);
+  return true;
+}
+
+// Descobre as conexões abertas de cada jogador da dupla
+function resolveDuplaPlayers(members, fallbackUid, fallbackWs) {
+  const players = [];
+  members.forEach(member => {
+    let socket = null;
+    if (member.id === fallbackUid && fallbackWs && fallbackWs.readyState === 1) {
+      // quem entrou na fila joga na própria aba
+      socket = fallbackWs;
+    } else if (member.ws && member.ws.readyState === 1) {
+      // o parceiro joga na aba em que aceitou o convite
+      socket = member.ws;
+    } else {
+      socket = findUserSocket(member.id);
+    }
+    if (socket) {
+      players.push({ id: member.id, name: member.name, picture: member.picture, ws: socket });
+    }
+  });
+  return players;
+}
+
+function tryDuplaMatchmaking() {
+  // Resolve quem está online em cada dupla que está na fila
+  const valid = [];
+  duplaQueue.forEach(entry => {
+    const players = resolveDuplaPlayers(entry.members, entry.uid, entry.ws);
+    if (!players.length) return; // ninguém da dupla está online
+    entry.players = players;
+    valid.push(entry);
+  });
+
+  duplaQueue.length = 0;
+  valid.forEach(entry => duplaQueue.push(entry));
+
+  while (duplaQueue.length >= 2) {
+    const first = duplaQueue[0];
+    let matchIndex = -1;
+    for (let i = 1; i < duplaQueue.length; i++) {
+      // Duplas do mesmo tamanho enfrentam duplas do mesmo tamanho
+      if (duplaQueue[i].players.length === first.players.length) {
+        matchIndex = i;
+        break;
+      }
+    }
+    if (matchIndex === -1) break;
+
+    const second = duplaQueue[matchIndex];
+    duplaQueue.splice(matchIndex, 1);
+    duplaQueue.shift();
+    startDuplaMatch(first, second);
+  }
+}
+
+function startDuplaMatch(entryA, entryB) {
+  const teamA = entryA.players || [];
+  const teamB = entryB.players || [];
+  if (!teamA.length || !teamB.length) return;
+
+  let code;
+  do {
+    code = generateRoomCode();
+  } while (rooms.has(code));
+
+  const soloMatch = teamA.length === 1 && teamB.length === 1;
+  const seats = [];
+
+  if (soloMatch) {
+    // Cada lado é uma dupla com apenas um jogador (1 vs 1)
+    seats.push({ player: teamA[0], team: 0, slot: 0 });
+    seats.push({ player: teamB[0], team: 1, slot: 1 });
+  } else {
+    // 2 vs 2: slots 0 e 2 são do time 0; slots 1 e 3 são do time 1
+    const a = teamA.slice(0, 2);
+    const b = teamB.slice(0, 2);
+    seats.push({ player: a[0], team: 0, slot: 0 });
+    seats.push({ player: b[0], team: 1, slot: 1 });
+    if (a[1]) seats.push({ player: a[1], team: 0, slot: 2 });
+    if (b[1]) seats.push({ player: b[1], team: 1, slot: 3 });
+  }
+
+  const room = {
+    players: [],
+    names: [],
+    userIds: [],
+    teams: [],
+    ready: [],
+    mode: 'dupla'
+  };
+
+  seats.forEach(seat => {
+    room.players[seat.slot] = seat.player.ws;
+    room.names[seat.slot] = seat.player.name;
+    room.userIds[seat.slot] = seat.player.id;
+    room.teams[seat.slot] = seat.team;
+    room.ready[seat.slot] = true;
+    const conn = connections.get(seat.player.ws);
+    if (conn) {
+      conn.roomCode = code;
+      conn.playerIdx = seat.slot;
+    }
+  });
+
+  rooms.set(code, room);
+
+  const roster = seats.map(seat => {
+    const source = seat.team === 0 ? entryA : entryB;
+    return {
+      slot: seat.slot,
+      id: seat.player.id,
+      uid: seat.player.id,
+      name: seat.player.name,
+      picture: seat.player.picture || '',
+      playerName: seat.player.name,
+      team: seat.team,
+      teamName: source.teamName,
+      teamColor: source.teamColor,
+      teamColorName: source.teamColorName
+    };
+  });
+
+  seats.forEach(seat => {
+    const matchMessage = {
+      type: 'dupla_match_found',
+      room: code,
+      slot: seat.slot,
+      team: seat.team,
+      solo: soloMatch,
+      players: roster
+    };
+    // A partida começa na aba do jogador; as outras abas só são avisadas
+    sendTo(seat.player.ws, matchMessage);
+    getUserSockets(seat.player.id).forEach(socket => {
+      if (socket !== seat.player.ws) {
+        sendTo(socket, {
+          type: 'dupla_match_started_elsewhere',
+          message: 'A partida de dupla começou em outra aba.'
+        });
+      }
+    });
+  });
 }
 
 const MIME_TYPES = {
@@ -430,7 +738,7 @@ async function handleAuthConfig(request, response) {
    HISTÓRICO DE PARTIDAS
 ------------------------------------------------------------- */
 const MATCH_RECORD_LIMIT = 100;
-const MATCH_MODES = new Set(['quick', 'invite', 'local']);
+const MATCH_MODES = new Set(['quick', 'invite', 'local', 'dupla']);
 
 function sanitizeMatchRecord(body) {
   const mode = MATCH_MODES.has(body.mode) ? body.mode : 'local';
@@ -664,9 +972,16 @@ async function serveStatic(request, response, urlPath) {
     const contentType = MIME_TYPES[extension] || 'application/octet-stream';
     const data = await fs.readFile(filePath);
 
+    // Em desenvolvimento os arquivos não são cacheados (evita servir
+    // versões antigas depois de uma alteração); em produção o cache
+    // continua valendo para os arquivos estáticos.
+    const cacheControl = NODE_ENV === 'production'
+      ? (extension === '.html' ? 'no-store' : 'public, max-age=3600')
+      : 'no-store';
+
     response.writeHead(200, {
       'Content-Type': contentType,
-      'Cache-Control': extension === '.html' ? 'no-store' : 'public, max-age=3600'
+      'Cache-Control': cacheControl
     });
     response.end(data);
   } catch (error) {
@@ -825,6 +1140,18 @@ async function main() {
           trackUserConnection(ws, uid);
           if (prevConn) prevConn.userId = uid;
           broadcastUserStatus(uid, true);
+          // O dono do lobby voltou: não encerra mais o lobby
+          clearDuplaLobbyCleanup(uid);
+          // Reenvia o lobby de dupla atual (se o usuário estiver em um)
+          // e reanexa a aba que voltou a estar online
+          duplaLobbies.forEach(lobby => {
+            const member = lobby.members.find(entry => entry.id === uid);
+            if (!member) return;
+            // Mantém a aba em que o jogador entrou no lobby
+            if (!member.ws || member.ws.readyState !== 1) member.ws = ws;
+            broadcastDuplaLobby(lobby);
+          });
+          sendDuplaLobbyToUser(uid);
         }
         sendTo(ws, { type: 'ack', original: 'identify' });
         return;
@@ -965,21 +1292,212 @@ async function main() {
         return;
       }
 
+      /* --- LOBBY DE DUPLA ONLINE ---------------------------------------- */
+      if (data.type === 'dupla_lobby_request') {
+        sendDuplaLobbyToUser(conn.userId);
+        return;
+      }
+
+      if (data.type === 'dupla_invite') {
+        const hostUid = conn.userId;
+        const targetId = String(data.targetId || '').trim();
+
+        if (!hostUid) {
+          sendTo(ws, { type: 'dupla_invite_result', status: 'error', message: 'Entre na sua conta para convidar amigos.' });
+          return;
+        }
+        if (!targetId || targetId === hostUid) {
+          sendTo(ws, { type: 'dupla_invite_result', status: 'error', message: 'Convite inválido.' });
+          return;
+        }
+
+        // O convidado precisa estar online para receber o convite
+        if (!getUserSockets(targetId).length) {
+          sendTo(ws, {
+            type: 'dupla_invite_result',
+            status: 'offline',
+            targetId,
+            message: 'Não foi possível enviar convite: o amigo está offline.'
+          });
+          return;
+        }
+
+        // Só amigos podem ser convidados para a dupla
+        const relation = await db.getRelation(hostUid, targetId);
+        if (relation !== 'friend') {
+          sendTo(ws, {
+            type: 'dupla_invite_result',
+            status: 'error',
+            targetId,
+            message: 'Você só pode convidar amigos.'
+          });
+          return;
+        }
+
+        const inviteId = require('crypto').randomUUID();
+        const teamName = sanitizeTeamName(data.teamName);
+        const teamColor = sanitizeTeamColor(data.teamColor);
+        const teamColorName = sanitizeColorName(data.teamColorName);
+
+        duplaPendingInvites.set(inviteId, {
+          id: inviteId,
+          fromUid: hostUid,
+          toUid: targetId,
+          teamName,
+          teamColor,
+          teamColorName,
+          createdAt: Date.now()
+        });
+
+        const hostProfile = await getLobbyMemberProfile(hostUid, conn.name);
+        sendToUser(targetId, {
+          type: 'dupla_invite',
+          inviteId,
+          fromId: hostUid,
+          fromName: hostProfile.name,
+          fromPicture: hostProfile.picture,
+          teamName,
+          teamColor,
+          teamColorName,
+          matchType: 'dupla',
+          matchTypeLabel: 'DUPLA • 2 vs 2'
+        });
+
+        sendTo(ws, {
+          type: 'dupla_invite_result',
+          status: 'sent',
+          targetId,
+          inviteId,
+          message: 'Convite enviado! Aguardando resposta...'
+        });
+        return;
+      }
+
+      if (data.type === 'dupla_invite_response') {
+        const inviteId = String(data.inviteId || '');
+        const invite = duplaPendingInvites.get(inviteId);
+        if (!invite || invite.toUid !== conn.userId) {
+          sendTo(ws, { type: 'dupla_invite_result', status: 'error', message: 'Convite inválido ou expirado.' });
+          return;
+        }
+        duplaPendingInvites.delete(inviteId);
+
+        if (!data.accept) {
+          sendToUser(invite.fromUid, {
+            type: 'dupla_invite_result',
+            status: 'declined',
+            targetId: invite.toUid,
+            message: 'O convite foi recusado.'
+          });
+          return;
+        }
+
+        const lobby = await ensureDuplaLobby(invite.fromUid, invite.teamName, invite.teamColor, invite.teamColorName, findUserSocket(invite.fromUid));
+        if (!lobby.members.some(member => member.id === invite.toUid) && lobby.members.length >= 2) {
+          sendTo(ws, { type: 'dupla_invite_result', status: 'error', message: 'A dupla já está completa (2/2).' });
+          return;
+        }
+
+        const member = await getLobbyMemberWithSocket(invite.toUid, conn.name, ws);
+        if (!lobby.members.some(entry => entry.id === invite.toUid)) {
+          lobby.members.push(member);
+        } else {
+          // Atualiza a aba em que o parceiro está
+          const existing = lobby.members.find(entry => entry.id === invite.toUid);
+          if (existing) existing.ws = ws;
+        }
+
+        broadcastDuplaLobby(lobby);
+        // Avisa quem convidou que o convite foi aceito
+        sendToUser(invite.fromUid, {
+          type: 'dupla_invite_result',
+          status: 'accepted',
+          targetId: invite.toUid,
+          message: 'Convite aceito! O amigo entrou no lobby.'
+        });
+        sendTo(ws, {
+          type: 'dupla_invite_result',
+          status: 'accepted',
+          message: 'Você entrou no lobby da dupla.'
+        });
+        return;
+      }
+
+      if (data.type === 'dupla_lobby_remove') {
+        const lobby = duplaLobbies.get(conn.userId);
+        if (!lobby) return;
+        const memberId = String(data.memberId || '');
+        lobby.members = lobby.members.filter(member => member.id !== memberId);
+        broadcastDuplaLobby(lobby);
+        sendToUser(memberId, { type: 'dupla_lobby_left', message: 'Você saiu do lobby da dupla.' });
+        return;
+      }
+
+      if (data.type === 'dupla_queue') {
+        const uid = conn.userId;
+        if (!uid) {
+          sendTo(ws, { type: 'dupla_queue_error', error: 'Entre na sua conta para buscar partida.' });
+          return;
+        }
+
+        removeFromDuplaQueue(ws);
+
+        const lobby = await ensureDuplaLobby(uid, data.teamName, data.teamColor, data.teamColorName, ws);
+        const members = lobby.members.slice();
+        const players = resolveDuplaPlayers(members, uid, ws);
+        if (!players.length) {
+          sendTo(ws, { type: 'dupla_queue_error', error: 'Não foi possível entrar na fila.' });
+          return;
+        }
+
+        const entry = {
+          ws,
+          uid,
+          name: conn.name,
+          teamName: lobby.teamName,
+          teamColor: lobby.teamColor,
+          teamColorName: lobby.teamColorName,
+          members,
+          players
+        };
+        duplaQueue.push(entry);
+
+        sendTo(ws, {
+          type: 'dupla_queued',
+          size: players.length,
+          message: players.length >= 2
+            ? 'Na fila: procurando outra dupla...'
+            : 'Na fila: procurando uma dupla adversária...'
+        });
+
+        tryDuplaMatchmaking();
+        return;
+      }
+
+      if (data.type === 'dupla_leave_queue') {
+        removeFromDuplaQueue(ws);
+        return;
+      }
+
       if (conn.roomCode === null || conn.playerIdx === null) return;
 
-      // Relay de mensagens de jogo para o oponente
+      // Relay de mensagens de jogo para os outros jogadores da sala
+      // (1 vs 1 envia para o oponente; 2 vs 2 envia para todos os demais)
       const room = rooms.get(conn.roomCode);
       if (!room) return;
 
       const forward = {
         type: data.type,
         from: conn.playerIdx,
-        to: otherPlayerIndex(conn.playerIdx),
         ...data
       };
 
-      const target = room.players[otherPlayerIndex(conn.playerIdx)];
-      sendTo(target, forward);
+      const payload = JSON.stringify(forward);
+      room.players.forEach(other => {
+        if (other && other !== ws && other.readyState === 1) {
+          other.send(payload);
+        }
+      });
 
       // Eco de confirmação para o remetente (opcional)
       sendTo(ws, { type: 'ack', original: data.type });
@@ -990,9 +1508,35 @@ async function main() {
       const userId = conn ? conn.userId : null;
       // Sai da fila e da sala; quem ficou é notificado
       removeFromQueue(ws);
+      removeFromDuplaQueue(ws);
       detachFromRoom(ws);
       connections.delete(ws);
       if (userId) {
+        // Se o usuário era o dono de um lobby de dupla, o lobby continua
+        // existindo por um tempo (o dono pode recarregar a página):
+        // os membros só são avisados e o lobby é dissolvido depois.
+        const ownedLobby = duplaLobbies.get(userId);
+        if (ownedLobby) {
+          const host = ownedLobby.members.find(member => member.id === userId);
+          if (host) host.ws = null;
+          ownedLobby.members.forEach(member => {
+            if (member.id !== userId) {
+              sendToUser(member.id, {
+                type: 'dupla_lobby_left',
+                message: 'O criador do lobby está offline. O lobby será encerrado se ele não voltar.'
+              });
+            }
+          });
+          scheduleDuplaLobbyCleanup(userId);
+        }
+        // O membro que saiu continua no lobby, mas marcado como offline
+        duplaLobbies.forEach(lobby => {
+          const member = lobby.members.find(entry => entry.id === userId);
+          if (!member) return;
+          member.ws = null;
+          broadcastDuplaLobby(lobby);
+        });
+
         untrackUserConnection(ws, userId);
         // Só envia offline se não houver mais conexões para este usuário
         const remaining = userConnections.get(userId);
