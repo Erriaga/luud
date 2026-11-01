@@ -653,22 +653,25 @@
               <div class="flex items-center gap-3">
                 <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Cor da dupla</span>
                 <div class="flex gap-2" id="dupla-color-picker">
-                  <!-- cores serão adicionadas via JS -->
+                  <button type="button" onclick="duplaPickColor('#ef233c')" class="w-6 h-6 rounded-full border-2 border-slate-600" style="background-color:#ef233c;" data-hex="#ef233c"></button>
+                  <button type="button" onclick="duplaPickColor('#00a86b')" class="w-6 h-6 rounded-full border-2 border-slate-600" style="background-color:#00a86b;" data-hex="#00a86b"></button>
+                  <button type="button" onclick="duplaPickColor('#ffcc00')" class="w-6 h-6 rounded-full border-2 border-slate-600" style="background-color:#ffcc00;" data-hex="#ffcc00"></button>
+                  <button type="button" onclick="duplaPickColor('#0096ff')" class="w-6 h-6 rounded-full border-2 border-slate-600" style="background-color:#0096ff;" data-hex="#0096ff"></button>
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- Lista de amigos para convidar -->
+          <!-- Botão convidar amigo (abre lista) -->
           <div class="bg-slate-800 border border-slate-600 p-4 rounded-lg shadow-md">
-            <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center justify-between">
               <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Convidar amigo</span>
-              <input id="dupla-friend-search" type="text" placeholder="Buscar amigo..." class="bg-slate-900 border border-slate-600 px-3 py-1.5 text-xs rounded text-slate-100 focus:border-slate-400 w-full" />
+              <button type="button" onclick="duplaOpenFriendList()" class="text-xs bg-slate-600 hover:bg-slate-500 text-white px-2 py-1 rounded">Convidar</button>
             </div>
-            <div id="dupla-friends-list" class="space-y-1 max-h-40 overflow-y-auto">
-              <!-- amigos serão listados aqui -->
+            <div id="dupla-friends-list-view" class="hidden space-y-1 max-h-40 overflow-y-auto">
+              <!-- lista de amigos online será mostrada aqui -->
             </div>
-            <div id="dupla-friend-status" class="text-xs text-slate-400 text-center mt-2"></div>
+            <div id="dupla-invite-status" class="text-xs text-slate-400 text-center mt-2"></div>
           </div>
 
           <!-- Membro atual da dupla -->
@@ -682,9 +685,9 @@
             </div>
           </div>
 
-          <!-- Botão buscar partida -->
+          <!-- Botão buscar partida (maiúsculo) -->
           <button id="dupla-search-btn" onclick="duplaSearchMatch()" class="w-full py-3 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm disabled:opacity-50 disabled:cursor-not-allowed">
-            Buscar partida
+            BUSCAR PARTIDA
           </button>
           <button type="button" onclick="hideOnlineDuplaView()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
             VOLTAR
@@ -4317,6 +4320,9 @@
       if (!onlineView || !duplaView) return;
       onlineView.classList.add('hidden');
       duplaView.classList.remove('hidden');
+      initDuplaColorPicker();
+      renderDuplaMembers();
+      loadDuplaFriends();
       gameAudio.playClick();
     }
 
@@ -4354,13 +4360,15 @@
     let duplaTeamName = 'Dupla';
     let duplaTeamColor = '#ef233c'; // vermelho por padrão
     let duplaDuplaColors = ['#ef233c', '#00a86b', '#ffcc00', '#0096ff'];
+    let duplaMatchmakingTimer = null;
+    let duplaMatchmakingSeconds = 0;
 
     async function loadDuplaFriends() {
       try {
         const response = await fetch('/api/friends');
         const data = await response.json();
         const friends = data.friends || [];
-        const list = document.getElementById('dupla-friends-list');
+        const list = document.getElementById('dupla-friends-list-view');
         list.innerHTML = '';
         friends.forEach(f => {
           const alreadyMember = duplaMembers.some(m => m.id === f.id);
@@ -4376,30 +4384,43 @@
           list.appendChild(div);
         });
       } catch (error) {
-        document.getElementById('dupla-friend-status').textContent = 'Erro ao carregar amigos.';
+        document.getElementById('dupla-invite-status').textContent = 'Erro ao carregar amigos.';
       }
     }
 
     async function duplaInviteFriend(targetId, targetName, targetPicture) {
       if (duplaMembers.length >= 1) return; // só 1 amigo na dupla
       try {
-        const response = await fetch('/api/friends/request', {
+        // Envia convite de lobby para o amigo
+        const response = await fetch('/api/online/dupla/invite', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ targetId })
+          body: JSON.stringify({
+            targetId,
+            teamName: duplaTeamName,
+            teamColor: duplaTeamColor
+          })
         });
         if (!response.ok) {
           const error = await response.json().catch(() => ({}));
-          document.getElementById('dupla-friend-status').textContent = error.error || 'Não foi possível convidar.';
+          document.getElementById('dupla-invite-status').textContent = error.error || 'Não foi possível enviar convite.';
           return;
         }
         duplaMembers.push({ id: targetId, name: targetName, picture: targetPicture });
         renderDuplaMembers();
-        document.getElementById('dupla-friend-status').textContent = 'Convite enviado!';
-        setTimeout(() => { document.getElementById('dupla-friend-status').textContent = ''; }, 3000);
-        loadDuplaFriends(); // recarrega para atualizar estados
+        document.getElementById('dupla-invite-status').textContent = 'Convite enviado!';
+        setTimeout(() => { document.getElementById('dupla-invite-status').textContent = ''; }, 3000);
+        loadDuplaFriends();
       } catch (error) {
-        document.getElementById('dupla-friend-status').textContent = 'Erro de rede.';
+        document.getElementById('dupla-invite-status').textContent = 'Erro de rede.';
+      }
+    }
+
+    function duplaOpenFriendList() {
+      const list = document.getElementById('dupla-friends-list-view');
+      list.classList.toggle('hidden');
+      if (!list.classList.contains('hidden')) {
+        loadDuplaFriends();
       }
     }
 
@@ -4463,7 +4484,12 @@
       if (duplaMembers.length < 1) return;
       const btn = document.getElementById('dupla-search-btn');
       btn.disabled = true;
-      btn.textContent = 'Buscando partida...';
+      btn.textContent = 'BUSCAR PARTIDA...';
+      duplaMatchmakingSeconds = 0;
+      duplaMatchmakingTimer = setInterval(() => {
+        duplaMatchmakingSeconds++;
+        btn.textContent = `BUSCAR PARTIDA... (${duplaMatchmakingSeconds}s)`;
+      }, 1000);
       try {
         const response = await fetch('/api/online/dupla/queue', {
           method: 'POST',
@@ -4476,22 +4502,23 @@
         });
         if (!response.ok) {
           const error = await response.json().catch(() => ({}));
-          document.getElementById('dupla-friend-status').textContent = error.error || 'Erro na fila.';
+          document.getElementById('dupla-invite-status').textContent = error.error || 'Erro na fila.';
           btn.disabled = false;
-          btn.textContent = 'Buscar partida';
+          btn.textContent = 'BUSCAR PARTIDA';
+          clearInterval(duplaMatchmakingTimer);
           return;
         }
         const data = await response.json();
-        // entrar na sala de partida
-        document.getElementById('dupla-friend-status').textContent = 'Partida encontrada!';
+        document.getElementById('dupla-invite-status').textContent = 'Partida encontrada!';
         setTimeout(() => {
-          // redirecionar ou iniciar partida online dupla
+          clearInterval(duplaMatchmakingTimer);
           startOnlineDuplaGame(data);
         }, 1000);
       } catch (error) {
-        document.getElementById('dupla-friend-status').textContent = 'Erro de rede.';
+        document.getElementById('dupla-invite-status').textContent = 'Erro de rede.';
         btn.disabled = false;
-        btn.textContent = 'Buscar partida';
+        btn.textContent = 'BUSCAR PARTIDA';
+        clearInterval(duplaMatchmakingTimer);
       }
     }
 
