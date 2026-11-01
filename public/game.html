@@ -657,6 +657,7 @@
                   <button type="button" onclick="duplaPickColor('#00a86b')" class="w-6 h-6 rounded-full border-2 border-slate-600" style="background-color:#00a86b;" data-hex="#00a86b"></button>
                   <button type="button" onclick="duplaPickColor('#ffcc00')" class="w-6 h-6 rounded-full border-2 border-slate-600" style="background-color:#ffcc00;" data-hex="#ffcc00"></button>
                   <button type="button" onclick="duplaPickColor('#0096ff')" class="w-6 h-6 rounded-full border-2 border-slate-600" style="background-color:#0096ff;" data-hex="#0096ff"></button>
+                  <button type="button" onclick="duplaPickColor('#d946ef')" class="w-6 h-6 rounded-full border-2 border-slate-600" style="background-color:#d946ef;" data-hex="#d946ef"></button>
                 </div>
               </div>
             </div>
@@ -666,7 +667,7 @@
           <div class="bg-slate-800 border border-slate-600 p-4 rounded-lg shadow-md">
             <div class="flex items-center justify-between">
               <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Convidar amigo</span>
-              <button type="button" onclick="duplaOpenFriendList()" class="text-xs bg-slate-600 hover:bg-slate-500 text-white px-2 py-1 rounded">Convidar</button>
+              <button type="button" onclick="duplaOpenFriendList()" class="w-6 h-6 bg-slate-600 hover:bg-slate-500 text-white font-bold text-xs">+</button>
             </div>
             <div id="dupla-friends-list-view" class="hidden space-y-1 max-h-40 overflow-y-auto">
               <!-- lista de amigos online será mostrada aqui -->
@@ -733,6 +734,38 @@
           <button type="button" onclick="hideOnlineArenaView()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
             VOLTAR
           </button>
+        </div>
+      </div>
+
+      <!-- MODAL DE CONVITE DE DUPLA ONLINE -->
+      <div id="dupla-invite-modal" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4">
+        <div class="bg-slate-800 border border-slate-600 p-6 rounded-lg shadow-2xl w-full max-w-sm text-center">
+          <div class="space-y-4">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Convite de Dupla</span>
+            </div>
+            <div class="flex items-center gap-3">
+              <img id="dupla-invite-from-picture" src="/assets/avatar.svg" class="w-10 h-10 rounded-full object-cover" onerror="this.onerror=null;this.src='/assets/avatar.svg'">
+              <div class="text-left">
+                <span class="text-sm font-bold text-slate-100" id="dupla-invite-from-name">Jogador</span>
+                <span class="text-[10px] text-slate-500">convidou você para uma dupla</span>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 mt-2">
+              <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Nome da dupla:</span>
+              <span id="dupla-invite-team-name" class="text-sm text-slate-100 font-bold">Dupla</span>
+            </div>
+            <div class="flex items-center gap-2 mt-2">
+              <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Cor da dupla:</span>
+              <span id="dupla-invite-team-color" class="w-4 h-4 rounded-full border border-slate-600" style="background-color:#ef233c;"></span>
+            </div>
+            <div class="flex justify-center gap-4 mt-4">
+              <button type="button" onclick="acceptDuplaInvite()" class="w-1/2 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded">Aceitar</button>
+              <button type="button" onclick="declineDuplaInvite()" class="w-1/2 py-2 bg-slate-600 hover:bg-slate-500 text-white font-bold rounded">Recusar</button>
+            </div>
+            <input type="hidden" id="dupla-invite-from-id">
+            <input type="hidden" id="dupla-invite-team-color-value">
+          </div>
         </div>
       </div>
 
@@ -4372,12 +4405,17 @@
         list.innerHTML = '';
         friends.forEach(f => {
           const alreadyMember = duplaMembers.some(m => m.id === f.id);
+          const onlineStatus = f.online ? 'Online' : 'Offline';
+          const statusColor = f.online ? 'text-emerald-400' : 'text-slate-500';
           const div = document.createElement('div');
           div.className = 'flex items-center justify-between p-2 bg-slate-900 border border-slate-700 rounded hover:bg-slate-800 cursor-pointer ' + (alreadyMember ? 'bg-slate-700' : '');
           div.innerHTML = `
             <div class="flex items-center gap-3">
               <img src="${f.picture || '/assets/avatar.svg'}" class="w-6 h-6 rounded-full object-cover" onerror="this.onerror=null;this.src='/assets/avatar.svg'">
-              <span class="text-sm text-slate-100 truncate">${friendLabel(f)}</span>
+              <div class="flex-1 min-w-0">
+                <span class="text-sm text-slate-100 truncate">${friendLabel(f)}</span>
+                <span class="text-[10px] ${statusColor}">${onlineStatus}</span>
+              </div>
             </div>
             ${alreadyMember ? '<span class="text-xs text-emerald-400 font-bold">Na dupla</span>' : `<button type="button" onclick="duplaInviteFriend('${f.id}', '${friendLabel(f)}', '${f.picture || ''}')" class="text-xs bg-slate-600 hover:bg-slate-500 text-white px-2 py-1 rounded">Convidar</button>`}
           `;
@@ -4416,6 +4454,44 @@
       }
     }
 
+    // Função chamada quando recebe um convite de dupla via WebSocket
+    function showDuplaInvite(fromId, fromName, fromPicture, teamName, teamColor) {
+      const modal = document.getElementById('dupla-invite-modal');
+      document.getElementById('dupla-invite-from-picture').src = fromPicture || '/assets/avatar.svg';
+      document.getElementById('dupla-invite-from-name').textContent = fromName;
+      document.getElementById('dupla-invite-team-name').textContent = teamName;
+      document.getElementById('dupla-invite-team-color').style.backgroundColor = teamColor;
+      document.getElementById('dupla-invite-from-id').value = fromId;
+      document.getElementById('dupla-invite-team-color-value').value = teamColor;
+      modal.classList.remove('hidden');
+    }
+
+    function acceptDuplaInvite() {
+      const fromId = document.getElementById('dupla-invite-from-id').value;
+      const teamName = document.getElementById('dupla-invite-team-name').textContent;
+      const teamColor = document.getElementById('dupla-invite-team-color-value').value;
+      const fromPicture = document.getElementById('dupla-invite-from-picture').src;
+      hideDuplaInviteModal();
+      
+      duplaMembers.push({ id: fromId, name: fromName, picture: fromPicture });
+      duplaTeamName = teamName;
+      duplaTeamColor = teamColor;
+      renderDuplaMembers();
+      loadDuplaFriends();
+      document.getElementById('dupla-invite-status').textContent = 'Convite aceito!';
+      setTimeout(() => { document.getElementById('dupla-invite-status').textContent = ''; }, 3000);
+    }
+
+    function declineDuplaInvite() {
+      hideDuplaInviteModal();
+    }
+
+    function hideDuplaInviteModal() {
+      document.getElementById('dupla-invite-modal').classList.add('hidden');
+    }
+
+    function duplaRemoveMember(index) {
+
     function duplaOpenFriendList() {
       const list = document.getElementById('dupla-friends-list-view');
       list.classList.toggle('hidden');
@@ -4444,14 +4520,15 @@
         div.innerHTML = `
           <div class="flex items-center gap-3">
             <img src="${m.picture}" class="w-6 h-6 rounded-full object-cover" onerror="this.onerror=null;this.src='/assets/avatar.svg'">
-            <span class="text-sm text-slate-100">${m.name}</span>
+            <span class="text-sm text-slate-100 truncate">${m.name}</span>
           </div>
           ${!m.isMe ? `<button type="button" onclick="duplaRemoveMember(${idx - 1})" class="text-xs text-red-400 hover:text-red-300">Remover</button>` : ''}
         `;
         list.appendChild(div);
       });
       document.getElementById('dupla-team-size').textContent = members.length + '/2';
-      document.getElementById('dupla-search-btn').disabled = members.length < 2;
+      // Permitir buscar partida mesmo sozinho
+      document.getElementById('dupla-search-btn').disabled = false;
     }
 
     function duplaEditTeamName() {
