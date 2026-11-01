@@ -278,6 +278,22 @@ async function getLobbyMemberWithSocket(userId, fallbackName, socket) {
   return profile;
 }
 
+// Atualiza nome/apelido/foto dos membros a partir do banco (o nickname
+// pode ter mudado depois que o membro entrou no lobby)
+async function refreshDuplaLobbyMembers(lobby) {
+  await Promise.all(lobby.members.map(async member => {
+    try {
+      const profile = await getLobbyMemberProfile(member.id, member.name);
+      if (!profile) return;
+      member.name = profile.name;
+      member.picture = profile.picture || member.picture;
+      member.playerName = profile.playerName;
+    } catch (error) {
+      /* mantém os dados que já tinha */
+    }
+  }));
+}
+
 function buildDuplaLobbyPayload(lobby) {
   return {
     type: 'dupla_lobby',
@@ -298,7 +314,8 @@ function buildDuplaLobbyPayload(lobby) {
   };
 }
 
-function broadcastDuplaLobby(lobby) {
+async function broadcastDuplaLobby(lobby) {
+  await refreshDuplaLobbyMembers(lobby);
   const payload = buildDuplaLobbyPayload(lobby);
   sendToUser(lobby.hostId, payload);
   lobby.members.forEach(member => {
@@ -307,10 +324,11 @@ function broadcastDuplaLobby(lobby) {
 }
 
 // Envia o lobby atual (se existir) para o usuário
-function sendDuplaLobbyToUser(userId) {
+async function sendDuplaLobbyToUser(userId) {
   if (!userId) return;
   for (const lobby of duplaLobbies.values()) {
     if (lobby.hostId === userId || lobby.members.some(member => member.id === userId)) {
+      await refreshDuplaLobbyMembers(lobby);
       sendToUser(userId, buildDuplaLobbyPayload(lobby));
       return;
     }
@@ -346,6 +364,17 @@ function clearDuplaLobbyCleanup(hostUid) {
     clearTimeout(timer);
     duplaLobbyCleanupTimers.delete(hostUid);
   }
+}
+
+// Lobby em que o usuário participa (criador ou convidado)
+function findDuplaLobbyForUser(uid) {
+  if (!uid) return null;
+  const owned = duplaLobbies.get(uid);
+  if (owned) return owned;
+  for (const lobby of duplaLobbies.values()) {
+    if (lobby.members.some(member => member.id === uid)) return lobby;
+  }
+  return null;
 }
 
 async function ensureDuplaLobby(hostUid, teamName, teamColor, teamColorName, socket) {
@@ -889,7 +918,7 @@ async function withFriendship(request, response, action) {
       sendToUser(targetId, {
         type: 'friend_request_received',
         fromId: user.id,
-        from: fromProfile || { id: user.id, name: user.displayName || user.playerName || user.email, email: user.email, picture: '', playerName: user.playerName || user.displayName || user.email }
+        from: fromProfile || { id: user.id, name: user.playerName || user.email.split('@')[0], email: user.email, picture: '', playerName: user.playerName || user.email.split('@')[0] }
       });
     }
 
@@ -899,7 +928,7 @@ async function withFriendship(request, response, action) {
       sendToUser(targetId, {
         type: 'friend_request_accepted',
         fromId: user.id,
-        from: toProfile || { id: user.id, name: user.displayName || user.playerName || user.email, email: user.email, picture: '', playerName: user.playerName || user.displayName || user.email }
+        from: toProfile || { id: user.id, name: user.playerName || user.email.split('@')[0], email: user.email, picture: '', playerName: user.playerName || user.email.split('@')[0] }
       });
     }
 
@@ -1144,14 +1173,14 @@ async function main() {
           clearDuplaLobbyCleanup(uid);
           // Reenvia o lobby de dupla atual (se o usuário estiver em um)
           // e reanexa a aba que voltou a estar online
-          duplaLobbies.forEach(lobby => {
+          for (const lobby of duplaLobbies.values()) {
             const member = lobby.members.find(entry => entry.id === uid);
-            if (!member) return;
+            if (!member) continue;
             // Mantém a aba em que o jogador entrou no lobby
             if (!member.ws || member.ws.readyState !== 1) member.ws = ws;
-            broadcastDuplaLobby(lobby);
-          });
-          sendDuplaLobbyToUser(uid);
+            await broadcastDuplaLobby(lobby);
+          }
+          await sendDuplaLobbyToUser(uid);
         }
         sendTo(ws, { type: 'ack', original: 'identify' });
         return;
@@ -1294,7 +1323,7 @@ async function main() {
 
       /* --- LOBBY DE DUPLA ONLINE ---------------------------------------- */
       if (data.type === 'dupla_lobby_request') {
-        sendDuplaLobbyToUser(conn.userId);
+        await sendDuplaLobbyToUser(conn.userId);
         return;
       }
 
@@ -1407,7 +1436,7 @@ async function main() {
           if (existing) existing.ws = ws;
         }
 
-        broadcastDuplaLobby(lobby);
+        await broadcastDuplaLobby(lobby);
         // Avisa quem convidou que o convite foi aceito
         sendToUser(invite.fromUid, {
           type: 'dupla_invite_result',
@@ -1424,12 +1453,49 @@ async function main() {
       }
 
       if (data.type === 'dupla_lobby_remove') {
+        const lobby = findDuplaLobbyForUser(conn.userId);
+        if (!lobby || lobby.hostId !== conn.userId) return;
+        const memberId = String(data.memberId || '');
+        if (memberId === lobby.hostId) return;
+        lobby.members = lobby.members.filter(member => member.id !== memberId);
+        await broadcastDuplaLobby(lobby);
+        sendToUser(memberId, { type: 'dupla_lobby_left', message: 'Você foi removido da dupla.' });
+        return;
+      }
+
+      if (data.type === 'dupla_lobby_leave') {
+        const uid = conn.userId;
+        const lobby = findDuplaLobbyForUser(uid);
+        if (!lobby) return;
+        if (lobby.hostId === uid) {
+          // O criador saiu: o lobby é encerrado
+          duplaLobbies.delete(uid);
+          clearDuplaLobbyCleanup(uid);
+          lobby.members.forEach(member => {
+            if (member.id !== uid) {
+              sendToUser(member.id, {
+                type: 'dupla_lobby_left',
+                message: 'O criador do lobby saiu. O lobby foi encerrado.'
+              });
+            }
+          });
+          return;
+        }
+        // O convidado saiu: o lobby continua com o criador
+        lobby.members = lobby.members.filter(member => member.id !== uid);
+        await broadcastDuplaLobby(lobby);
+        sendToUser(uid, { type: 'dupla_lobby_left', message: 'Você saiu do lobby da dupla.' });
+        return;
+      }
+
+      if (data.type === 'dupla_lobby_update') {
+        // Criador do lobby alterando nome/cor da dupla em tempo real
         const lobby = duplaLobbies.get(conn.userId);
         if (!lobby) return;
-        const memberId = String(data.memberId || '');
-        lobby.members = lobby.members.filter(member => member.id !== memberId);
-        broadcastDuplaLobby(lobby);
-        sendToUser(memberId, { type: 'dupla_lobby_left', message: 'Você saiu do lobby da dupla.' });
+        if (data.teamName) lobby.teamName = sanitizeTeamName(data.teamName);
+        if (data.teamColor) lobby.teamColor = sanitizeTeamColor(data.teamColor);
+        if (data.teamColorName) lobby.teamColorName = sanitizeColorName(data.teamColorName);
+        await broadcastDuplaLobby(lobby);
         return;
       }
 
@@ -1442,7 +1508,14 @@ async function main() {
 
         removeFromDuplaQueue(ws);
 
-        const lobby = await ensureDuplaLobby(uid, data.teamName, data.teamColor, data.teamColorName, ws);
+        // Somente o criador do lobby pode colocar a dupla na fila
+        const existingLobby = findDuplaLobbyForUser(uid);
+        if (existingLobby && existingLobby.hostId !== uid) {
+          sendTo(ws, { type: 'dupla_queue_error', error: 'Apenas o criador do lobby pode buscar partida.' });
+          return;
+        }
+
+        const lobby = existingLobby || await ensureDuplaLobby(uid, data.teamName, data.teamColor, data.teamColorName, ws);
         const members = lobby.members.slice();
         const players = resolveDuplaPlayers(members, uid, ws);
         if (!players.length) {
@@ -1534,7 +1607,7 @@ async function main() {
           const member = lobby.members.find(entry => entry.id === userId);
           if (!member) return;
           member.ws = null;
-          broadcastDuplaLobby(lobby);
+          broadcastDuplaLobby(lobby).catch(() => {});
         });
 
         untrackUserConnection(ws, userId);

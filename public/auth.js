@@ -24,9 +24,11 @@ function setAvatarImage(imageElement, url) {
   imageElement.src = url || DEFAULT_AVATAR;
 }
 
-function getAccountFirstName(user) {
-  const name = (user && (user.displayName || user.playerName || user.email)) || '';
-  return String(name).trim().split(/\s+/)[0] || '';
+// Nome exibido no site: sempre o NICKNAME (apelido) do jogador.
+// O nome e sobrenome da conta Google nunca são exibidos.
+function getAccountNickname(user) {
+  const nickname = (user && (user.playerName || (user.email || '').split('@')[0])) || '';
+  return String(nickname).trim();
 }
 
 function updateAccountUI(user) {
@@ -42,10 +44,10 @@ function updateAccountUI(user) {
   }
 
   accountUser = user;
-  // No cabeçalho, ao lado da foto, apenas o primeiro nome
-  accountName.textContent = getAccountFirstName(user) || 'Conta';
+  // No cabeçalho, ao lado da foto, aparece o nickname
+  accountName.textContent = getAccountNickname(user) || 'Conta';
   setAvatarImage(accountAvatar, user.avatarUrl || user.picture || DEFAULT_AVATAR);
-  dropdownAccountName.textContent = user.displayName || user.playerName || 'Conta';
+  dropdownAccountName.textContent = getAccountNickname(user) || 'Conta';
   dropdownAccountEmail.textContent = user.email || '';
   // Sincroniza a tela inicial do jogo (esconde o login Google e habilita
   // o botão Single Player Online) assim que a sessão é carregada.

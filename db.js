@@ -172,13 +172,27 @@ async function ensureDataFiles() {
 /* ------------------------------------------------------------------
    Normalização de usuário
 ------------------------------------------------------------------ */
+/**
+ * Nome exibido no site: sempre o NICKNAME (apelido).
+ * Contas antigas podem ter o nome completo no campo player_name
+ * (gerado automaticamente a partir do Google): nesse caso o apelido
+ * usado é o prefixo do e-mail.
+ */
+function nicknameFrom(playerName, displayName, email) {
+  const nick = String(playerName || '').trim();
+  const display = String(displayName || '').trim();
+  const prefix = String(email || '').split('@')[0].trim();
+  if (nick && nick !== display) return nick;
+  return prefix || nick || display;
+}
+
 function normalizeUserFromDb(row) {
   if (!row) return null;
   return {
     id: row.id,
     email: row.email,
     displayName: row.display_name || row.email.split('@')[0],
-    playerName: row.player_name || row.display_name || row.email.split('@')[0],
+    playerName: nicknameFrom(row.player_name, row.display_name, row.email),
     avatarUrl: row.avatar_url || '',
     bio: row.bio || '',
     googleSub: row.google_sub || '',
@@ -193,7 +207,7 @@ function normalizeUser(user) {
     id: user.id,
     email: user.email,
     displayName: user.displayName || user.email.split('@')[0],
-    playerName: user.playerName || user.displayName || user.email.split('@')[0],
+    playerName: nicknameFrom(user.playerName, user.displayName, user.email),
     avatarUrl: user.avatarUrl || '',
     bio: user.bio || '',
     googleSub: user.googleSub || '',
@@ -208,18 +222,20 @@ function normalizeUser(user) {
 
 /* ------------------------------------------------------------------
    Perfil público de usuário (para mensagens do WebSocket)
+   O nome exibido é sempre o NICKNAME (apelido), nunca o nome completo.
 ------------------------------------------------------------------ */
 async function getUserProfile(uid) {
   if (!uid) return null;
   const user = await getUserById(uid);
   if (!user) return null;
+  const nickname = nicknameFrom(user.playerName, user.displayName, user.email);
   return {
     id: user.id,
     uid: user.id,
-    name: user.displayName || user.playerName || user.email.split('@')[0],
+    name: nickname,
     email: user.email,
     picture: user.picture || user.avatarUrl || '',
-    playerName: user.playerName || user.displayName || user.email.split('@')[0]
+    playerName: nickname
   };
 }
 
@@ -314,6 +330,9 @@ async function createOrUpdateUserFromGoogle(payload) {
   const email = payload.email;
   const displayName = payload.name || email.split('@')[0];
   const picture = payload.picture || '';
+  // O NICKNAME do jogo é o prefixo do e-mail (ex.: "ifsp.raphael").
+  // O nome e sobrenome do Google ficam só em display_name e nunca são exibidos.
+  const nickname = email.split('@')[0];
 
   if (useDatabase()) {
     try {
@@ -321,16 +340,22 @@ async function createOrUpdateUserFromGoogle(payload) {
       const existing = await p.query('SELECT * FROM users WHERE id = $1', [userId]);
       if (existing.rows.length > 0) {
         const u = existing.rows[0];
+        // Mantém o nickname escolhido pelo jogador; se ele ainda for o nome
+        // completo do Google (gerado automaticamente), troca pelo prefixo do e-mail.
+        const currentPlayerName = u.player_name || '';
+        const playerName = (currentPlayerName && currentPlayerName !== (u.display_name || ''))
+          ? currentPlayerName
+          : nickname;
         await p.query(
-          `UPDATE users SET email = $1, display_name = COALESCE($2, display_name), player_name = COALESCE($3, player_name), picture = COALESCE($4, picture), google_sub = COALESCE($5, google_sub), updated_at = $6 WHERE id = $7`,
-          [email, displayName, displayName, picture, payload.sub, now, userId]
+          `UPDATE users SET email = $1, display_name = COALESCE($2, display_name), player_name = $3, picture = COALESCE($4, picture), google_sub = COALESCE($5, google_sub), updated_at = $6 WHERE id = $7`,
+          [email, displayName, playerName, picture, payload.sub, now, userId]
         );
         const row = await p.query('SELECT * FROM users WHERE id = $1', [userId]);
         return normalizeUserFromDb(row.rows[0]);
       } else {
         await p.query(
           `INSERT INTO users (id, email, display_name, player_name, avatar_url, bio, google_sub, picture, created_at, updated_at) VALUES ($1, $2, $3, $4, '', '', $5, $6, $7, $8)`,
-          [userId, email, displayName, displayName, payload.sub, picture, now, now]
+          [userId, email, displayName, nickname, payload.sub, picture, now, now]
         );
         const row = await p.query('SELECT * FROM users WHERE id = $1', [userId]);
         return normalizeUserFromDb(row.rows[0]);
@@ -344,11 +369,15 @@ async function createOrUpdateUserFromGoogle(payload) {
   // Fallback JSON
   const users = await readJsonFile(USERS_FILE);
   const existingUser = users[userId];
+  const currentPlayerName = existingUser?.playerName || '';
+  const playerName = (currentPlayerName && currentPlayerName !== (existingUser?.displayName || ''))
+    ? currentPlayerName
+    : nickname;
   const updatedUser = normalizeUser({
     id: userId,
     email,
     displayName: existingUser?.displayName || displayName,
-    playerName: existingUser?.playerName || existingUser?.displayName || displayName,
+    playerName,
     avatarUrl: existingUser?.avatarUrl || '',
     bio: existingUser?.bio || '',
     googleSub: payload.sub || '',
@@ -394,6 +423,29 @@ async function updateUserProfile(userId, fields) {
 }
 
 /* ------------------------------------------------------------------
+   NICKNAME
+   O nome exibido no site é sempre o apelido (prefixo do e-mail).
+   Contas antigas ainda podem ter o nome completo no campo player_name:
+   nesse caso o apelido é ajustado uma única vez.
+------------------------------------------------------------------ */
+async function ensureNickname(user) {
+  if (!user) return null;
+  const nickname = String(user.playerName || '').trim();
+  const displayName = String(user.displayName || '').trim();
+  const emailPrefix = String(user.email || '').split('@')[0];
+
+  // Só troca quando o apelido ainda é o nome completo gerado automaticamente
+  if (nickname && nickname !== displayName) return user;
+  if (!emailPrefix || nickname === emailPrefix) return user;
+
+  try {
+    return await updateUserProfile(user.id, { playerName: emailPrefix });
+  } catch (error) {
+    return { ...user, playerName: emailPrefix };
+  }
+}
+
+/* ------------------------------------------------------------------
    Sessões
 ------------------------------------------------------------------ */
 async function createSession(userId) {
@@ -429,7 +481,7 @@ async function getSessionUser(token) {
         await p.query('DELETE FROM sessions WHERE token = $1', [token]);
         return null;
       }
-      return getUserById(session.user_id);
+      return ensureNickname(await getUserById(session.user_id));
     } catch (error) {
       dbAvailable = false;
       pool = null;
@@ -443,7 +495,7 @@ async function getSessionUser(token) {
       await writeJsonFile(SESSIONS_FILE, sessions);
       return null;
     }
-    return getUserById(session.userId);
+    return ensureNickname(await getUserById(session.userId));
   }
 }
 

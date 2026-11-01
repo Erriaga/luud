@@ -646,22 +646,38 @@
           <!-- Seleção de nome e cor da dupla -->
           <div class="bg-slate-800 border border-slate-600 p-4 rounded-lg shadow-md">
             <div class="space-y-3">
-              <div class="flex items-center justify-between">
-                <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Nome da dupla</span>
-                <input id="dupla-team-name" type="text" maxlength="20" value="Dupla" oninput="duplaEditTeamName()" class="bg-slate-900 border border-slate-600 px-3 py-1.5 text-xs rounded text-slate-100 focus:border-slate-400 w-32" />
-              </div>
-              <div class="flex items-center gap-3">
-                <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Cor da dupla</span>
-                <div class="flex gap-2" id="dupla-color-picker">
-                  <button type="button" onclick="duplaPickColor('#ef233c', 'Vermelho')" class="dupla-color-btn w-6 h-6 rounded-full border-2 border-slate-600" style="background-color:#ef233c;" data-hex="#ef233c" title="Vermelho"></button>
-                  <button type="button" onclick="duplaPickColor('#00a86b', 'Verde')" class="dupla-color-btn w-6 h-6 rounded-full border-2 border-slate-600" style="background-color:#00a86b;" data-hex="#00a86b" title="Verde"></button>
-                  <button type="button" onclick="duplaPickColor('#ffcc00', 'Amarelo')" class="dupla-color-btn w-6 h-6 rounded-full border-2 border-slate-600" style="background-color:#ffcc00;" data-hex="#ffcc00" title="Amarelo"></button>
-                  <button type="button" onclick="duplaPickColor('#0096ff', 'Azul')" class="dupla-color-btn w-6 h-6 rounded-full border-2 border-slate-600" style="background-color:#0096ff;" data-hex="#0096ff" title="Azul"></button>
-                  <button type="button" onclick="duplaPickCustomColor()" class="dupla-color-btn w-6 h-6 rounded-full border-2 border-slate-600 bg-white" data-hex="#ffffff" title="Quinta cor: escolha uma cor personalizada">
-                    <input type="color" id="dupla-custom-color-picker" value="#ffffff" class="w-full h-full cursor-pointer opacity-0" onchange="duplaPickColor(this.value, identifyColorName(this.value))">
-                  </button>
+              <!-- Criador do lobby: pode editar o nome e a cor -->
+              <div id="dupla-team-editor" class="space-y-3">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Nome da dupla</span>
+                  <input id="dupla-team-name" type="text" maxlength="20" value="Dupla" oninput="duplaEditTeamName()" class="bg-slate-900 border border-slate-600 px-3 py-1.5 text-xs rounded text-slate-100 focus:border-slate-400 w-32" />
                 </div>
-                <span id="dupla-color-label" class="text-[10px] text-slate-400 whitespace-nowrap">Vermelho</span>
+                <div class="flex items-center gap-3">
+                  <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Cor da dupla</span>
+                  <div class="flex gap-2" id="dupla-color-picker">
+                    <button type="button" onclick="duplaPickColor('#ef233c', 'Vermelho')" class="dupla-color-btn w-6 h-6 rounded-full border-2 border-slate-600" style="background-color:#ef233c;" data-hex="#ef233c" title="Vermelho"></button>
+                    <button type="button" onclick="duplaPickColor('#00a86b', 'Verde')" class="dupla-color-btn w-6 h-6 rounded-full border-2 border-slate-600" style="background-color:#00a86b;" data-hex="#00a86b" title="Verde"></button>
+                    <button type="button" onclick="duplaPickColor('#ffcc00', 'Amarelo')" class="dupla-color-btn w-6 h-6 rounded-full border-2 border-slate-600" style="background-color:#ffcc00;" data-hex="#ffcc00" title="Amarelo"></button>
+                    <button type="button" onclick="duplaPickColor('#0096ff', 'Azul')" class="dupla-color-btn w-6 h-6 rounded-full border-2 border-slate-600" style="background-color:#0096ff;" data-hex="#0096ff" title="Azul"></button>
+                    <button type="button" onclick="duplaPickCustomColor()" class="dupla-color-btn w-6 h-6 rounded-full border-2 border-slate-600 bg-white" data-hex="#ffffff" title="Quinta cor: escolha uma cor personalizada">
+                      <input type="color" id="dupla-custom-color-picker" value="#ffffff" class="w-full h-full cursor-pointer opacity-0" onchange="duplaPickColor(this.value, identifyColorName(this.value))">
+                    </button>
+                  </div>
+                  <span id="dupla-color-label" class="text-[10px] text-slate-400 whitespace-nowrap">Vermelho</span>
+                </div>
+              </div>
+
+              <!-- Convidado: apenas acompanha as mudanças feitas pelo criador -->
+              <div id="dupla-team-info" class="hidden space-y-3">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Nome da dupla</span>
+                  <span id="dupla-team-name-view" class="text-xs font-bold text-slate-100 truncate">Dupla</span>
+                </div>
+                <div class="flex items-center gap-3">
+                  <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Cor da dupla</span>
+                  <span id="dupla-team-color-view" class="w-6 h-6 border-2 border-slate-600" style="background-color:#ef233c;"></span>
+                  <span id="dupla-team-color-name-view" class="text-[10px] text-slate-400 whitespace-nowrap">Vermelho</span>
+                </div>
               </div>
             </div>
           </div>
@@ -670,7 +686,7 @@
           <div class="bg-slate-800 border border-slate-600 p-4 rounded-lg shadow-md">
             <div class="flex items-center justify-between">
               <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Convidar amigo</span>
-              <button type="button" onclick="duplaOpenFriendList()" title="Convidar amigo" aria-label="Convidar amigo" class="w-6 h-6 flex items-center justify-center bg-slate-600 hover:bg-slate-500 text-white font-bold text-xs">+</button>
+              <button type="button" id="dupla-invite-btn" onclick="duplaOpenFriendList()" title="Convidar amigo" aria-label="Convidar amigo" class="w-6 h-6 flex items-center justify-center bg-slate-600 hover:bg-slate-500 text-white font-bold text-xs disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed">+</button>
             </div>
             <div id="dupla-friends-list-view" class="hidden space-y-1 max-h-40 overflow-y-auto">
               <!-- lista de amigos online será mostrada aqui -->
@@ -689,11 +705,11 @@
             </div>
           </div>
 
-          <!-- Botão buscar partida (maiúsculo) -->
+          <!-- Botão buscar partida (apenas o criador do lobby) -->
           <button id="dupla-search-btn" onclick="duplaSearchMatch()" class="w-full py-3 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm disabled:opacity-50 disabled:cursor-not-allowed">
             BUSCAR PARTIDA
           </button>
-          <button type="button" onclick="hideOnlineDuplaView()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
+          <button type="button" id="dupla-back-btn" onclick="duplaBackOrLeave()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
             VOLTAR
           </button>
         </div>
@@ -755,21 +771,34 @@
                 <span class="text-[10px] text-slate-500">convidou você para uma partida</span>
               </div>
             </div>
-            <div class="flex items-center gap-2 mt-2">
-              <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Nome da dupla:</span>
-              <span id="dupla-invite-team-name" class="text-sm text-slate-100 font-bold">Dupla</span>
-            </div>
-            <div class="flex items-center gap-2 mt-2">
-              <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Cor da dupla:</span>
-              <span id="dupla-invite-team-color" class="w-4 h-4 rounded-full border border-slate-600" style="background-color:#ef233c;"></span>
-            </div>
             <div class="flex justify-center gap-4 mt-4">
               <button type="button" onclick="acceptDuplaInvite()" class="w-1/2 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold">Aceitar</button>
               <button type="button" onclick="declineDuplaInvite()" class="w-1/2 py-2 bg-slate-600 hover:bg-slate-500 text-white font-bold">Recusar</button>
             </div>
             <input type="hidden" id="dupla-invite-from-id">
             <input type="hidden" id="dupla-invite-invite-id">
-            <input type="hidden" id="dupla-invite-team-color-value">
+          </div>
+        </div>
+      </div>
+
+      <!-- CONFIRMAÇÃO: REMOVER JOGADOR DA DUPLA -->
+      <div id="dupla-remove-modal" class="hidden fixed inset-0 z-[110] bg-black/80 flex items-center justify-center p-4">
+        <div class="bg-slate-800 border border-slate-600 shadow-2xl p-6 max-w-md w-full text-center">
+          <p class="text-sm text-slate-100 mb-5">Deseja realmente remover <span id="dupla-remove-name" class="font-bold">Jogador</span> da dupla?</p>
+          <div class="flex gap-3 justify-center">
+            <button type="button" onclick="duplaConfirmRemoveYes()" class="px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-bold">SIM</button>
+            <button type="button" onclick="duplaConfirmRemoveNo()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold">NÃO</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- CONFIRMAÇÃO: SAIR DO LOBBY -->
+      <div id="dupla-leave-modal" class="hidden fixed inset-0 z-[110] bg-black/80 flex items-center justify-center p-4">
+        <div class="bg-slate-800 border border-slate-600 shadow-2xl p-6 max-w-md w-full text-center">
+          <p class="text-sm text-slate-100 mb-5">Deseja realmente sair do lobby da dupla?</p>
+          <div class="flex gap-3 justify-center">
+            <button type="button" onclick="duplaConfirmLeaveYes()" class="px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-bold">SIM</button>
+            <button type="button" onclick="duplaConfirmLeaveNo()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold">NÃO</button>
           </div>
         </div>
       </div>
@@ -2116,6 +2145,16 @@
       return String(value ?? '').trim().split(/\s+/)[0] || '';
     }
 
+    // Nome exibido no site: sempre o NICKNAME (apelido) da conta.
+    // O nome e sobrenome do Google nunca são exibidos.
+    function accountNickname(user) {
+      if (!user) return '';
+      const nick = String(user.playerName || '').trim();
+      if (nick) return nick;
+      const email = String(user.email || '').trim();
+      return email ? email.split('@')[0] : '';
+    }
+
     function getPlayerDisplayName(player) {
       // Na partida online de dupla, mostra o apelido de cada jogador
       if (isOnlineTeamMode()) {
@@ -2417,7 +2456,7 @@
           }));
           actions.appendChild(menuItem('Remover amigo', 'text-red-400 hover:bg-red-500/20', () => {
             closeOpponentMenu();
-            confirmRemoveFriend(prof.id, prof.playerName || prof.displayName || prof.name || 'Oponente');
+            confirmRemoveFriend(prof.id, prof.playerName || prof.name || 'Oponente');
           }));
         } else if (rel === 'sent') {
           actions.appendChild(disabledItem('Solicitação enviada'));
@@ -2448,7 +2487,7 @@
         } else {
           actions.appendChild(menuItem('+ Adicionar amigo', 'bg-blue-600 hover:bg-blue-500 text-white', () => {
             closeOpponentMenu();
-            sendFriendRequestTo(prof.id, prof.playerName || prof.displayName || prof.name || 'Oponente');
+            sendFriendRequestTo(prof.id, prof.playerName || prof.name || 'Oponente');
           }));
         }
       } else {
@@ -2464,7 +2503,7 @@
       closeProfileModal();
 
       const prof = onlineOpponentProfile;
-      const fullName = String(prof.playerName || prof.displayName || prof.name || 'Oponente');
+      const fullName = String(prof.playerName || prof.name || 'Oponente');
       const parts = fullName.split(/\s+/);
       const first = parts[0] || 'Oponente';
       const last = parts.slice(1).join(' ') || '—';
@@ -2534,7 +2573,7 @@
       const statusEl = document.getElementById('friend-profile-status');
       const removeBtn = document.getElementById('friend-profile-remove-btn');
 
-      nameEl.textContent = prof.playerName || prof.displayName || prof.name || 'Oponente';
+      nameEl.textContent = prof.playerName || prof.name || 'Oponente';
       emailEl.textContent = prof.email || '—';
 
       // Status online/offline
@@ -2551,7 +2590,7 @@
       modal.classList.remove('hidden');
 
       // Configura o botão de remover amigo
-      removeBtn.onclick = () => confirmRemoveFriendFromProfile(prof.id, prof.playerName || prof.displayName || prof.name || 'Oponente');
+      removeBtn.onclick = () => confirmRemoveFriendFromProfile(prof.id, prof.playerName || prof.name || 'Oponente');
 
       try {
         const response = await fetch('/api/users/' + encodeURIComponent(prof.id) + '/matches');
@@ -2662,24 +2701,16 @@
       document.getElementById('friends-modal').classList.add('hidden');
     }
 
-    // Nome exibido para amigos: se o apelido for apenas o prefixo da conta Google
-    // (ex.: prof.rh19), mostra o primeiro nome da conta (ex.: Raphael).
+    // Nome exibido para amigos: sempre o NICKNAME (apelido).
+    // O nome e sobrenome da conta Google nunca são exibidos.
     function friendFullName(f) {
-      const email = String(f.email || '');
-      const prefix = email.split('@')[0].toLowerCase();
-      const nick = String(f.playerName || '').trim();
-      const disp = String(f.displayName || '').trim();
-      const nickIsPrefix = !nick || nick.toLowerCase() === prefix;
-      if (nickIsPrefix && disp && disp.toLowerCase() !== prefix) return disp;
-      return nick || disp || email;
+      const nick = String((f && f.playerName) || '').trim();
+      const email = String((f && f.email) || '');
+      return nick || email.split('@')[0] || '';
     }
 
     function friendLabel(f) {
-      const full = friendFullName(f);
-      const nick = String(f.playerName || '').trim();
-      const prefix = String(f.email || '').split('@')[0].toLowerCase();
-      const nickIsPrefix = !nick || nick.toLowerCase() === prefix;
-      return nickIsPrefix ? (full.split(/\s+/)[0] || full) : nick;
+      return friendFullName(f) || 'Jogador';
     }
 
     // Ordem alfabética por nome, depois sobrenome; empate: conta Google
@@ -3783,9 +3814,9 @@
       const nameInput = document.getElementById('player-name-input');
       let startName = nameInput ? nameInput.value : '';
       if (isOnlineGame) {
-        // Usa o primeiro nome da conta Google como nome do jogador local
+        // Usa o nickname (apelido) da conta Google como nome do jogador local
         const account = typeof accountUser !== 'undefined' ? accountUser : null;
-        startName = getFirstName(account && (account.playerName || account.displayName)) || 'Você';
+        startName = accountNickname(account) || 'Você';
       }
       updatePlayerName(startName);
       onlineMatchEnded = false;
@@ -4248,7 +4279,7 @@
           // Alguém enviou uma solicitação de amizade para esta conta.
           pendingFriendRequestsCount = (pendingFriendRequestsCount || 0) + 1;
           updateFriendsBadge();
-          const fromName = (data.from && (data.from.playerName || data.from.name || data.from.displayName)) || 'Alguém';
+          const fromName = (data.from && (data.from.playerName || data.from.name)) || 'Alguém';
           logStatus(`Nova solicitação de amizade de ${escapeHtmlText(fromName)}`);
           // Atualiza a coluna "Convites pendentes" se a modal estiver aberta
           if (!document.getElementById('friends-modal').classList.contains('hidden')) {
@@ -4306,6 +4337,17 @@
         case 'dupla_lobby':
           // Lobby sincronizado pelo servidor (jogadores presentes + criador)
           applyDuplaLobby(data.lobby);
+          break;
+
+        case 'dupla_lobby_left':
+          // Saiu do lobby (removeu o jogador ou o criador saiu)
+          duplaLobbyRoster = [];
+          duplaMembers = [];
+          duplaLobbyHostId = null;
+          setDuplaStatus(data.message || 'Você saiu do lobby da dupla.');
+          logStatus(data.message || 'Você saiu do lobby da dupla.');
+          hideOnlineDuplaView();
+          openSetupModal();
           break;
 
         case 'dupla_queued':
@@ -4539,6 +4581,7 @@
       duplaView.classList.remove('hidden');
       initDuplaColorPicker();
       renderDuplaMembers();
+      updateDuplaLobbyControls();
       loadDuplaFriends();
       // Pede ao servidor o estado atual do lobby (jogadores presentes e criador)
       sendOnline({ type: 'dupla_lobby_request' });
@@ -4594,6 +4637,8 @@
     let duplaMatchmakingSeconds = 0;
     let duplaQueued = false;        // está na fila buscando partida
     let pendingDuplaInvite = null;  // convite recebido (aguardando resposta)
+    let duplaRemoveTarget = null;   // membro marcado para remoção
+    let duplaLeaveTarget = null;    // saída do lobby aguardando confirmação
 
     // Perfil do usuário logado (usado na lista "Sua dupla")
     function currentAccountProfile() {
@@ -4601,7 +4646,7 @@
       if (!account) return null;
       return {
         id: getAccountUid(),
-        name: account.playerName || account.displayName || 'Você',
+        name: accountNickname(account) || 'Você',
         picture: account.picture || account.avatarUrl || '/assets/avatar.svg'
       };
     }
@@ -4630,19 +4675,23 @@
           const isOnline = f.online === true;
           const statusText = isOnline ? 'Online' : 'Offline';
           const statusClass = isOnline ? 'text-emerald-400' : 'text-slate-500';
+          const lobbyFull = isDuplaLobbyFull();
+          const disabledAttr = (!isOnline || lobbyFull)
+            ? `disabled title="${lobbyFull ? 'A dupla já está completa (2/2)' : 'O amigo está offline'}"`
+            : '';
           const row = document.createElement('div');
           row.className = 'flex items-center justify-between gap-2 p-2 bg-slate-900 border border-slate-700';
           row.innerHTML = `
             <div class="flex items-center gap-3 min-w-0">
               <img src="${escapeHtmlText(f.picture || '/assets/avatar.svg')}" class="w-8 h-8 rounded-full object-cover shrink-0" onerror="this.onerror=null;this.src='/assets/avatar.svg'" alt="">
-              <div class="flex flex-col min-w-0">
-                <span class="text-sm text-slate-100 truncate">${escapeHtmlText(friendLabel(f))}</span>
-                <span class="text-[10px] ${statusClass}">${statusText}</span>
+              <div class="flex flex-col items-start min-w-0">
+                <span class="block text-left text-sm text-slate-100 truncate">${escapeHtmlText(friendLabel(f))}</span>
+                <span class="block text-left text-[10px] ${statusClass}">${statusText}</span>
               </div>
             </div>
             ${alreadyMember
               ? '<span class="text-xs text-emerald-400 font-bold shrink-0">Na dupla</span>'
-              : `<button type="button" onclick="duplaInviteFriend('${escapeHtmlText(f.id)}')" ${isOnline ? '' : 'disabled title="O amigo está offline"'} class="w-7 h-7 shrink-0 flex items-center justify-center bg-slate-600 hover:bg-slate-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-bold text-base leading-none" title="Convidar para a dupla">+</button>`}
+              : `<button type="button" onclick="duplaInviteFriend('${escapeHtmlText(f.id)}')" ${disabledAttr} class="w-7 h-7 shrink-0 flex items-center justify-center bg-slate-600 hover:bg-slate-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-bold text-base leading-none" title="Convidar para a dupla">+</button>`}
           `;
           list.appendChild(row);
         });
@@ -4653,7 +4702,7 @@
 
     function duplaInviteFriend(targetId) {
       if (!targetId) return;
-      if (duplaMembers.length >= 1) {
+      if (isDuplaLobbyFull()) {
         setDuplaStatus('A dupla já está completa (2/2).');
         return;
       }
@@ -4677,11 +4726,8 @@
       document.getElementById('dupla-invite-from-picture').src = data.fromPicture || '/assets/avatar.svg';
       document.getElementById('dupla-invite-from-name').textContent = data.fromName || 'Jogador';
       document.getElementById('dupla-invite-match-type').textContent = data.matchTypeLabel || 'DUPLA • 2 vs 2';
-      document.getElementById('dupla-invite-team-name').textContent = data.teamName || 'Dupla';
-      document.getElementById('dupla-invite-team-color').style.backgroundColor = data.teamColor || '#ef233c';
       document.getElementById('dupla-invite-from-id').value = data.fromId || '';
       document.getElementById('dupla-invite-invite-id').value = data.inviteId || '';
-      document.getElementById('dupla-invite-team-color-value').value = data.teamColor || '#ef233c';
       modal.classList.remove('hidden');
     }
 
@@ -4712,10 +4758,62 @@
       if (modal) modal.classList.add('hidden');
     }
 
-    // O dono do lobby pode remover um membro
-    function duplaRemoveMember(memberId) {
+    // O dono do lobby pode remover um membro (com confirmação)
+    function duplaRemoveMember(memberId, memberName) {
       if (!memberId) return;
-      sendOnline({ type: 'dupla_lobby_remove', memberId: memberId });
+      duplaRemoveTarget = { id: memberId, name: memberName || 'Jogador' };
+      const nameEl = document.getElementById('dupla-remove-name');
+      if (nameEl) nameEl.textContent = duplaRemoveTarget.name;
+      const modal = document.getElementById('dupla-remove-modal');
+      if (modal) modal.classList.remove('hidden');
+    }
+
+    function duplaConfirmRemoveYes() {
+      const target = duplaRemoveTarget;
+      closeDuplaRemoveModal();
+      if (!target) return;
+      sendOnline({ type: 'dupla_lobby_remove', memberId: target.id });
+      setDuplaStatus(`${target.name} foi removido da dupla.`);
+    }
+
+    function duplaConfirmRemoveNo() {
+      closeDuplaRemoveModal();
+    }
+
+    function closeDuplaRemoveModal() {
+      duplaRemoveTarget = null;
+      const modal = document.getElementById('dupla-remove-modal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    // Criador volta para a tela de modos online; convidado sai do lobby
+    function duplaBackOrLeave() {
+      if (isDuplaLobbyHost()) {
+        hideOnlineDuplaView();
+        return;
+      }
+      const modal = document.getElementById('dupla-leave-modal');
+      if (modal) modal.classList.remove('hidden');
+    }
+
+    function duplaConfirmLeaveYes() {
+      closeDuplaLeaveModal();
+      sendOnline({ type: 'dupla_lobby_leave' });
+      duplaLeaveTarget = null;
+      duplaLobbyRoster = [];
+      duplaMembers = [];
+      duplaLobbyHostId = null;
+      // Volta para a tela inicial do jogo
+      openSetupModal();
+    }
+
+    function duplaConfirmLeaveNo() {
+      closeDuplaLeaveModal();
+    }
+
+    function closeDuplaLeaveModal() {
+      const modal = document.getElementById('dupla-leave-modal');
+      if (modal) modal.classList.add('hidden');
     }
 
     function duplaOpenFriendList() {
@@ -4739,22 +4837,21 @@
         roster = [{ id: me.id, name: me.name, picture: me.picture, isHost: true }];
       }
 
+      const isHost = isDuplaLobbyHost();
       list.innerHTML = '';
       roster.forEach(m => {
         const isMe = Boolean(me && m.id === me.id);
-        const isHost = Boolean(m.isHost);
-        const isOnline = m.online !== false;
+        const memberIsHost = Boolean(m.isHost);
         const row = document.createElement('div');
         row.className = 'flex items-center justify-between gap-2 p-2 bg-slate-900 border border-slate-600';
         row.innerHTML = `
           <div class="flex items-center gap-3 min-w-0">
             <img src="${escapeHtmlText(m.picture || '/assets/avatar.svg')}" class="w-8 h-8 rounded-full object-cover shrink-0" onerror="this.onerror=null;this.src='/assets/avatar.svg'" alt="">
-            <div class="flex flex-col min-w-0">
-              <span class="text-sm text-slate-100 truncate">${escapeHtmlText(m.name || 'Jogador')}${isMe ? ' (você)' : ''}</span>
-              <span class="text-[10px] ${isOnline ? 'text-emerald-400' : 'text-slate-500'}">${isOnline ? 'Online' : 'Offline'}${isHost ? ' • Criador do lobby' : ''}</span>
+            <div class="flex flex-col items-start min-w-0">
+              <span class="text-sm text-slate-100 truncate text-left">${memberIsHost ? '👑 ' : ''}${escapeHtmlText(m.name || 'Jogador')}${isMe ? ' (você)' : ''}</span>
             </div>
           </div>
-          ${!isHost && !isMe && isDuplaLobbyHost() ? `<button type="button" onclick="duplaRemoveMember('${escapeHtmlText(m.id)}')" class="text-xs text-red-400 hover:text-red-300 shrink-0">Remover</button>` : ''}
+          ${!memberIsHost && !isMe && isHost ? `<button type="button" onclick="duplaRemoveMember('${escapeHtmlText(m.id)}', '${escapeHtmlText(m.name || 'Jogador')}')" class="w-7 h-7 shrink-0 flex items-center justify-center bg-red-600 hover:bg-red-500 text-white font-bold text-sm leading-none" title="Remover da dupla" aria-label="Remover da dupla">X</button>` : ''}
         `;
         list.appendChild(row);
       });
@@ -4762,9 +4859,46 @@
       const sizeEl = document.getElementById('dupla-team-size');
       if (sizeEl) sizeEl.textContent = roster.length + '/2';
 
-      // Dá para buscar partida mesmo estando sozinho no lobby
+      updateDuplaLobbyControls();
+    }
+
+    // Botões e permissões do lobby: só o criador edita a dupla e busca partida
+    function updateDuplaLobbyControls() {
+      const isHost = isDuplaLobbyHost();
+
+      // Criador edita nome/cor; convidado apenas visualiza
+      const editor = document.getElementById('dupla-team-editor');
+      const info = document.getElementById('dupla-team-info');
+      if (editor) editor.classList.toggle('hidden', !isHost);
+      if (info) info.classList.toggle('hidden', isHost);
+
+      // Botão de convidar: desabilitado quando a dupla já está completa
+      const inviteBtn = document.getElementById('dupla-invite-btn');
+      if (inviteBtn) {
+        inviteBtn.disabled = isDuplaLobbyFull();
+        inviteBtn.title = isDuplaLobbyFull() ? 'A dupla já está completa (2/2)' : 'Convidar amigo';
+      }
+
+      // Apenas o criador busca partida
       const searchBtn = document.getElementById('dupla-search-btn');
-      if (searchBtn && !duplaQueued) searchBtn.disabled = false;
+      if (searchBtn) {
+        searchBtn.classList.toggle('hidden', !isHost);
+        if (!isHost) {
+          searchBtn.disabled = false;
+          searchBtn.textContent = 'BUSCAR PARTIDA';
+        } else if (!duplaQueued) {
+          searchBtn.disabled = false;
+        }
+      }
+
+      // Criador volta para o menu; convidado sai do lobby
+      const backBtn = document.getElementById('dupla-back-btn');
+      if (backBtn) backBtn.textContent = isHost ? 'VOLTAR' : 'SAIR';
+    }
+
+    // A dupla está completa quando há duas pessoas no lobby
+    function isDuplaLobbyFull() {
+      return Array.isArray(duplaLobbyRoster) && duplaLobbyRoster.length >= 2;
     }
 
     function isDuplaLobbyHost() {
@@ -4792,30 +4926,49 @@
         online: m.online !== false
       })) : [];
       duplaMembers = duplaLobbyRoster.filter(m => !me || m.id !== me.id);
+      const nameInput = document.getElementById('dupla-team-name');
+      if (nameInput && nameInput.value !== duplaTeamName) nameInput.value = duplaTeamName;
       updateDuplaColorPickerUI();
       renderDuplaMembers();
       loadDuplaFriends();
     }
 
     function duplaEditTeamName() {
+      if (!isDuplaLobbyHost()) return;
       const input = document.getElementById('dupla-team-name');
       duplaTeamName = (input && input.value.trim()) || 'Dupla';
+      sendDuplaLobbyUpdate();
     }
 
     function duplaPickColor(hex, colorName) {
+      if (!isDuplaLobbyHost()) return;
       const normalized = normalizeHexColor(hex);
       if (!normalized) return;
       duplaTeamColor = normalized;
       duplaTeamColorName = colorName || identifyColorName(normalized);
       updateDuplaColorPickerUI();
+      sendDuplaLobbyUpdate();
+    }
+
+    // O criador avisa o servidor para que o convidado veja as mudanças em tempo real
+    function sendDuplaLobbyUpdate() {
+      if (!isDuplaLobbyHost()) return;
+      sendOnline({
+        type: 'dupla_lobby_update',
+        teamName: duplaTeamName,
+        teamColor: duplaTeamColor,
+        teamColorName: duplaTeamColorName
+      });
     }
 
     function duplaPickCustomColor() {
+      if (!isDuplaLobbyHost()) return;
       const picker = document.getElementById('dupla-custom-color-picker');
       if (picker) picker.click();
     }
 
     // Mantém o destaque da cor selecionada (sem criar botões duplicados)
+    // e atualiza as informações exibidas para quem não é o criador
     function updateDuplaColorPickerUI() {
       document.querySelectorAll('#dupla-color-picker .dupla-color-btn').forEach(btn => {
         const selected = btn.dataset.hex === duplaTeamColor;
@@ -4826,6 +4979,14 @@
       if (label) label.textContent = duplaTeamColorName;
       const picker = document.getElementById('dupla-custom-color-picker');
       if (picker) picker.value = duplaTeamColor;
+
+      // Informações em tempo real para o convidado
+      const nameView = document.getElementById('dupla-team-name-view');
+      if (nameView) nameView.textContent = duplaTeamName || 'Dupla';
+      const colorView = document.getElementById('dupla-team-color-view');
+      if (colorView) colorView.style.backgroundColor = duplaTeamColor;
+      const colorNameView = document.getElementById('dupla-team-color-name-view');
+      if (colorNameView) colorNameView.textContent = duplaTeamColorName;
     }
 
     function initDuplaColorPicker() {
@@ -4848,6 +5009,12 @@
     function duplaSearchMatch() {
       const btn = document.getElementById('dupla-search-btn');
       if (!btn) return;
+
+      // Somente o criador do lobby pode iniciar o matchmaking
+      if (!isDuplaLobbyHost()) {
+        setDuplaStatus('Apenas o criador do lobby pode buscar partida.');
+        return;
+      }
 
       if (duplaQueued) {
         // Cancelar a busca
@@ -5131,7 +5298,7 @@
       sendOnline({
         type: 'quick_match',
         uid: getAccountUid(),
-        name: accountUser.playerName || accountUser.displayName || 'Jogador'
+        name: accountNickname(accountUser) || 'Jogador'
       });
     }
 
@@ -5312,7 +5479,7 @@
         return;
       }
 
-      const name = accountUser.playerName || accountUser.displayName || 'Jogador 1';
+      const name = accountNickname(accountUser) || 'Jogador 1';
       sendOnline({ type: 'join_room', room: '', name, uid: getAccountUid() });
     }
 
@@ -5323,7 +5490,7 @@
       }
 
       const code = document.getElementById('online-room-code').value.trim().toUpperCase();
-      const name = accountUser.playerName || accountUser.displayName || 'Jogador 2';
+      const name = accountNickname(accountUser) || 'Jogador 2';
       if (!code) {
         document.getElementById('online-status').textContent = 'Informe o código da sala.';
         return;
@@ -5558,16 +5725,16 @@
 
           const nameInput = document.getElementById('player-name-input');
           if (nameInput && !nameInput.value) {
-            nameInput.value = data.user.playerName || data.user.displayName || '';
+            nameInput.value = accountNickname(data.user);
             if (typeof updatePlayerName === 'function') updatePlayerName(nameInput.value);
           }
           statusEl.style.color = '#4ade80';
           statusEl.textContent = 'Conta Google conectada com sucesso!';
-          // Usa o primeiro nome da conta Google
-          const firstName = data.user.displayName ? data.user.displayName.split(' ')[0] : data.user.playerName || 'Jogador';
+          // Usa o nickname (apelido) da conta
+          const nickname = accountNickname(data.user) || 'Jogador';
           if (nameInput) {
-            nameInput.value = firstName;
-            if (typeof updatePlayerName === 'function') updatePlayerName(firstName);
+            nameInput.value = nickname;
+            if (typeof updatePlayerName === 'function') updatePlayerName(nickname);
           }
           // Esconde o botão de login e habilita o botão Single Player Online
           syncSetupLoginUI();
