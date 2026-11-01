@@ -4160,6 +4160,11 @@
           }
           break;
 
+        case 'dupla-invite':
+          // Recebeu um convite para dupla online
+          showDuplaInvite(data.fromId, data.fromName, data.fromPicture, data.teamName, data.teamColor);
+          break;
+
         case 'error':
           document.getElementById('online-status').textContent = data.error || 'Ocorreu um erro no modo online.';
           break;
