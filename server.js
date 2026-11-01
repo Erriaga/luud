@@ -234,11 +234,13 @@ async function startQuickMatchRoom(a, b) {
    LOBBY DE DUPLA ONLINE - funções auxiliares
 ------------------------------------------------------------- */
 function sanitizeTeamName(value) {
+  // O nome pode ficar vazio no lobby: apenas a busca de partida exige um nome.
+  // Quem exibe o nome da dupla usa "Dupla" como valor padrão.
   return String(value || '')
     .replace(/[\u0000-\u001f\u007f]/g, '')
     .replace(/\s+/g, ' ')
     .trim()
-    .slice(0, 20) || 'Dupla';
+    .slice(0, 20);
 }
 
 function sanitizeTeamColor(value) {
@@ -391,7 +393,7 @@ async function ensureDuplaLobby(hostUid, teamName, teamColor, teamColorName, soc
     duplaLobbies.set(hostUid, lobby);
     return lobby;
   }
-  if (teamName) lobby.teamName = sanitizeTeamName(teamName);
+  if (typeof teamName === 'string') lobby.teamName = sanitizeTeamName(teamName);
   if (teamColor) lobby.teamColor = sanitizeTeamColor(teamColor);
   if (teamColorName) lobby.teamColorName = sanitizeColorName(teamColorName);
   // Mantém a aba do dono do lobby conectada
@@ -1492,7 +1494,8 @@ async function main() {
         // Criador do lobby alterando nome/cor da dupla em tempo real
         const lobby = duplaLobbies.get(conn.userId);
         if (!lobby) return;
-        if (data.teamName) lobby.teamName = sanitizeTeamName(data.teamName);
+        // O nome da dupla pode ser apagado (fica vazio até o criador definir)
+        if (typeof data.teamName === 'string') lobby.teamName = sanitizeTeamName(data.teamName);
         if (data.teamColor) lobby.teamColor = sanitizeTeamColor(data.teamColor);
         if (data.teamColorName) lobby.teamColorName = sanitizeColorName(data.teamColorName);
         await broadcastDuplaLobby(lobby);
@@ -1516,6 +1519,17 @@ async function main() {
         }
 
         const lobby = existingLobby || await ensureDuplaLobby(uid, data.teamName, data.teamColor, data.teamColorName, ws);
+
+        // O nome enviado pelo criador tem prioridade (evita corrida com a
+        // atualização do lobby que acontece enquanto o jogador digita)
+        if (typeof data.teamName === 'string') lobby.teamName = sanitizeTeamName(data.teamName);
+
+        // É obrigatório ter um nome registrado para a dupla
+        if (!lobby.teamName) {
+          sendTo(ws, { type: 'dupla_queue_error', error: 'Informe o nome da dupla antes de buscar partida.' });
+          return;
+        }
+
         const members = lobby.members.slice();
         const players = resolveDuplaPlayers(members, uid, ws);
         if (!players.length) {

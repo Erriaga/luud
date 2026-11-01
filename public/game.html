@@ -556,8 +556,9 @@
           <button type="button" onclick="showCpuModeSelection()" id="mode-btn-1" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
             <span class="font-bold text-sm text-slate-100">SINGLE PLAYER</span>
           </button>
-          <button type="button" onclick="showOnlineModeSelection()" id="mode-btn-3" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
-            <span class="font-bold text-sm text-slate-100">MULTIPLAYER</span>
+          <!-- MULTIPLAYER: só fica disponível para quem fez login com o Google -->
+          <button type="button" onclick="showOnlineModeSelection()" id="mode-btn-3" disabled class="p-3 border-2 border-transparent bg-slate-700 transition flex flex-col items-center opacity-70 cursor-not-allowed text-slate-500">
+            <span class="font-bold text-sm text-slate-500">MULTIPLAYER</span>
           </button>
         </div>
       </div>
@@ -705,8 +706,14 @@
             </div>
           </div>
 
+          <!-- Cronômetro da busca (aparece quando o criador inicia o matchmaking) -->
+          <div id="dupla-match-timer-wrap" class="hidden space-y-1 text-center">
+            <p id="dupla-match-timer" class="font-mono text-xl text-amber-400 tracking-widest">00:00</p>
+            <p class="text-[10px] uppercase tracking-wider text-slate-500">Procurando dupla adversária</p>
+          </div>
+
           <!-- Botão buscar partida (apenas o criador do lobby) -->
-          <button id="dupla-search-btn" onclick="duplaSearchMatch()" class="w-full py-3 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+          <button id="dupla-search-btn" onclick="duplaSearchMatch()" class="w-full py-3 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
             BUSCAR PARTIDA
           </button>
           <button type="button" id="dupla-back-btn" onclick="duplaBackOrLeave()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
@@ -4352,12 +4359,15 @@
 
         case 'dupla_queued':
           duplaQueued = true;
+          updateDuplaLobbyControls();
+          startDuplaMatchmakingTimer();
           setDuplaStatus(data.message || 'Na fila: procurando uma dupla adversária...', 'text-emerald-400');
           break;
 
         case 'dupla_queue_error':
           duplaQueued = false;
           stopDuplaMatchmakingTimer();
+          updateDuplaLobbyControls();
           setDuplaStatus(data.error || 'Não foi possível entrar na fila.', 'text-red-400');
           break;
 
@@ -4366,6 +4376,7 @@
           // e começam juntos ao fim da contagem regressiva
           duplaQueued = false;
           stopDuplaMatchmakingTimer();
+          updateDuplaLobbyControls();
           setDuplaStatus('Partida encontrada!', 'text-emerald-400');
           pendingQuickStart = null;
           pendingGameStarter = () => startOnlineDuplaGame(data);
@@ -4538,6 +4549,14 @@
     }
 
     function showOnlineModeSelection() {
+      // Sem login com o Google o MULTIPLAYER fica desabilitado
+      const loggedIn = typeof accountUser !== 'undefined' && Boolean(accountUser);
+      if (!loggedIn) {
+        const statusEl = document.getElementById('login-status-setup');
+        if (statusEl) statusEl.textContent = 'Faça login com o Google para acessar o MULTIPLAYER.';
+        return;
+      }
+
       const mainView = document.getElementById('setup-main-view');
       const onlineView = document.getElementById('online-mode-view');
       if (!mainView || !onlineView) return;
@@ -4592,6 +4611,13 @@
       const onlineView = document.getElementById('online-mode-view');
       const duplaView = document.getElementById('online-dupla-view');
       if (!onlineView || !duplaView) return;
+      // Sai da fila de busca (se estiver buscando) e esconde o cronômetro
+      if (duplaQueued) {
+        sendOnline({ type: 'dupla_leave_queue' });
+        duplaQueued = false;
+      }
+      stopDuplaMatchmakingTimer();
+      updateDuplaLobbyControls();
       onlineView.classList.remove('hidden');
       duplaView.classList.add('hidden');
       gameAudio.playClick();
@@ -4816,6 +4842,35 @@
       if (modal) modal.classList.add('hidden');
     }
 
+    /* -------------------------------------------------------------
+       PROTEÇÃO DA PÁGINA (lobby e partida)
+       Impede que o jogador recarregue ou saia da página forçadamente
+       enquanto está no lobby da dupla ou durante a partida online.
+    ------------------------------------------------------------- */
+    let luudAllowPageExit = false;
+
+    // Libera a saída da página (usado, por exemplo, ao encerrar a sessão)
+    function allowPageExit() {
+      luudAllowPageExit = true;
+    }
+
+    function isPageExitBlocked() {
+      if (luudAllowPageExit) return false;
+      // Durante a partida online
+      if (typeof isOnlineGame !== 'undefined' && isOnlineGame) return true;
+      // No lobby da dupla
+      const duplaView = document.getElementById('online-dupla-view');
+      if (duplaView && !duplaView.classList.contains('hidden')) return true;
+      return false;
+    }
+
+    window.addEventListener('beforeunload', (event) => {
+      if (!isPageExitBlocked()) return undefined;
+      event.preventDefault();
+      event.returnValue = '';
+      return '';
+    });
+
     function duplaOpenFriendList() {
       const list = document.getElementById('dupla-friends-list-view');
       if (!list) return;
@@ -4879,15 +4934,13 @@
         inviteBtn.title = isDuplaLobbyFull() ? 'A dupla já está completa (2/2)' : 'Convidar amigo';
       }
 
-      // Apenas o criador busca partida
+      // Apenas o criador busca partida (o botão vira "CANCELAR BUSCA" na fila)
       const searchBtn = document.getElementById('dupla-search-btn');
       if (searchBtn) {
         searchBtn.classList.toggle('hidden', !isHost);
-        if (!isHost) {
+        if (isHost) {
           searchBtn.disabled = false;
-          searchBtn.textContent = 'BUSCAR PARTIDA';
-        } else if (!duplaQueued) {
-          searchBtn.disabled = false;
+          searchBtn.textContent = duplaQueued ? 'CANCELAR BUSCA' : 'BUSCAR PARTIDA';
         }
       }
 
@@ -4913,7 +4966,8 @@
       if (!lobby) return;
       const me = currentAccountProfile();
       duplaLobbyHostId = lobby.hostId || null;
-      if (lobby.teamName) duplaTeamName = lobby.teamName;
+      // O nome da dupla pode estar vazio (o criador ainda não informou um nome)
+      if (typeof lobby.teamName === 'string') duplaTeamName = lobby.teamName;
       if (lobby.teamColor) {
         duplaTeamColor = lobby.teamColor;
         duplaTeamColorName = lobby.teamColorName || identifyColorName(lobby.teamColor);
@@ -4927,7 +4981,10 @@
       })) : [];
       duplaMembers = duplaLobbyRoster.filter(m => !me || m.id !== me.id);
       const nameInput = document.getElementById('dupla-team-name');
-      if (nameInput && nameInput.value !== duplaTeamName) nameInput.value = duplaTeamName;
+      // Não sobrescreve o campo enquanto o criador está digitando
+      if (nameInput && document.activeElement !== nameInput && nameInput.value !== duplaTeamName) {
+        nameInput.value = duplaTeamName;
+      }
       updateDuplaColorPickerUI();
       renderDuplaMembers();
       loadDuplaFriends();
@@ -4936,7 +4993,8 @@
     function duplaEditTeamName() {
       if (!isDuplaLobbyHost()) return;
       const input = document.getElementById('dupla-team-name');
-      duplaTeamName = (input && input.value.trim()) || 'Dupla';
+      // O campo pode ficar vazio: apenas a busca de partida exige um nome
+      duplaTeamName = input ? input.value.trim() : '';
       sendDuplaLobbyUpdate();
     }
 
@@ -4982,7 +5040,7 @@
 
       // Informações em tempo real para o convidado
       const nameView = document.getElementById('dupla-team-name-view');
-      if (nameView) nameView.textContent = duplaTeamName || 'Dupla';
+      if (nameView) nameView.textContent = duplaTeamName || '(sem nome)';
       const colorView = document.getElementById('dupla-team-color-view');
       if (colorView) colorView.style.backgroundColor = duplaTeamColor;
       const colorNameView = document.getElementById('dupla-team-color-name-view');
@@ -4994,13 +5052,49 @@
       updateDuplaColorPickerUI();
     }
 
+    /* -------------------------------------------------------------
+       CRONÔMETRO DA FILA (DUPLA ONLINE)
+       Mesmo estilo do cronômetro do JOGO RÁPIDO (SOLO): aparece
+       entre a área "SUA DUPLA" e o botão de buscar partida.
+    ------------------------------------------------------------- */
+    function startDuplaMatchmakingTimer() {
+      const wrap = document.getElementById('dupla-match-timer-wrap');
+      const timerEl = document.getElementById('dupla-match-timer');
+      if (!wrap || !timerEl) return;
+
+      // Se já está rodando, apenas garante que ele fique visível
+      if (duplaMatchmakingTimer) {
+        wrap.classList.remove('hidden');
+        return;
+      }
+
+      const update = () => {
+        // Formato M:SS (um algarismo para minutos, dois para segundos)
+        const m = String(Math.floor(duplaMatchmakingSeconds / 60));
+        const ss = String(duplaMatchmakingSeconds % 60).padStart(2, '0');
+        timerEl.textContent = `${m}:${ss}`;
+      };
+
+      wrap.classList.remove('hidden');
+      update();
+      duplaMatchmakingTimer = setInterval(() => {
+        duplaMatchmakingSeconds++;
+        update();
+      }, 1000);
+    }
+
     function stopDuplaMatchmakingTimer() {
       if (duplaMatchmakingTimer) {
         clearInterval(duplaMatchmakingTimer);
         duplaMatchmakingTimer = null;
       }
+      duplaMatchmakingSeconds = 0;
+      const wrap = document.getElementById('dupla-match-timer-wrap');
+      if (wrap) wrap.classList.add('hidden');
+      const timerEl = document.getElementById('dupla-match-timer');
+      if (timerEl) timerEl.textContent = '00:00';
       const btn = document.getElementById('dupla-search-btn');
-      if (btn) {
+      if (btn && isDuplaLobbyHost()) {
         btn.textContent = 'BUSCAR PARTIDA';
         btn.disabled = false;
       }
@@ -5021,22 +5115,25 @@
         sendOnline({ type: 'dupla_leave_queue' });
         duplaQueued = false;
         stopDuplaMatchmakingTimer();
+        updateDuplaLobbyControls();
         setDuplaStatus('Busca cancelada.');
         return;
       }
 
-      // É possível buscar partida mesmo sozinho: a dupla completa
-      // (2/2) ou incompleta (1/2) entra na fila do servidor.
-      btn.disabled = true;
-      btn.textContent = 'BUSCAR PARTIDA...';
-      duplaMatchmakingSeconds = 0;
-      stopDuplaMatchmakingTimer();
-      btn.textContent = 'BUSCAR PARTIDA...';
-      btn.disabled = true;
-      duplaMatchmakingTimer = setInterval(() => {
-        duplaMatchmakingSeconds++;
-        btn.textContent = `BUSCAR PARTIDA... (${duplaMatchmakingSeconds}s)`;
-      }, 1000);
+      // É obrigatório ter um nome para a dupla antes de buscar partida
+      const nameInput = document.getElementById('dupla-team-name');
+      const teamName = String((nameInput && nameInput.value) || duplaTeamName || '').trim();
+      if (!teamName) {
+        setDuplaStatus('Informe o nome da dupla antes de buscar partida.', 'text-red-400');
+        if (nameInput) nameInput.focus();
+        return;
+      }
+      duplaTeamName = teamName;
+
+      // O botão continua habilitado e passa a permitir cancelar a busca
+      btn.disabled = false;
+      btn.textContent = 'CANCELAR BUSCA';
+      startDuplaMatchmakingTimer();
 
       sendOnline({
         type: 'dupla_queue',
@@ -5044,6 +5141,8 @@
         teamColor: duplaTeamColor,
         teamColorName: duplaTeamColorName
       });
+      duplaQueued = true;
+      updateDuplaLobbyControls();
       setDuplaStatus('Procurando uma dupla adversária...');
     }
 
@@ -5634,6 +5733,34 @@
       }
     }
 
+    // Habilita/desabilita o botão MULTIPLAYER na tela inicial:
+    // somente quem fez login com o Google pode acessar o modo online
+    function updateMultiplayerButton() {
+      const multiplayerBtn = document.getElementById('mode-btn-3');
+      if (!multiplayerBtn) return;
+
+      const loggedIn = typeof accountUser !== 'undefined' && Boolean(accountUser);
+      const label = multiplayerBtn.querySelector('span');
+
+      if (loggedIn) {
+        multiplayerBtn.disabled = false;
+        multiplayerBtn.classList.remove('opacity-70', 'cursor-not-allowed', 'text-slate-500');
+        multiplayerBtn.classList.add('hover:bg-slate-600');
+        if (label) {
+          label.classList.remove('text-slate-500');
+          label.classList.add('text-slate-100');
+        }
+      } else {
+        multiplayerBtn.disabled = true;
+        multiplayerBtn.classList.add('opacity-70', 'cursor-not-allowed', 'text-slate-500');
+        multiplayerBtn.classList.remove('hover:bg-slate-600');
+        if (label) {
+          label.classList.add('text-slate-500');
+          label.classList.remove('text-slate-100');
+        }
+      }
+    }
+
     // Sincroniza a tela inicial com o estado de login atual
     // (também chamado pelo auth.js depois que a sessão da conta é carregada)
     function syncSetupLoginUI() {
@@ -5647,6 +5774,7 @@
       }
 
       updateOnlineSingleButton();
+      updateMultiplayerButton();
     }
 
     function initGoogleLoginSetup() {

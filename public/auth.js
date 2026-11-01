@@ -132,6 +132,14 @@ async function saveProfile(event) {
 async function logoutAccount() {
   hideAccountDropdown();
 
+  // No lobby ou durante a partida, a saída da página é bloqueada:
+  // pede confirmação e só então encerra a sessão.
+  if (typeof isPageExitBlocked === 'function' && isPageExitBlocked()) {
+    const wantsToLeave = window.confirm('Você está no lobby ou em uma partida. Deseja realmente sair e encerrar a sessão?');
+    if (!wantsToLeave) return;
+    if (typeof allowPageExit === 'function') allowPageExit();
+  }
+
   try {
     await fetch('/api/auth/logout', { method: 'POST' });
   } catch (error) {
