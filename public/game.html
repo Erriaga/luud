@@ -2765,6 +2765,10 @@
       hideCpuModeSelection();
       // Garante que a visão de seleção de modo online volte ao menu
       hideOnlineModeView();
+      // Garante que sub-visões online (Solo/Dupla/Arena) estejam escondidas
+      document.getElementById('online-solo-view')?.classList.add('hidden');
+      document.getElementById('online-dupla-view')?.classList.add('hidden');
+      document.getElementById('online-arena-view')?.classList.add('hidden');
     }
 
     function getCurrentPlayer() {
