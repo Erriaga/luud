@@ -4491,6 +4491,9 @@
     }
 
     function duplaRemoveMember(index) {
+      duplaMembers.splice(index, 1);
+      renderDuplaMembers();
+    }
 
     function duplaOpenFriendList() {
       const list = document.getElementById('dupla-friends-list-view');
