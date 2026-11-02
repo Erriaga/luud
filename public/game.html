@@ -719,7 +719,7 @@
           <button id="dupla-search-btn" onclick="duplaSearchMatch()" class="w-full py-3 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
             BUSCAR PARTIDA
           </button>
-          <button type="button" id="dupla-back-btn" onclick="duplaBackOrLeave()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
+          <button type="button" id="dupla-back-btn" onclick="backOrLeaveLobby('dupla')" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
             VOLTAR
           </button>
         </div>
@@ -729,26 +729,26 @@
       <div id="online-arena-view" class="hidden space-y-5 sm:space-y-6 w-full">
         <div class="space-y-4 w-full">
           <div class="space-y-2 text-center">
-            <label class="text-xs font-bold uppercase tracking-wider text-slate-300">ARENA ONLINE</label>
-            <p class="text-xs text-slate-400">Cada um por si - 4 jogadores</p>
+            <label class="text-xs font-bold uppercase tracking-wider text-slate-300">ARENA</label>
+            <p class="text-xs text-slate-400">Cada um por si</p>
           </div>
 
-          <!-- Lista de amigos para convidar (até 3) -->
-          <div class="bg-slate-800 border border-slate-600 p-4 rounded-lg shadow-md">
-            <div class="flex items-center justify-between mb-3">
-              <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Convidar amigos (até 3)</span>
-              <input id="arena-friend-search" type="text" placeholder="Buscar amigo..." class="bg-slate-900 border border-slate-600 px-3 py-1.5 text-xs rounded text-slate-100 focus:border-slate-400 w-full" />
-            </div>
-            <div id="arena-friends-list" class="space-y-1 max-h-48 overflow-y-auto">
-              <!-- amigos serão listados aqui -->
-            </div>
-            <div id="arena-friend-status" class="text-xs text-slate-400 text-center mt-2"></div>
-          </div>
-
-          <!-- Membros atuais da arena -->
+          <!-- Botão convidar amigo (abre lista) -->
           <div class="bg-slate-800 border border-slate-600 p-4 rounded-lg shadow-md">
             <div class="flex items-center justify-between">
-              <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Jogadores na sala</span>
+              <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Convidar amigo</span>
+              <button type="button" id="arena-invite-btn" onclick="arenaOpenFriendList()" title="Convidar amigo" aria-label="Convidar amigo" class="w-6 h-6 flex items-center justify-center bg-slate-600 hover:bg-slate-500 text-white font-bold text-xs disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed">+</button>
+            </div>
+            <div id="arena-friends-list-view" class="hidden space-y-1 max-h-40 overflow-y-auto">
+              <!-- lista de amigos online será mostrada aqui -->
+            </div>
+            <div id="arena-invite-status" class="text-xs text-slate-400 text-center mt-2"></div>
+          </div>
+
+          <!-- Jogadores no lobby da arena -->
+          <div class="bg-slate-800 border border-slate-600 p-4 rounded-lg shadow-md">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Lobby</span>
               <span id="arena-team-size" class="text-xs font-bold text-slate-400">1/4</span>
             </div>
             <div id="arena-members" class="mt-2 space-y-2">
@@ -756,59 +756,65 @@
             </div>
           </div>
 
-          <!-- Botão buscar partida -->
+          <!-- Cronômetro da busca (aparece quando o criador inicia o matchmaking) -->
+          <div id="arena-match-timer-wrap" class="hidden space-y-1 text-center">
+            <p id="arena-match-timer" class="font-mono text-xl text-amber-400 tracking-widest">00:00</p>
+            <p class="text-[10px] uppercase tracking-wider text-slate-500">Procurando adversários</p>
+          </div>
+
+          <!-- Botão buscar partida (apenas o criador do lobby) -->
           <button id="arena-search-btn" onclick="arenaSearchMatch()" class="w-full py-3 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm disabled:opacity-50 disabled:cursor-not-allowed">
-            Buscar partida
+            BUSCAR PARTIDA
           </button>
-          <button type="button" onclick="hideOnlineArenaView()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
+          <button type="button" id="arena-back-btn" onclick="backOrLeaveLobby('arena')" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
             VOLTAR
           </button>
         </div>
       </div>
 
-      <!-- MODAL DE CONVITE DE DUPLA ONLINE -->
-      <div id="dupla-invite-modal" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <!-- MODAL DE CONVITE DE PARTIDA (dupla ou arena) -->
+      <div id="match-invite-modal" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4">
         <div class="bg-slate-800 border border-slate-600 p-6 rounded-lg shadow-2xl w-full max-w-sm text-center">
           <div class="space-y-4">
             <div class="flex items-center gap-2 mb-2">
               <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Convite de Partida</span>
-              <span id="dupla-invite-match-type" class="ml-auto text-[10px] font-bold uppercase tracking-wider bg-slate-900 border border-slate-600 px-2 py-1 text-slate-200">DUPLA • 2 vs 2</span>
+              <span id="match-invite-match-type" class="ml-auto text-[10px] font-bold uppercase tracking-wider bg-slate-900 border border-slate-600 px-2 py-1 text-slate-200">DUPLA • 2 vs 2</span>
             </div>
             <div class="flex items-center gap-3">
-              <img id="dupla-invite-from-picture" src="/assets/avatar.svg" class="w-10 h-10 rounded-full object-cover" onerror="this.onerror=null;this.src='/assets/avatar.svg'">
+              <img id="match-invite-from-picture" src="/assets/avatar.svg" class="w-10 h-10 rounded-full object-cover" onerror="this.onerror=null;this.src='/assets/avatar.svg'">
               <div class="text-left">
-                <span class="text-sm font-bold text-slate-100" id="dupla-invite-from-name">Jogador</span>
+                <span class="text-sm font-bold text-slate-100" id="match-invite-from-name">Jogador</span>
                 <span class="text-[10px] text-slate-500">convidou você para uma partida</span>
               </div>
             </div>
             <div class="flex justify-center gap-4 mt-4">
-              <button type="button" onclick="acceptDuplaInvite()" class="w-1/2 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold">Aceitar</button>
-              <button type="button" onclick="declineDuplaInvite()" class="w-1/2 py-2 bg-slate-600 hover:bg-slate-500 text-white font-bold">Recusar</button>
+              <button type="button" onclick="acceptMatchInvite()" class="w-1/2 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold">Aceitar</button>
+              <button type="button" onclick="declineMatchInvite()" class="w-1/2 py-2 bg-slate-600 hover:bg-slate-500 text-white font-bold">Recusar</button>
             </div>
-            <input type="hidden" id="dupla-invite-from-id">
-            <input type="hidden" id="dupla-invite-invite-id">
+            <input type="hidden" id="match-invite-from-id">
+            <input type="hidden" id="match-invite-invite-id">
           </div>
         </div>
       </div>
 
-      <!-- CONFIRMAÇÃO: REMOVER JOGADOR DA DUPLA -->
-      <div id="dupla-remove-modal" class="hidden fixed inset-0 z-[110] bg-black/80 flex items-center justify-center p-4">
+      <!-- CONFIRMAÇÃO: REMOVER JOGADOR DO LOBBY -->
+      <div id="remove-player-modal" class="hidden fixed inset-0 z-[110] bg-black/80 flex items-center justify-center p-4">
         <div class="bg-slate-800 border border-slate-600 shadow-2xl p-6 max-w-md w-full text-center">
-          <p class="text-sm text-slate-100 mb-5">Deseja realmente remover <span id="dupla-remove-name" class="font-bold">Jogador</span> da dupla?</p>
+          <p class="text-sm text-slate-100 mb-5">Deseja realmente remover <span id="remove-player-name" class="font-bold">Jogador</span> <span id="remove-player-lobby-name" class="font-bold"></span>?</p>
           <div class="flex gap-3 justify-center">
-            <button type="button" onclick="duplaConfirmRemoveYes()" class="px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-bold">SIM</button>
-            <button type="button" onclick="duplaConfirmRemoveNo()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold">NÃO</button>
+            <button type="button" onclick="confirmRemovePlayerYes()" class="px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-bold">SIM</button>
+            <button type="button" onclick="confirmRemovePlayerNo()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold">NÃO</button>
           </div>
         </div>
       </div>
 
       <!-- CONFIRMAÇÃO: SAIR DO LOBBY -->
-      <div id="dupla-leave-modal" class="hidden fixed inset-0 z-[110] bg-black/80 flex items-center justify-center p-4">
+      <div id="leave-lobby-modal" class="hidden fixed inset-0 z-[110] bg-black/80 flex items-center justify-center p-4">
         <div class="bg-slate-800 border border-slate-600 shadow-2xl p-6 max-w-md w-full text-center">
-          <p class="text-sm text-slate-100 mb-5">Deseja realmente sair do lobby da dupla?</p>
+          <p class="text-sm text-slate-100 mb-5">Deseja realmente sair do lobby<span id="leave-lobby-name" class="font-bold"></span>?</p>
           <div class="flex gap-3 justify-center">
-            <button type="button" onclick="duplaConfirmLeaveYes()" class="px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-bold">SIM</button>
-            <button type="button" onclick="duplaConfirmLeaveNo()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold">NÃO</button>
+            <button type="button" onclick="confirmLeaveLobbyYes()" class="px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-bold">SIM</button>
+            <button type="button" onclick="confirmLeaveLobbyNo()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold">NÃO</button>
           </div>
         </div>
       </div>
@@ -2627,6 +2633,11 @@
       return Boolean(isOnlineGame && onlineTeamMode);
     }
 
+    // Partida online de arena: quatro jogadores humanos, cada um por si
+    function isOnlineArenaMode() {
+      return Boolean(isOnlineGame && onlineMatchType === 'arena');
+    }
+
     // Time (0 ou 1) do jogador dono da cor informada
     function onlineTeamForColor(player) {
       if (!onlineSlotColors.length) return null;
@@ -2699,8 +2710,8 @@
     }
 
     function getPlayerDisplayName(player) {
-      // Na partida online de dupla, mostra o apelido de cada jogador
-      if (isOnlineTeamMode()) {
+      // Na partida online de dupla ou de arena, mostra o apelido de cada jogador
+      if (isOnlineTeamMode() || onlineMatchType === 'arena') {
         const entry = onlineRosterEntryForColor(player);
         if (entry) {
           const base = entry.name || entry.playerName || 'Jogador';
@@ -3725,6 +3736,13 @@
       }
       // No modo online, o slot do oponente mostra os pontos do jogador remoto
       if (isOnlineGame) {
+        // Na arena (cada um por si) vale a pontuação do melhor adversário
+        if (onlineMatchType === 'arena') {
+          return activePlayers.reduce((best, player) => {
+            if (player === getHumanPlayerKey()) return best;
+            return Math.max(best, playerScores[player] || 0);
+          }, 0);
+        }
         const opponentKey = activePlayers.find(player => player !== getHumanPlayerKey());
         return opponentKey ? (playerScores[opponentKey] || 0) : 0;
       }
@@ -4233,6 +4251,34 @@
       if (captured) gameAudio.playCapture();
     }
 
+    // Placar final da arena: uma linha por jogador (4 jogadores, cada um por si)
+    function buildArenaStandingsHtml() {
+      const humanColorIdx = CLOCKWISE_COLORS.indexOf(getHumanPlayerKey());
+      const orderedPlayers = [];
+      for (let i = 0; i < 4; i++) {
+        const colorKey = CLOCKWISE_COLORS[(humanColorIdx + i) % 4];
+        if (activePlayers.includes(colorKey)) {
+          orderedPlayers.push(colorKey);
+        }
+      }
+
+      const isOnline = onlineMatchType === 'arena';
+      return orderedPlayers.map(colorKey => {
+        const color = getPlayerColor(colorKey);
+        const name = isOnline
+          ? (getPlayerDisplayName(colorKey) || 'Jogador')
+          : (colorKey === getHumanPlayerKey() ? 'Você' : `CPU (${color.name})`);
+        const points = playerScores[colorKey] || 0;
+        return `<div class="flex items-center justify-between gap-4 mb-1">
+          <div class="flex items-center gap-3">
+            <span class="w-2 h-2 rounded-full shrink-0" style="background-color:${color.hex}"></span>
+            <span class="font-bold text-sm">${name}</span>
+          </div>
+          <span class="font-black text-sm">${points}</span>
+        </div>`;
+      }).join('');
+    }
+
     async function finishMove() {
       renderTokens();
       isAnimating = false;
@@ -4252,35 +4298,13 @@
         stopTurnTimer();
 
         // Modo ARENA: cada jogador por si, mostrar placar de todos os 4
-        if (!isTeamMode() && !isOnlineGame && activePlayers.length === 4) {
+        if (isOnlineArenaMode() || (!isTeamMode() && !isOnlineGame && activePlayers.length === 4)) {
           winTitle.innerText = humanWon ? 'V I T Ó R I A' : 'D E R R O T A';
           winTitle.className = `win-title font-display font-black ${humanWon ? 'text-amber-400' : 'text-red-500'}`;
           document.getElementById('win-subtitle').classList.add('hidden');
-          
+
           // Montar placar final com todos os 4 jogadores
-          const humanColorIdx = CLOCKWISE_COLORS.indexOf(getHumanPlayerKey());
-          const orderedPlayers = [];
-          for (let i = 0; i < 4; i++) {
-            const colorKey = CLOCKWISE_COLORS[(humanColorIdx + i) % 4];
-            if (activePlayers.includes(colorKey)) {
-              orderedPlayers.push(colorKey);
-            }
-          }
-          
-          let arenaPlacar = '';
-          orderedPlayers.forEach((colorKey, idx) => {
-            const color = getPlayerColor(colorKey);
-            const name = colorKey === getHumanPlayerKey() ? 'Você' : `CPU (${color.name})`;
-            const points = playerScores[colorKey] || 0;
-            arenaPlacar += `<div class="flex items-center justify-between gap-4 mb-1">
-              <div class="flex items-center gap-3">
-                <span class="w-2 h-2 rounded-full shrink-0" style="background-color:${color.hex}"></span>
-                <span class="font-bold text-sm">${name}</span>
-              </div>
-              <span class="font-black text-sm">${points}</span>
-            </div>`;
-          });
-          document.getElementById('win-score').innerHTML = arenaPlacar;
+          document.getElementById('win-score').innerHTML = buildArenaStandingsHtml();
         } else {
           // Modo SOLO ou DUPLA: placar tradicional
           winTitle.innerText = humanWon ? 'V I T Ó R I A' : 'D E R R O T A';
@@ -4328,7 +4352,7 @@
       const target = getWinningScore();
 
       // Modo ARENA: cada jogador por si, primeiro a atingir o target vence
-      if (!isTeamMode() && !isOnlineGame && activePlayers.length === 4) {
+      if (isOnlineArenaMode() || (!isTeamMode() && !isOnlineGame && activePlayers.length === 4)) {
         for (const colorKey of activePlayers) {
           if (playerScores[colorKey] >= target) {
             return colorKey; // Retorna a chave da cor do vencedor
@@ -4389,6 +4413,13 @@
       if (isOnlineTeamMode()) {
         // Partida online 2 vs 2: o jogador local, o parceiro (em outra aba)
         // e os dois adversários são todos humanos controlados por WebSocket
+        CLOCKWISE_COLORS.forEach(color => {
+          if (color !== humanPlayerKey) {
+            playerTypes[color] = 'HUMAN';
+          }
+        });
+      } else if (isOnlineArenaMode()) {
+        // Partida online de arena: 4 jogadores humanos, cada um por si
         CLOCKWISE_COLORS.forEach(color => {
           if (color !== humanPlayerKey) {
             playerTypes[color] = 'HUMAN';
@@ -4865,7 +4896,7 @@
         case 'dupla_invite':
           // Convite de partida de dupla recebido: mostra tipo de partida,
           // quem convidou e os botões de aceitar/recusar
-          showDuplaInvite(data);
+          showMatchInvite(data, 'dupla');
           break;
 
         case 'dupla_invite_result':
@@ -4926,6 +4957,74 @@
         case 'dupla_match_started_elsewhere':
           // A partida começou em outra aba deste mesmo usuário
           setDuplaStatus(data.message || 'A partida começou em outra aba.', 'text-amber-400');
+          break;
+
+        case 'arena_invite':
+          // Convite de partida de arena recebido
+          showMatchInvite(data, 'arena');
+          break;
+
+        case 'arena_invite_result':
+          // Resposta do amigo ao convite de arena (aceito ou recusado)
+          if (data.status === 'declined') {
+            setArenaStatus('O convite foi recusado.', 'text-amber-400');
+          } else if (data.status === 'accepted') {
+            setArenaStatus('Convite aceito! O amigo entrou no lobby.', 'text-emerald-400');
+          } else if (data.status === 'joined') {
+            setArenaStatus('Você entrou no lobby da arena.', 'text-emerald-400');
+            openArenaLobbyView();
+          } else if (data.status === 'offline') {
+            setArenaStatus('Não foi possível enviar convite: o amigo está offline.', 'text-red-400');
+          } else if (data.message) {
+            setArenaStatus(data.message);
+          }
+          break;
+
+        case 'arena_lobby':
+          // Lobby da arena sincronizado pelo servidor
+          applyArenaLobby(data.lobby);
+          break;
+
+        case 'arena_lobby_left':
+          // Saiu do lobby da arena (foi removido ou o criador saiu)
+          arenaLobbyRoster = [];
+          arenaMembers = [];
+          arenaLobbyHostId = null;
+          setArenaStatus(data.message || 'Você saiu do lobby da arena.');
+          logStatus(data.message || 'Você saiu do lobby da arena.');
+          hideOnlineArenaView();
+          openSetupModal();
+          break;
+
+        case 'arena_queued':
+          arenaQueued = true;
+          updateArenaLobbyControls();
+          startArenaMatchmakingTimer();
+          setArenaStatus(data.message || 'Na fila: procurando adversários...', 'text-emerald-400');
+          break;
+
+        case 'arena_queue_error':
+          arenaQueued = false;
+          stopArenaMatchmakingTimer();
+          updateArenaLobbyControls();
+          setArenaStatus(data.error || 'Não foi possível entrar na fila.', 'text-red-400');
+          break;
+
+        case 'arena_match_found':
+          // Partida da arena encontrada: os quatro jogadores começam juntos
+          // ao fim da contagem regressiva
+          arenaQueued = false;
+          stopArenaMatchmakingTimer();
+          updateArenaLobbyControls();
+          setArenaStatus('Partida encontrada!', 'text-emerald-400');
+          pendingQuickStart = null;
+          pendingGameStarter = () => startOnlineArenaGame(data);
+          showMatchFoundNotice();
+          break;
+
+        case 'arena_match_started_elsewhere':
+          // A partida começou em outra aba deste mesmo usuário
+          setArenaStatus(data.message || 'A partida de arena começou em outra aba.', 'text-amber-400');
           break;
 
         case 'error':
@@ -5169,6 +5268,11 @@
       if (!onlineView || !arenaView) return;
       onlineView.classList.add('hidden');
       arenaView.classList.remove('hidden');
+      renderArenaMembers();
+      updateArenaLobbyControls();
+      loadArenaFriends();
+      // Pede ao servidor o estado atual do lobby (jogadores presentes e criador)
+      sendOnline({ type: 'arena_lobby_request' });
       gameAudio.playClick();
     }
 
@@ -5176,9 +5280,26 @@
       const onlineView = document.getElementById('online-mode-view');
       const arenaView = document.getElementById('online-arena-view');
       if (!onlineView || !arenaView) return;
+      // Sai da fila de busca (se estiver buscando) e esconde o cronômetro
+      if (arenaQueued) {
+        sendOnline({ type: 'arena_leave_queue' });
+        arenaQueued = false;
+      }
+      stopArenaMatchmakingTimer();
+      updateArenaLobbyControls();
       onlineView.classList.remove('hidden');
       arenaView.classList.add('hidden');
       gameAudio.playClick();
+    }
+
+    // Abre o lobby da arena a partir de qualquer tela (usado quando o
+    // jogador aceita um convite de arena)
+    function openArenaLobbyView() {
+      const mainView = document.getElementById('setup-main-view');
+      const onlineView = document.getElementById('online-mode-view');
+      if (mainView) mainView.classList.add('hidden');
+      if (onlineView) onlineView.classList.add('hidden');
+      showOnlineArenaView();
     }
 
     /* ================================================================
@@ -5203,9 +5324,8 @@
     let duplaMatchmakingTimer = null;
     let duplaMatchmakingSeconds = 0;
     let duplaQueued = false;        // está na fila buscando partida
-    let pendingDuplaInvite = null;  // convite recebido (aguardando resposta)
-    let duplaRemoveTarget = null;   // membro marcado para remoção
-    let duplaLeaveTarget = null;    // saída do lobby aguardando confirmação
+    let pendingMatchInvite = null;  // convite recebido (aguardando resposta)
+    let pendingRemoveTarget = null; // membro marcado para remoção
 
     // Perfil do usuário logado (usado na lista "Sua dupla")
     function currentAccountProfile() {
@@ -5285,102 +5405,139 @@
 
     // Convite recebido via WebSocket: abre a tela com o tipo de partida,
     // quem convidou e os botões de aceitar/recusar
-    function showDuplaInvite(payload) {
+    function showMatchInvite(payload, kind) {
       const data = payload || {};
-      pendingDuplaInvite = data;
-      const modal = document.getElementById('dupla-invite-modal');
+      pendingMatchInvite = Object.assign({}, data, { kind: kind || 'dupla' });
+      const modal = document.getElementById('match-invite-modal');
       if (!modal) return;
-      document.getElementById('dupla-invite-from-picture').src = data.fromPicture || '/assets/avatar.svg';
-      document.getElementById('dupla-invite-from-name').textContent = data.fromName || 'Jogador';
-      document.getElementById('dupla-invite-match-type').textContent = data.matchTypeLabel || 'DUPLA • 2 vs 2';
-      document.getElementById('dupla-invite-from-id').value = data.fromId || '';
-      document.getElementById('dupla-invite-invite-id').value = data.inviteId || '';
+      document.getElementById('match-invite-from-picture').src = data.fromPicture || '/assets/avatar.svg';
+      document.getElementById('match-invite-from-name').textContent = data.fromName || 'Jogador';
+      document.getElementById('match-invite-match-type').textContent = data.matchTypeLabel || 'DUPLA • 2 vs 2';
+      document.getElementById('match-invite-from-id').value = data.fromId || '';
+      document.getElementById('match-invite-invite-id').value = data.inviteId || '';
       modal.classList.remove('hidden');
     }
 
-    function acceptDuplaInvite() {
-      if (!pendingDuplaInvite) return;
+    function acceptMatchInvite() {
+      const invite = pendingMatchInvite;
+      if (!invite) return;
+      const isArena = invite.kind === 'arena';
       sendOnline({
-        type: 'dupla_invite_response',
-        inviteId: pendingDuplaInvite.inviteId,
+        type: isArena ? 'arena_invite_response' : 'dupla_invite_response',
+        inviteId: invite.inviteId,
         accept: true
       });
-      hideDuplaInviteModal();
-      setDuplaStatus('Convite aceito! Entrando no lobby...');
+      hideMatchInviteModal();
+      if (isArena) {
+        setArenaStatus('Convite aceito! Entrando no lobby...');
+      } else {
+        setDuplaStatus('Convite aceito! Entrando no lobby...');
+      }
     }
 
-    function declineDuplaInvite() {
-      if (!pendingDuplaInvite) return;
+    function declineMatchInvite() {
+      const invite = pendingMatchInvite;
+      if (!invite) return;
+      const isArena = invite.kind === 'arena';
       sendOnline({
-        type: 'dupla_invite_response',
-        inviteId: pendingDuplaInvite.inviteId,
+        type: isArena ? 'arena_invite_response' : 'dupla_invite_response',
+        inviteId: invite.inviteId,
         accept: false
       });
-      hideDuplaInviteModal();
+      hideMatchInviteModal();
     }
 
-    function hideDuplaInviteModal() {
-      pendingDuplaInvite = null;
-      const modal = document.getElementById('dupla-invite-modal');
+    function hideMatchInviteModal() {
+      pendingMatchInvite = null;
+      const modal = document.getElementById('match-invite-modal');
       if (modal) modal.classList.add('hidden');
     }
 
     // O dono do lobby pode remover um membro (com confirmação)
-    function duplaRemoveMember(memberId, memberName) {
+    function removeLobbyMember(kind, memberId, memberName) {
       if (!memberId) return;
-      duplaRemoveTarget = { id: memberId, name: memberName || 'Jogador' };
-      const nameEl = document.getElementById('dupla-remove-name');
-      if (nameEl) nameEl.textContent = duplaRemoveTarget.name;
-      const modal = document.getElementById('dupla-remove-modal');
+      const target = { kind: kind || 'dupla', id: memberId, name: memberName || 'Jogador' };
+      pendingRemoveTarget = target;
+      const nameEl = document.getElementById('remove-player-name');
+      if (nameEl) nameEl.textContent = target.name;
+      const lobbyEl = document.getElementById('remove-player-lobby-name');
+      if (lobbyEl) lobbyEl.textContent = target.kind === 'arena' ? 'da arena' : 'da dupla';
+      const modal = document.getElementById('remove-player-modal');
       if (modal) modal.classList.remove('hidden');
     }
 
-    function duplaConfirmRemoveYes() {
-      const target = duplaRemoveTarget;
-      closeDuplaRemoveModal();
+    function confirmRemovePlayerYes() {
+      const target = pendingRemoveTarget;
+      closeRemovePlayerModal();
       if (!target) return;
-      sendOnline({ type: 'dupla_lobby_remove', memberId: target.id });
-      setDuplaStatus(`${target.name} foi removido da dupla.`);
+      const isArena = target.kind === 'arena';
+      sendOnline({ type: isArena ? 'arena_lobby_remove' : 'dupla_lobby_remove', memberId: target.id });
+      if (isArena) {
+        setArenaStatus(`${target.name} foi removido da arena.`);
+      } else {
+        setDuplaStatus(`${target.name} foi removido da dupla.`);
+      }
     }
 
-    function duplaConfirmRemoveNo() {
-      closeDuplaRemoveModal();
+    function confirmRemovePlayerNo() {
+      closeRemovePlayerModal();
     }
 
-    function closeDuplaRemoveModal() {
-      duplaRemoveTarget = null;
-      const modal = document.getElementById('dupla-remove-modal');
+    function closeRemovePlayerModal() {
+      pendingRemoveTarget = null;
+      const modal = document.getElementById('remove-player-modal');
       if (modal) modal.classList.add('hidden');
     }
 
     // Criador volta para a tela de modos online; convidado sai do lobby
-    function duplaBackOrLeave() {
-      if (isDuplaLobbyHost()) {
-        hideOnlineDuplaView();
+    function backOrLeaveLobby(kind) {
+      const isArena = kind === 'arena';
+      if (isArena ? isArenaLobbyHost() : isDuplaLobbyHost()) {
+        if (isArena) {
+          hideOnlineArenaView();
+        } else {
+          hideOnlineDuplaView();
+        }
         return;
       }
-      const modal = document.getElementById('dupla-leave-modal');
-      if (modal) modal.classList.remove('hidden');
+      const modal = document.getElementById('leave-lobby-modal');
+      const nameEl = document.getElementById('leave-lobby-name');
+      if (nameEl) nameEl.textContent = isArena ? ' da arena' : ' da dupla';
+      if (modal) {
+        modal.dataset.kind = isArena ? 'arena' : 'dupla';
+        modal.classList.remove('hidden');
+      }
     }
 
-    function duplaConfirmLeaveYes() {
-      closeDuplaLeaveModal();
-      sendOnline({ type: 'dupla_lobby_leave' });
-      duplaLeaveTarget = null;
-      duplaLobbyRoster = [];
-      duplaMembers = [];
-      duplaLobbyHostId = null;
+    function confirmLeaveLobbyYes() {
+      const modal = document.getElementById('leave-lobby-modal');
+      const isArena = modal && modal.dataset.kind === 'arena';
+      closeLeaveLobbyModal();
+      if (isArena) {
+        sendOnline({ type: 'arena_lobby_leave' });
+        arenaLobbyRoster = [];
+        arenaMembers = [];
+        arenaLobbyHostId = null;
+      } else {
+        sendOnline({ type: 'dupla_lobby_leave' });
+        duplaLobbyRoster = [];
+        duplaMembers = [];
+        duplaLobbyHostId = null;
+      }
       // Volta para a tela inicial do jogo
       openSetupModal();
     }
 
-    function duplaConfirmLeaveNo() {
-      closeDuplaLeaveModal();
+    function confirmLeaveLobbyNo() {
+      closeLeaveLobbyModal();
     }
 
-    function closeDuplaLeaveModal() {
-      const modal = document.getElementById('dupla-leave-modal');
-      if (modal) modal.classList.add('hidden');
+    function closeLeaveLobbyModal() {
+      const modal = document.getElementById('leave-lobby-modal');
+      if (modal) {
+        modal.classList.add('hidden');
+        delete modal.dataset.kind;
+      }
     }
 
     /* -------------------------------------------------------------
@@ -5402,6 +5559,9 @@
       // No lobby da dupla
       const duplaView = document.getElementById('online-dupla-view');
       if (duplaView && !duplaView.classList.contains('hidden')) return true;
+      // No lobby da arena
+      const arenaView = document.getElementById('online-arena-view');
+      if (arenaView && !arenaView.classList.contains('hidden')) return true;
       return false;
     }
 
@@ -5447,7 +5607,7 @@
               <span class="text-sm text-slate-100 truncate text-left">${memberIsHost ? '👑 ' : ''}${escapeHtmlText(m.name || 'Jogador')}${isMe ? ' (você)' : ''}</span>
             </div>
           </div>
-          ${!memberIsHost && !isMe && isHost ? `<button type="button" onclick="duplaRemoveMember('${escapeHtmlText(m.id)}', '${escapeHtmlText(m.name || 'Jogador')}')" class="w-7 h-7 shrink-0 flex items-center justify-center bg-red-600 hover:bg-red-500 text-white font-bold text-sm leading-none" title="Remover da dupla" aria-label="Remover da dupla">X</button>` : ''}
+          ${!memberIsHost && !isMe && isHost ? `<button type="button" onclick="removeLobbyMember('dupla', '${escapeHtmlText(m.id)}', '${escapeHtmlText(m.name || 'Jogador')}')" class="w-7 h-7 shrink-0 flex items-center justify-center bg-red-600 hover:bg-red-500 text-white font-bold text-sm leading-none" title="Remover da dupla" aria-label="Remover da dupla">X</button>` : ''}
         `;
         list.appendChild(row);
       });
@@ -5714,117 +5874,258 @@
     }
 
     /* ================================================================
-       LOBBY ARENA ONLINE - 1 vs 1 vs 1 vs 1
+       LOBBY ARENA ONLINE - cada um por si (4 jogadores no tabuleiro)
+       O lobby é mantido pelo servidor: quem cria o lobby é o "dono"
+       (host) e os amigos entram depois de aceitar o convite (até 4).
        ================================================================ */
-    let arenaMembers = [];
-    let arenaDuplaColors = ['#ef233c', '#00a86b', '#ffcc00', '#0096ff'];
+    const ARENA_LOBBY_MAX = 4;   // jogadores no lobby (o dono + 3 convidados)
+    const ARENA_MATCH_SIZE = 4;  // jogadores na partida
+    let arenaLobbyRoster = [];       // [{ id, name, picture, isHost }] - jogadores no lobby
+    let arenaMembers = [];           // membros do lobby (sem o dono)
+    let arenaLobbyHostId = null;     // id de quem criou o lobby
+    let arenaMatchmakingTimer = null;
+    let arenaMatchmakingSeconds = 0;
+    let arenaQueued = false;         // está na fila buscando partida
+
+    function setArenaStatus(message, tone) {
+      const el = document.getElementById('arena-invite-status');
+      if (!el) return;
+      el.textContent = message || '';
+      el.className = 'text-xs text-center mt-2 ' + (tone || 'text-slate-400');
+    }
+
+    function arenaOpenFriendList() {
+      const list = document.getElementById('arena-friends-list-view');
+      if (!list) return;
+      list.classList.toggle('hidden');
+      if (!list.classList.contains('hidden')) {
+        loadArenaFriends();
+      }
+    }
 
     async function loadArenaFriends() {
+      const list = document.getElementById('arena-friends-list-view');
+      if (!list) return;
       try {
         const response = await fetch('/api/friends');
         const data = await response.json();
         const friends = data.friends || [];
-        const list = document.getElementById('arena-friends-list');
         list.innerHTML = '';
-        friends.forEach(f => {
-          const alreadyMember = arenaMembers.some(m => m.id === f.id);
-          const div = document.createElement('div');
-          div.className = 'flex items-center justify-between p-2 bg-slate-900 border border-slate-700 rounded hover:bg-slate-800 cursor-pointer ' + (alreadyMember ? 'bg-slate-700' : '');
-          div.innerHTML = `
-            <div class="flex items-center gap-3">
-              <img src="${f.picture || '/assets/avatar.svg'}" class="w-6 h-6 rounded-full object-cover" onerror="this.onerror=null;this.src='/assets/avatar.svg'">
-              <span class="text-sm text-slate-100 truncate">${friendLabel(f)}</span>
-            </div>
-            ${alreadyMember ? '<span class="text-xs text-emerald-400 font-bold">Na sala</span>' : `<button type="button" onclick="arenaInviteFriend('${f.id}', '${friendLabel(f)}', '${f.picture || ''}')" class="text-xs bg-slate-600 hover:bg-slate-500 text-white px-2 py-1 rounded">Convidar</button>`}
-          `;
-          list.appendChild(div);
-        });
-      } catch (error) {
-        document.getElementById('arena-friend-status').textContent = 'Erro ao carregar amigos.';
-      }
-    }
-
-    async function arenaInviteFriend(targetId, targetName, targetPicture) {
-      if (arenaMembers.length >= 3) return; // máximo 3 amigos
-      try {
-        const response = await fetch('/api/friends/request', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ targetId })
-        });
-        if (!response.ok) {
-          const error = await response.json().catch(() => ({}));
-          document.getElementById('arena-friend-status').textContent = error.error || 'Não foi possível convidar.';
+        if (!friends.length) {
+          list.innerHTML = '<p class="text-xs text-slate-500 p-2">Você ainda não tem amigos na lista.</p>';
           return;
         }
-        arenaMembers.push({ id: targetId, name: targetName, picture: targetPicture });
-        renderArenaMembers();
-        document.getElementById('arena-friend-status').textContent = 'Convite enviado!';
-        setTimeout(() => { document.getElementById('arena-friend-status').textContent = ''; }, 3000);
-        loadArenaFriends();
+        friends.forEach(f => {
+          const alreadyMember = arenaMembers.some(m => m.id === f.id);
+          const isOnline = f.online === true;
+          const statusText = isOnline ? 'Online' : 'Offline';
+          const statusClass = isOnline ? 'text-emerald-400' : 'text-slate-500';
+          const lobbyFull = isArenaLobbyFull();
+          const disabledAttr = (!isOnline || lobbyFull)
+            ? `disabled title="${lobbyFull ? 'O lobby já está completo (4/4)' : 'O amigo está offline'}"`
+            : '';
+          const row = document.createElement('div');
+          row.className = 'flex items-center justify-between gap-2 p-2 bg-slate-900 border border-slate-700';
+          row.innerHTML = `
+            <div class="flex items-center gap-3 min-w-0">
+              <img src="${escapeHtmlText(f.picture || '/assets/avatar.svg')}" class="w-8 h-8 rounded-full object-cover shrink-0" onerror="this.onerror=null;this.src='/assets/avatar.svg'" alt="">
+              <div class="flex flex-col items-start min-w-0">
+                <span class="block text-left text-sm text-slate-100 truncate">${escapeHtmlText(friendLabel(f))}</span>
+                <span class="block text-left text-[10px] ${statusClass}">${statusText}</span>
+              </div>
+            </div>
+            ${alreadyMember
+              ? '<span class="text-xs text-emerald-400 font-bold shrink-0">No lobby</span>'
+              : `<button type="button" onclick="arenaInviteFriend('${escapeHtmlText(f.id)}')" ${disabledAttr} class="w-7 h-7 shrink-0 flex items-center justify-center bg-slate-600 hover:bg-slate-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-bold text-base leading-none" title="Convidar para a arena">+</button>`}
+          `;
+          list.appendChild(row);
+        });
       } catch (error) {
-        document.getElementById('arena-friend-status').textContent = 'Erro de rede.';
+        list.innerHTML = '<p class="text-xs text-red-400 p-2">Erro ao carregar amigos.</p>';
       }
     }
 
-    function arenaRemoveMember(index) {
-      arenaMembers.splice(index, 1);
+    function arenaInviteFriend(targetId) {
+      if (!targetId) return;
+      if (isArenaLobbyFull()) {
+        setArenaStatus('O lobby já está completo (4/4).');
+        return;
+      }
+      sendOnline({ type: 'arena_invite', targetId: targetId });
+      setArenaStatus('Convite enviado! Aguardando resposta...');
+    }
+
+    // Atualiza a lista "LOBBY" com os jogadores presentes no lobby
+    function renderArenaMembers() {
+      const list = document.getElementById('arena-members');
+      if (!list) return;
+      const me = currentAccountProfile();
+      let roster = Array.isArray(arenaLobbyRoster) ? arenaLobbyRoster.slice() : [];
+
+      // Enquanto o servidor não sincroniza o lobby, mostra o próprio jogador
+      if (!roster.length && me) {
+        roster = [{ id: me.id, name: me.name, picture: me.picture, isHost: true }];
+      }
+
+      const isHost = isArenaLobbyHost();
+      list.innerHTML = '';
+      roster.forEach(m => {
+        const isMe = Boolean(me && m.id === me.id);
+        const memberIsHost = Boolean(m.isHost);
+        const row = document.createElement('div');
+        row.className = 'flex items-center justify-between gap-2 p-2 bg-slate-900 border border-slate-600';
+        row.innerHTML = `
+          <div class="flex items-center gap-3 min-w-0">
+            <img src="${escapeHtmlText(m.picture || '/assets/avatar.svg')}" class="w-8 h-8 rounded-full object-cover shrink-0" onerror="this.onerror=null;this.src='/assets/avatar.svg'" alt="">
+            <div class="flex flex-col items-start min-w-0">
+              <span class="text-sm text-slate-100 truncate text-left">${memberIsHost ? '👑 ' : ''}${escapeHtmlText(m.name || 'Jogador')}${isMe ? ' (você)' : ''}</span>
+            </div>
+          </div>
+          ${!memberIsHost && !isMe && isHost ? `<button type="button" onclick="removeLobbyMember('arena', '${escapeHtmlText(m.id)}', '${escapeHtmlText(m.name || 'Jogador')}')" class="w-7 h-7 shrink-0 flex items-center justify-center bg-red-600 hover:bg-red-500 text-white font-bold text-sm leading-none" title="Remover da arena" aria-label="Remover da arena">X</button>` : ''}
+        `;
+        list.appendChild(row);
+      });
+
+      const sizeEl = document.getElementById('arena-team-size');
+      if (sizeEl) sizeEl.textContent = roster.length + '/4';
+
+      updateArenaLobbyControls();
+    }
+
+    // Botões e permissões do lobby: só o criador convida e busca partida
+    function updateArenaLobbyControls() {
+      const isHost = isArenaLobbyHost();
+
+      // Botão de convidar: desabilitado quando o lobby já está completo
+      const inviteBtn = document.getElementById('arena-invite-btn');
+      if (inviteBtn) {
+        inviteBtn.disabled = isArenaLobbyFull();
+        inviteBtn.title = isArenaLobbyFull() ? 'O lobby já está completo (4/4)' : 'Convidar amigo';
+      }
+
+      // Apenas o criador busca partida (o botão vira "CANCELAR BUSCA" na fila)
+      const searchBtn = document.getElementById('arena-search-btn');
+      if (searchBtn) {
+        searchBtn.classList.toggle('hidden', !isHost);
+        if (isHost) {
+          searchBtn.disabled = false;
+          searchBtn.textContent = arenaQueued ? 'CANCELAR BUSCA' : 'BUSCAR PARTIDA';
+        }
+      }
+
+      // Criador volta para o menu; convidado sai do lobby
+      const backBtn = document.getElementById('arena-back-btn');
+      if (backBtn) backBtn.textContent = isHost ? 'VOLTAR' : 'SAIR';
+    }
+
+    // O lobby está completo quando há quatro pessoas no lobby
+    function isArenaLobbyFull() {
+      return Array.isArray(arenaLobbyRoster) && arenaLobbyRoster.length >= ARENA_LOBBY_MAX;
+    }
+
+    function isArenaLobbyHost() {
+      const me = currentAccountProfile();
+      if (!me) return false;
+      if (!arenaLobbyHostId) return true;
+      return arenaLobbyHostId === me.id;
+    }
+
+    // Recebe o lobby sincronizado pelo servidor
+    function applyArenaLobby(lobby) {
+      if (!lobby) return;
+      const me = currentAccountProfile();
+      arenaLobbyHostId = lobby.hostId || null;
+      arenaLobbyRoster = Array.isArray(lobby.members) ? lobby.members.map(m => ({
+        id: m.id,
+        name: m.name || 'Jogador',
+        picture: m.picture || '/assets/avatar.svg',
+        isHost: Boolean(m.isHost),
+        online: m.online !== false
+      })) : [];
+      arenaMembers = arenaLobbyRoster.filter(m => !me || m.id !== me.id);
       renderArenaMembers();
       loadArenaFriends();
     }
 
-    function renderArenaMembers() {
-      const list = document.getElementById('arena-members');
-      list.innerHTML = '';
-      const members = [
-        { id: 'me', name: 'Você', picture: '/assets/avatar.svg', isMe: true },
-        ...arenaMembers
-      ];
-      members.forEach((m, idx) => {
-        const div = document.createElement('div');
-        div.className = 'flex items-center justify-between p-2 bg-slate-900 border border-slate-600 rounded';
-        div.innerHTML = `
-          <div class="flex items-center gap-3">
-            <img src="${m.picture}" class="w-6 h-6 rounded-full object-cover" onerror="this.onerror=null;this.src='/assets/avatar.svg'">
-            <span class="text-sm text-slate-100">${m.name}</span>
-          </div>
-          ${!m.isMe ? `<button type="button" onclick="arenaRemoveMember(${idx - 1})" class="text-xs text-red-400 hover:text-red-300">Remover</button>` : ''}
-        `;
-        list.appendChild(div);
-      });
-      document.getElementById('arena-team-size').textContent = members.length + '/4';
-      document.getElementById('arena-search-btn').disabled = members.length < 1;
+    /* -------------------------------------------------------------
+       CRONÔMETRO DA FILA (ARENA ONLINE)
+       Mesmo estilo do cronômetro do lobby de DUPLA: aparece entre a
+       área "LOBBY" e o botão de buscar partida.
+    ------------------------------------------------------------- */
+    function startArenaMatchmakingTimer() {
+      const wrap = document.getElementById('arena-match-timer-wrap');
+      const timerEl = document.getElementById('arena-match-timer');
+      if (!wrap || !timerEl) return;
+
+      // Se já está rodando, apenas garante que ele fique visível
+      if (arenaMatchmakingTimer) {
+        wrap.classList.remove('hidden');
+        return;
+      }
+
+      const update = () => {
+        // Formato M:SS (um algarismo para minutos, dois para segundos)
+        const m = String(Math.floor(arenaMatchmakingSeconds / 60));
+        const ss = String(arenaMatchmakingSeconds % 60).padStart(2, '0');
+        timerEl.textContent = `${m}:${ss}`;
+      };
+
+      wrap.classList.remove('hidden');
+      update();
+      arenaMatchmakingTimer = setInterval(() => {
+        arenaMatchmakingSeconds++;
+        update();
+      }, 1000);
     }
 
-    async function arenaSearchMatch() {
-      const btn = document.getElementById('arena-search-btn');
-      btn.disabled = true;
-      btn.textContent = 'Buscando partida...';
-      try {
-        const response = await fetch('/api/online/arena/queue', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            members: arenaMembers.map(m => m.id)
-          })
-        });
-        if (!response.ok) {
-          const error = await response.json().catch(() => ({}));
-          document.getElementById('arena-friend-status').textContent = error.error || 'Erro na fila.';
-          btn.disabled = false;
-          btn.textContent = 'Buscar partida';
-          return;
-        }
-        const data = await response.json();
-        document.getElementById('arena-friend-status').textContent = 'Partida encontrada!';
-        setTimeout(() => {
-          startOnlineArenaGame(data);
-        }, 1000);
-      } catch (error) {
-        document.getElementById('arena-friend-status').textContent = 'Erro de rede.';
-        btn.disabled = false;
-        btn.textContent = 'Buscar partida';
+    function stopArenaMatchmakingTimer() {
+      if (arenaMatchmakingTimer) {
+        clearInterval(arenaMatchmakingTimer);
+        arenaMatchmakingTimer = null;
       }
+      arenaMatchmakingSeconds = 0;
+      const wrap = document.getElementById('arena-match-timer-wrap');
+      if (wrap) wrap.classList.add('hidden');
+      const timerEl = document.getElementById('arena-match-timer');
+      if (timerEl) timerEl.textContent = '00:00';
+      const btn = document.getElementById('arena-search-btn');
+      if (btn && isArenaLobbyHost()) {
+        btn.textContent = 'BUSCAR PARTIDA';
+        btn.disabled = false;
+      }
+    }
+
+    function arenaSearchMatch() {
+      const btn = document.getElementById('arena-search-btn');
+      if (!btn) return;
+
+      // Somente o criador do lobby pode iniciar o matchmaking
+      if (!isArenaLobbyHost()) {
+        setArenaStatus('Apenas o criador do lobby pode buscar partida.');
+        return;
+      }
+
+      if (arenaQueued) {
+        // Cancelar a busca
+        sendOnline({ type: 'arena_leave_queue' });
+        arenaQueued = false;
+        stopArenaMatchmakingTimer();
+        updateArenaLobbyControls();
+        setArenaStatus('Busca cancelada.');
+        return;
+      }
+
+      // O botão continua habilitado e passa a permitir cancelar a busca
+      btn.disabled = false;
+      btn.textContent = 'CANCELAR BUSCA';
+      startArenaMatchmakingTimer();
+
+      // Coloca o lobby na fila da arena: cada jogador entra por si e a
+      // partida começa quando quatro jogadores estão na fila
+      sendOnline({ type: 'arena_queue' });
+      arenaQueued = true;
+      updateArenaLobbyControls();
+      setArenaStatus('Procurando adversários...');
     }
 
     // Inicia a partida de dupla online (1 vs 1 com duplas de um jogador
@@ -5896,9 +6197,51 @@
       startGame();
     }
 
+    // Inicia a partida online da arena: quatro jogadores no tabuleiro,
+    // cada um por si (ninguém divide tabuleiro com ninguém)
     function startOnlineArenaGame(data) {
+      const roster = Array.isArray(data.players) ? data.players : [];
+      const mySlot = Number(data.slot);
+      const myEntry = roster.find(player => Number(player.slot) === mySlot);
+      if (!myEntry) {
+        setArenaStatus('Não foi possível iniciar a partida.', 'text-red-400');
+        return;
+      }
+
+      onlineRoster = roster;
+      onlinePlayerIdx = mySlot;
+      onlineTeamIndex = mySlot;
+      onlineTeamMode = false;
+      onlineMatchType = 'arena';
       isOnlineGame = true;
-      opponentsCount = 3; // 4 jogadores total
+      opponentsCount = ARENA_MATCH_SIZE; // 4 jogadores, cada um por si
+
+      // Cada slot da arena tem uma cor própria (AZUL, VERMELHO, VERDE, AMARELO)
+      onlineSlotColors = CLOCKWISE_COLORS.slice();
+      const localColorKey = onlineSlotColors[mySlot] || 'BLUE';
+
+      // Guarda a escolha de cor da tela inicial para restaurar ao sair da partida
+      preOnlineColorState = {
+        selectedHumanColor,
+        usingCustomColor,
+        customColorHex,
+        customColorName
+      };
+
+      // Na arena a cor do jogador é a cor do seu slot no tabuleiro
+      selectedHumanColor = localColorKey;
+      usingCustomColor = false;
+      customColorHex = PLAYER_COLORS[localColorKey].hex;
+      customColorName = PLAYER_COLORS[localColorKey].name;
+
+      onlineOpponentName = 'Arena (4 jogadores)';
+      // Na arena não existe um "oponente" único: cada um joga por si
+      onlineOpponentColor = null;
+      onlineOpponentProfile = null;
+
+      updateColorVariables();
+      updateColorSelectionUI();
+
       hideOnlineArenaView();
       startGame();
     }
@@ -6084,8 +6427,13 @@
       winTitle.className = `win-title font-display font-black ${humanWon ? 'text-amber-400' : 'text-red-500'}`;
       winSubtitle.innerText = 'DESISTÊNCIA';
       winSubtitle.className = `win-subtitle font-display font-black ${humanWon ? 'text-amber-400' : 'text-red-500'}`;
-      // Placar por desistência: o vencedor recebe "4 - 0" e quem desiste recebe "0 - 4"
-      document.getElementById('win-score').innerText = humanWon ? '4 - 0' : '0 - 4';
+      if (matchMode === 'arena') {
+        // Arena: mostra o placar final dos quatro jogadores
+        document.getElementById('win-score').innerHTML = buildArenaStandingsHtml();
+      } else {
+        // Placar por desistência: o vencedor recebe "4 - 0" e quem desiste recebe "0 - 4"
+        document.getElementById('win-score').innerText = humanWon ? '4 - 0' : '0 - 4';
+      }
       document.getElementById('win-modal').classList.remove('hidden');
 
       // Registra o resultado por desistência no histórico da conta
