@@ -980,11 +980,15 @@
     <button type="button" id="account-button" onclick="handleAccountButtonClick(event)" title="Conta" class="flex h-10 items-center gap-2 pl-1.5 pr-3 bg-slate-700 hover:bg-slate-600 text-xs font-bold transition text-slate-100 border border-slate-600 relative">
       <img id="account-avatar" src="/assets/avatar.svg" alt="Foto do perfil" class="w-7 h-7 rounded-full object-cover bg-slate-800 border border-slate-500">
       <span id="account-name" class="max-w-[90px] truncate">Entrar</span>
+      <span id="account-premium-badge" class="hidden flex items-center px-1.5 py-0.5 bg-amber-400 text-slate-900 text-[9px] font-black tracking-wider rounded">PREMIUM</span>
       <span id="account-friends-badge" class="absolute top-1 right-1 hidden w-4 h-4 bg-red-500 text-white text-[9px] rounded-full flex items-center justify-center font-bold">1</span>
     </button>
     <div id="account-dropdown" class="hidden absolute right-0 mt-2 w-60 bg-slate-800 border border-slate-600 shadow-2xl overflow-hidden z-50">
       <div class="px-4 py-3 border-b border-slate-700">
-        <p id="dropdown-account-name" class="text-sm font-bold text-slate-100 truncate">Conta</p>
+        <div class="flex items-center gap-2">
+          <p id="dropdown-account-name" class="text-sm font-bold text-slate-100 truncate">Conta</p>
+          <span id="dropdown-premium-badge" class="hidden flex items-center px-1.5 py-0.5 bg-amber-400 text-slate-900 text-[9px] font-black tracking-wider rounded">PREMIUM</span>
+        </div>
         <p id="dropdown-account-email" class="text-xs text-slate-400 truncate">Não conectado</p>
       </div>
       <button type="button" onclick="openProfileModal()" class="w-full px-4 py-3 text-left text-sm text-slate-100 hover:bg-slate-700 transition">Perfil</button>
@@ -1209,7 +1213,10 @@
   <div id="account-profile-modal" class="hidden fixed inset-0 z-[100] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="bg-slate-800 border border-slate-600 shadow-2xl w-full max-w-lg p-6 space-y-5">
       <div class="flex items-center justify-between gap-3">
-        <h2 class="font-display text-2xl font-black text-slate-100">Perfil</h2>
+        <div class="flex items-center gap-2">
+          <h2 class="font-display text-2xl font-black text-slate-100">Perfil</h2>
+          <span id="profile-premium-badge" class="hidden flex items-center px-2 py-0.5 bg-amber-400 text-slate-900 text-[10px] font-black tracking-wider rounded">PREMIUM</span>
+        </div>
         <button type="button" onclick="closeProfileModal()" class="w-9 h-9 bg-slate-700 hover:bg-slate-600 text-slate-200 text-lg leading-none">✕</button>
       </div>
 
@@ -1265,12 +1272,61 @@
           <p id="profile-color-locked-hint" class="hidden text-[11px] text-amber-400">A cor terciária está disponível apenas para contas pagas.</p>
         </div>
 
+        <!-- CONTA PREMIUM: pagamento único via Pix, acesso vitalício -->
+        <div id="profile-premium-box" class="hidden space-y-3 border border-amber-400/40 bg-amber-400/10 p-4">
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <p id="profile-premium-title" class="text-xs font-black uppercase tracking-wider text-amber-300">Conta Premium</p>
+              <p id="profile-premium-note" class="text-[11px] text-slate-300 mt-1">Pagamento único. Sem mensalidade. Acesso vitalício.</p>
+            </div>
+            <p id="profile-premium-price" class="text-xl font-black text-amber-300 whitespace-nowrap">R$ 19,90</p>
+          </div>
+          <ul id="profile-premium-benefits" class="space-y-1 text-[11px] text-slate-300"></ul>
+          <button type="button" onclick="openPremiumCheckout()" id="profile-premium-buy-btn" class="w-full py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold transition text-sm">Assinar Conta Premium</button>
+          <p id="profile-premium-active" class="hidden text-[11px] text-emerald-400 font-bold">Sua Conta Premium está ativa. Aproveite!</p>
+        </div>
+
         <p id="profile-status" class="text-xs text-slate-400 min-h-[18px]"></p>
         <div class="flex flex-col gap-3 pt-2">
           <button type="button" onclick="saveProfileColors()" id="profile-save-colors-btn" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition">Salvar</button>
           <button type="button" onclick="closeProfileModal()" class="w-full py-3 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition">Fechar</button>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- MODAL DE COMPRA DA CONTA PREMIUM (PIX) -->
+  <div id="premium-checkout-modal" class="hidden fixed inset-0 z-[110] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-800 border border-slate-600 shadow-2xl w-full max-w-md p-6 space-y-4 max-h-[92vh] overflow-y-auto">
+      <div class="flex items-center justify-between gap-3">
+        <h3 id="premium-checkout-title" class="font-display text-xl font-black text-slate-100">Conta Premium</h3>
+        <button type="button" onclick="closePremiumCheckout()" class="w-9 h-9 bg-slate-700 hover:bg-slate-600 text-slate-200 text-lg leading-none">✕</button>
+      </div>
+
+      <p id="premium-checkout-note" class="text-xs text-slate-300">Pagamento único via Pix. Sem mensalidade. Acesso vitalício.</p>
+      <p id="premium-checkout-price" class="text-3xl font-black text-amber-300">R$ 19,90</p>
+
+      <ul id="premium-checkout-benefits" class="space-y-1 text-xs text-slate-300"></ul>
+
+      <div class="flex flex-col items-center gap-3">
+        <div id="premium-qr-image-wrap" class="hidden bg-white p-2">
+          <img id="premium-qr-image" alt="QR Code do Pix" class="w-52 h-52">
+        </div>
+        <p id="premium-checkout-status" class="text-xs text-slate-300 text-center">Gerando a cobrança Pix...</p>
+      </div>
+
+      <div id="premium-copy-area" class="space-y-2 hidden">
+        <label for="premium-pix-code" class="block text-xs font-bold uppercase tracking-wider text-slate-300">Pix copia e cola</label>
+        <textarea id="premium-pix-code" readonly class="w-full h-20 bg-slate-900 border border-slate-600 px-3 py-2 font-mono text-[11px] text-slate-200 outline-none"></textarea>
+        <button type="button" onclick="copyPremiumPixCode()" id="premium-copy-btn" class="w-full py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-xs">Copiar código</button>
+      </div>
+
+      <p id="premium-test-warning" class="hidden text-[11px] text-amber-400 text-center">Ambiente de teste: nenhuma cobrança real será feita.</p>
+
+      <button type="button" onclick="confirmPremiumDevPayment()" id="premium-dev-confirm-btn" class="hidden w-full py-2 bg-slate-700 hover:bg-slate-600 text-amber-300 font-bold transition text-xs">Simular pagamento (teste)</button>
+
+      <button type="button" onclick="checkPremiumPayment()" id="premium-check-btn" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition">Já paguei — verificar</button>
+      <button type="button" onclick="closePremiumCheckout()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">Fechar</button>
     </div>
   </div>
 
@@ -1994,7 +2050,10 @@
     // Conta paga: libera a personalização da cor terciária
     function hasPaidAccount(user) {
       if (!user) return false;
-      return Boolean(user.isPaid || user.paid || user.hasPaidPlan || user.subscription || user.plan === 'paid');
+      return Boolean(
+        user.isPaid || user.paid || user.hasPaidPlan || user.subscription ||
+        user.plan === 'paid' || user.plan === 'premium'
+      );
     }
 
     function profileColorRoleEnabled(role) {
@@ -2140,6 +2199,246 @@
       } catch (error) {
         setProfileStatus(error.message, 'text-red-400');
         if (saveBtn) saveBtn.disabled = false;
+      }
+    }
+
+    /* -------------------------------------------------------------
+       CONTA PREMIUM (pagamento único via Pix, acesso vitalício)
+    ------------------------------------------------------------- */
+    const premiumState = {
+      info: null,
+      payment: null,
+      pollTimer: null
+    };
+
+    function formatBRL(value) {
+      const amount = Number(value || 0);
+      return `R$ ${amount.toFixed(2).replace('.', ',')}`;
+    }
+
+    // Carrega nome, preço e benefícios do plano (vindos do servidor)
+    async function loadPremiumInfo() {
+      try {
+        const response = await fetch('/api/premium/info');
+        if (!response.ok) return null;
+        const data = await response.json();
+        premiumState.info = data.premium || null;
+        return premiumState.info;
+      } catch (error) {
+        return null;
+      }
+    }
+
+    function renderPremiumBenefits(elementId) {
+      const list = document.getElementById(elementId);
+      if (!list) return;
+      const benefits = (premiumState.info && premiumState.info.benefits) || [];
+      list.innerHTML = benefits
+        .map(benefit => `<li class="flex items-start gap-2"><span class="text-amber-400 font-bold">✓</span><span>${benefit}</span></li>`)
+        .join('');
+    }
+
+    // Bloco de venda dentro do modal de perfil
+    function renderPremiumBox(user) {
+      const box = document.getElementById('profile-premium-box');
+      if (!box) return;
+
+      const info = premiumState.info;
+      const paid = hasPaidAccount(user || (typeof accountUser !== 'undefined' ? accountUser : null));
+
+      box.classList.remove('hidden');
+
+      const title = document.getElementById('profile-premium-title');
+      const note = document.getElementById('profile-premium-note');
+      const price = document.getElementById('profile-premium-price');
+      const buyBtn = document.getElementById('profile-premium-buy-btn');
+      const activeText = document.getElementById('profile-premium-active');
+
+      if (info) {
+        if (title) title.textContent = info.planName || 'Conta Premium';
+        if (note) note.textContent = info.note || 'Pagamento único. Sem mensalidade. Acesso vitalício.';
+        if (price) price.textContent = formatBRL(info.price);
+      }
+      renderPremiumBenefits('profile-premium-benefits');
+
+      if (paid) {
+        if (buyBtn) buyBtn.classList.add('hidden');
+        if (activeText) activeText.classList.remove('hidden');
+        if (price) price.classList.add('hidden');
+      } else {
+        if (buyBtn) buyBtn.classList.remove('hidden');
+        if (activeText) activeText.classList.add('hidden');
+        if (price) price.classList.remove('hidden');
+      }
+    }
+
+    function setPremiumCheckoutStatus(message, tone) {
+      const el = document.getElementById('premium-checkout-status');
+      if (!el) return;
+      el.textContent = message || '';
+      el.className = `text-xs text-center ${tone || 'text-slate-300'}`;
+    }
+
+    function stopPremiumPolling() {
+      if (premiumState.pollTimer) {
+        clearInterval(premiumState.pollTimer);
+        premiumState.pollTimer = null;
+      }
+    }
+
+    // Abre o modal de compra e gera a cobrança Pix
+    async function openPremiumCheckout() {
+      const modal = document.getElementById('premium-checkout-modal');
+      if (!modal) return;
+
+      modal.classList.remove('hidden');
+      setPremiumCheckoutStatus('Gerando a cobrança Pix...', 'text-slate-300');
+
+      const qrWrap = document.getElementById('premium-qr-image-wrap');
+      const qrImage = document.getElementById('premium-qr-image');
+      const copyArea = document.getElementById('premium-copy-area');
+      const pixCode = document.getElementById('premium-pix-code');
+      const testWarning = document.getElementById('premium-test-warning');
+      if (qrWrap) qrWrap.classList.add('hidden');
+      if (copyArea) copyArea.classList.add('hidden');
+      if (testWarning) testWarning.classList.add('hidden');
+
+      if (!premiumState.info) await loadPremiumInfo();
+      const info = premiumState.info;
+      if (info) {
+        const title = document.getElementById('premium-checkout-title');
+        const note = document.getElementById('premium-checkout-note');
+        const price = document.getElementById('premium-checkout-price');
+        if (title) title.textContent = info.planName || 'Conta Premium';
+        if (note) note.textContent = info.note || 'Pagamento único via Pix. Sem mensalidade. Acesso vitalício.';
+        if (price) price.textContent = formatBRL(info.price);
+      }
+      renderPremiumBenefits('premium-checkout-benefits');
+
+      try {
+        const response = await fetch('/api/premium/checkout', { method: 'POST' });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'Não foi possível gerar a cobrança Pix.');
+
+        if (data.alreadyPaid) {
+          applyPremiumUser(data.user);
+          setPremiumCheckoutStatus('Você já tem a Conta Premium!', 'text-emerald-400');
+          setTimeout(closePremiumCheckout, 900);
+          return;
+        }
+
+        premiumState.payment = data.payment || null;
+        const payment = premiumState.payment;
+        if (!payment) throw new Error('Resposta inválida do servidor.');
+
+        if (payment.qrCode) {
+          if (qrImage) qrImage.src = payment.qrCode;
+          if (qrWrap) qrWrap.classList.remove('hidden');
+        } else if (payment.copyPaste) {
+          // Sem imagem do gateway (modo de teste): mostra o código para copiar
+          if (pixCode) pixCode.value = payment.copyPaste;
+          if (copyArea) copyArea.classList.remove('hidden');
+        }
+
+        if (payment.testMode && testWarning) testWarning.classList.remove('hidden');
+        if (payment.testMode) {
+          const devBtn = document.getElementById('premium-dev-confirm-btn');
+          if (devBtn) devBtn.classList.remove('hidden');
+        }
+
+        setPremiumCheckoutStatus('Abra o app do seu banco, escolha Pix e escaneie o QR Code (ou copie o código). O Premium é liberado assim que o pagamento é confirmado.', 'text-slate-300');
+        startPremiumPolling();
+      } catch (error) {
+        setPremiumCheckoutStatus(error.message, 'text-red-400');
+      }
+    }
+
+    function closePremiumCheckout() {
+      stopPremiumPolling();
+      const modal = document.getElementById('premium-checkout-modal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    // Consulta o status da cobrança (o servidor confere com o gateway)
+    async function checkPremiumPayment(silent) {
+      const payment = premiumState.payment;
+      try {
+        const response = await fetch(`/api/premium/status${payment ? `?id=${encodeURIComponent(payment.id)}` : ''}`);
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'Não foi possível consultar o pagamento.');
+
+        if (data.paid) {
+          applyPremiumUser(data.user);
+          setPremiumCheckoutStatus('Pagamento confirmado! Sua Conta Premium já está ativa.', 'text-emerald-400');
+          stopPremiumPolling();
+          setTimeout(closePremiumCheckout, 1200);
+          return true;
+        }
+
+        if (!silent) {
+          const statusText = {
+            pending: 'Pagamento ainda não confirmado. Se você já pagou, aguarde alguns segundos.',
+            rejected: 'O pagamento não foi aprovado. Tente novamente.',
+            expired: 'A cobrança expirou. Feche e abra novamente para gerar um novo QR Code.',
+            cancelled: 'O pagamento foi cancelado.'
+          };
+          setPremiumCheckoutStatus(statusText[data.status] || 'Pagamento ainda não confirmado.', data.status === 'pending' ? 'text-amber-400' : 'text-red-400');
+        }
+        return false;
+      } catch (error) {
+        if (!silent) setPremiumCheckoutStatus(error.message, 'text-red-400');
+        return false;
+      }
+    }
+
+    function startPremiumPolling() {
+      stopPremiumPolling();
+      premiumState.pollTimer = setInterval(() => checkPremiumPayment(true), 4000);
+    }
+
+    // Aplica o usuário com o Premium liberado (atualiza badge e perfil)
+    function applyPremiumUser(user) {
+      if (!user) return;
+      if (typeof updateAccountUI === 'function') updateAccountUI(user);
+      if (typeof initProfileColors === 'function') initProfileColors(user);
+      renderPremiumBox(user);
+    }
+
+    async function copyPremiumPixCode() {
+      const code = document.getElementById('premium-pix-code');
+      const btn = document.getElementById('premium-copy-btn');
+      if (!code) return;
+      try {
+        await navigator.clipboard.writeText(code.value);
+        if (btn) {
+          const original = btn.textContent;
+          btn.textContent = 'Código copiado!';
+          setTimeout(() => { btn.textContent = original; }, 1800);
+        }
+      } catch (error) {
+        code.select();
+        setPremiumCheckoutStatus('Selecione e copie o código manualmente.', 'text-amber-400');
+      }
+    }
+
+    // Libera o Premium manualmente (somente em desenvolvimento/testes)
+    async function confirmPremiumDevPayment() {
+      const payment = premiumState.payment;
+      if (!payment) return;
+      try {
+        const response = await fetch('/api/premium/dev/confirm', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: payment.id })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'Não foi possível confirmar o pagamento.');
+        applyPremiumUser(data.user);
+        setPremiumCheckoutStatus('Pagamento confirmado (modo teste)!', 'text-emerald-400');
+        stopPremiumPolling();
+        setTimeout(closePremiumCheckout, 1200);
+      } catch (error) {
+        setPremiumCheckoutStatus(error.message, 'text-red-400');
       }
     }
 
@@ -6186,6 +6485,8 @@
       updateColorSelectionUI();
       updateScoreboardUI();
       updateSoundSettingsUI();
+      // Preço e benefícios da Conta Premium (Pix)
+      if (typeof loadPremiumInfo === 'function') loadPremiumInfo();
       initBoard();
       initWebSocket();
       initGoogleLoginSetup();
@@ -6255,6 +6556,6 @@
     };
   </script>
   <!-- A versão no link evita que o navegador use um auth.js antigo em cache -->
-  <script src="/auth.js?v=20261101" defer></script>
+  <script src="/auth.js?v=20261102" defer></script>
 </body>
 </html>

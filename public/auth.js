@@ -15,11 +15,34 @@ const profileEmail = document.getElementById('profile-account-email');
 const profilePlayerName = document.getElementById('profile-player-name');
 const profileStatus = document.getElementById('profile-status');
 
+// Selo "PREMIUM" (conta paga) exibido junto do nickname
+const premiumBadges = [
+  document.getElementById('account-premium-badge'),
+  document.getElementById('dropdown-premium-badge'),
+  document.getElementById('profile-premium-badge')
+];
+
 // O botão "Entrar" do canto superior direito só aparece com login Google
 function setAccountAreaVisible(visible) {
   const area = document.getElementById('account-area');
   if (!area) return;
   area.classList.toggle('hidden', !visible);
+}
+
+// Conta com o plano Premium liberado (pagamento único vitalício)
+function isPremiumAccount(user) {
+  if (!user) return false;
+  return Boolean(
+    user.isPaid || user.paid || user.hasPaidPlan || user.subscription ||
+    user.plan === 'paid' || user.plan === 'premium'
+  );
+}
+
+function updatePremiumBadges(user) {
+  const visible = isPremiumAccount(user);
+  premiumBadges.forEach(badge => {
+    if (badge) badge.classList.toggle('hidden', !visible);
+  });
 }
 
 function setAvatarImage(imageElement, url) {
@@ -45,6 +68,7 @@ function updateAccountUI(user) {
     setAvatarImage(accountAvatar, DEFAULT_AVATAR);
     dropdownAccountName.textContent = 'Conta';
     dropdownAccountEmail.textContent = 'Não conectado';
+    updatePremiumBadges(null);
     // Sem login não existe botão de conta no canto superior direito
     setAccountAreaVisible(false);
     // Sincroniza a tela inicial do jogo com o estado "desconectado".
@@ -58,6 +82,8 @@ function updateAccountUI(user) {
   setAvatarImage(accountAvatar, user.avatarUrl || user.picture || DEFAULT_AVATAR);
   dropdownAccountName.textContent = getAccountNickname(user) || 'Conta';
   dropdownAccountEmail.textContent = user.email || '';
+  // Selo Premium (conta paga)
+  updatePremiumBadges(user);
   // Com login o botão de conta volta a aparecer no canto superior direito
   setAccountAreaVisible(true);
   // Sincroniza a tela inicial do jogo (esconde o login Google e habilita
@@ -95,6 +121,11 @@ function openProfileModal() {
   profileStatus.textContent = '';
   // Carrega as cores do perfil (primária, secundária e terciária)
   if (typeof initProfileColors === 'function') initProfileColors(accountUser);
+  // Bloco da Conta Premium (preço e benefícios)
+  if (typeof loadPremiumInfo === 'function') loadPremiumInfo().then(() => {
+    if (typeof renderPremiumBox === 'function') renderPremiumBox(accountUser);
+  });
+  if (typeof renderPremiumBox === 'function') renderPremiumBox(accountUser);
   profileModal.classList.remove('hidden');
 }
 

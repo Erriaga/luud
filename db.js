@@ -13,6 +13,7 @@ const DATA_DIR = path.join(process.env.DATA_DIR || ROOT, 'data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
 const MATCHES_FILE = path.join(DATA_DIR, 'matches.json');
+const PAYMENTS_FILE = path.join(DATA_DIR, 'payments.json');
 
 let pool = null;
 let dbAvailable = false; // true apenas se DATABASE_URL estiver definida E acessível
@@ -81,6 +82,8 @@ async function ensureDatabaseSchema() {
         tertiary_color TEXT DEFAULT '#ef233c',
         colors_customized BOOLEAN DEFAULT FALSE,
         is_paid BOOLEAN DEFAULT FALSE,
+        plan TEXT DEFAULT 'free',
+        paid_at TIMESTAMP,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
       );
@@ -96,8 +99,31 @@ async function ensureDatabaseSchema() {
       await p.query(`ALTER TABLE users ALTER COLUMN primary_color SET DEFAULT '#0096ff';`);
       await p.query(`ALTER TABLE users ALTER COLUMN secondary_color SET DEFAULT '#00a86b';`);
       await p.query(`ALTER TABLE users ALTER COLUMN tertiary_color SET DEFAULT '#ef233c';`);
+      await p.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS plan TEXT DEFAULT 'free';`);
+      await p.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS paid_at TIMESTAMP;`);
     } catch (migrationError) {
       console.warn('Não foi possível migrar as cores do perfil:', migrationError.message);
+    }
+
+    // Tabela de cobranças Pix (pagamento único da Conta Premium)
+    try {
+      await p.query(`
+        CREATE TABLE IF NOT EXISTS payments (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          gateway TEXT DEFAULT 'pix',
+          amount NUMERIC DEFAULT 0,
+          status TEXT DEFAULT 'pending',
+          gateway_ref TEXT DEFAULT '',
+          copy_paste TEXT DEFAULT '',
+          qr_code TEXT DEFAULT '',
+          created_at TIMESTAMP DEFAULT NOW(),
+          expires_at TIMESTAMP DEFAULT DEFAULT NOW(),
+          paid_at TIMESTAMP
+        );
+      `);
+    } catch (paymentsError) {
+      console.warn('Não foi possível criar a tabela de pagamentos:', paymentsError.message);
     }
 
     await p.query(`
@@ -199,9 +225,19 @@ const DEFAULT_TERTIARY_COLOR = '#ef233c';  // Vermelho
 /* Contas que já nascem com o plano pago liberado (usadas em testes) */
 const PAID_TEST_EMAILS = ['ifsp.raphael@gmail.com'];
 
+/* Planos disponíveis: 'free' (padrão) e 'premium' (pagamento único vitalício) */
+const PLAN_FREE = 'free';
+const PLAN_PREMIUM = 'premium';
+
 function isPaidEmail(email) {
   const value = String(email || '').trim().toLowerCase();
   return PAID_TEST_EMAILS.includes(value);
+}
+
+function normalizePlan(plan, isPaid) {
+  const value = String(plan || '').trim().toLowerCase();
+  if (value === PLAN_PREMIUM) return PLAN_PREMIUM;
+  return isPaid ? PLAN_PREMIUM : PLAN_FREE;
 }
 
 function normalizeHexColorValue(value, fallback) {
@@ -250,6 +286,7 @@ function normalizeUserFromDb(row) {
     secondaryColor: row.secondary_color,
     tertiaryColor: row.tertiary_color
   });
+  const paid = row.is_paid === true || row.plan === PLAN_PREMIUM || isPaidEmail(row.email);
   return {
     id: row.id,
     email: row.email,
@@ -263,7 +300,9 @@ function normalizeUserFromDb(row) {
     secondaryColor: colors.secondaryColor,
     tertiaryColor: colors.tertiaryColor,
     colorsCustomized: row.colors_customized === true,
-    isPaid: row.is_paid === true || isPaidEmail(row.email),
+    isPaid: paid,
+    plan: normalizePlan(row.plan, paid),
+    paidAt: row.paid_at ? new Date(row.paid_at).toISOString() : null,
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
     updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString()
   };
@@ -271,6 +310,7 @@ function normalizeUserFromDb(row) {
 
 function normalizeUser(user) {
   const colors = profileColorsFor(user);
+  const paid = user.isPaid === true || user.plan === PLAN_PREMIUM || isPaidEmail(user.email);
   return {
     id: user.id,
     email: user.email,
@@ -284,7 +324,9 @@ function normalizeUser(user) {
     secondaryColor: colors.secondaryColor,
     tertiaryColor: colors.tertiaryColor,
     colorsCustomized: Boolean(user.colorsCustomized),
-    isPaid: user.isPaid === true || isPaidEmail(user.email),
+    isPaid: paid,
+    plan: normalizePlan(user.plan, paid),
+    paidAt: user.paidAt || null,
     friends: Array.isArray(user.friends) ? user.friends : [],
     friendRequestsSent: Array.isArray(user.friendRequestsSent) ? user.friendRequestsSent : [],
     friendRequestsReceived: Array.isArray(user.friendRequestsReceived) ? user.friendRequestsReceived : [],
@@ -489,6 +531,8 @@ async function updateUserProfile(userId, fields) {
       if (fields.tertiaryColor !== undefined) { updates.push(`tertiary_color = $${idx++}`); values.push(fields.tertiaryColor); }
       if (fields.colorsCustomized !== undefined) { updates.push(`colors_customized = $${idx++}`); values.push(fields.colorsCustomized); }
       if (fields.isPaid !== undefined) { updates.push(`is_paid = $${idx++}`); values.push(fields.isPaid); }
+      if (fields.plan !== undefined) { updates.push(`plan = $${idx++}`); values.push(fields.plan); }
+      if (fields.paidAt !== undefined) { updates.push(`paid_at = $${idx++}`); values.push(fields.paidAt); }
       updates.push(`updated_at = $${idx++}`); values.push(new Date().toISOString());
       values.push(userId);
 
@@ -508,6 +552,170 @@ async function updateUserProfile(userId, fields) {
   users[userId] = normalizeUser({ ...currentUser, ...fields, updatedAt: new Date().toISOString() });
   await writeJsonFile(USERS_FILE, users);
   return users[userId];
+}
+
+/* ------------------------------------------------------------------
+   CONTA PREMIUM
+   Ativa o plano premium (pagamento único vitalício) do jogador.
+   A operação é idempotente: chamar de novo não causa problema.
+------------------------------------------------------------------ */
+async function activatePremium(userId, paymentRef) {
+  const paidAt = new Date().toISOString();
+  const user = await updateUserProfile(userId, {
+    isPaid: true,
+    plan: PLAN_PREMIUM,
+    paidAt
+  });
+  return { user, paymentRef: paymentRef || '' };
+}
+
+/* ------------------------------------------------------------------
+   COBRANÇAS PIX
+   Cada tentativa de compra gera um registro de pagamento. O registro
+   é a fonte de verdade do servidor: o cliente nunca informa que pagou.
+------------------------------------------------------------------ */
+function normalizePayment(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    userId: row.user_id || row.userId,
+    gateway: row.gateway || 'pix',
+    amount: Number(row.amount || 0),
+    status: row.status || 'pending',
+    gatewayRef: row.gateway_ref || row.gatewayRef || '',
+    copyPaste: row.copy_paste || row.copyPaste || '',
+    qrCode: row.qr_code || row.qrCode || '',
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+    expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
+    paidAt: row.paid_at ? new Date(row.paid_at).toISOString() : null
+  };
+}
+
+async function createPayment(payment) {
+  const record = {
+    id: payment.id,
+    userId: payment.userId,
+    gateway: payment.gateway || 'pix',
+    amount: Number(payment.amount || 0),
+    status: payment.status || 'pending',
+    gatewayRef: payment.gatewayRef || '',
+    copyPaste: payment.copyPaste || '',
+    qrCode: payment.qrCode || '',
+    createdAt: new Date().toISOString(),
+    expiresAt: payment.expiresAt || new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+    paidAt: null
+  };
+
+  if (useDatabase()) {
+    try {
+      const p = getPool();
+      await p.query(
+        `INSERT INTO payments (id, user_id, gateway, amount, status, gateway_ref, copy_paste, qr_code, created_at, expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [
+          record.id, record.userId, record.gateway, record.amount, record.status,
+          record.gatewayRef, record.copyPaste, record.qrCode, record.createdAt, record.expiresAt
+        ]
+      );
+      return record;
+    } catch (error) {
+      dbAvailable = false;
+      pool = null;
+    }
+  }
+
+  const payments = await readJsonFile(PAYMENTS_FILE);
+  payments[record.id] = record;
+  await writeJsonFile(PAYMENTS_FILE, payments);
+  return record;
+}
+
+async function getPayment(paymentId) {
+  if (!paymentId) return null;
+  if (useDatabase()) {
+    try {
+      const p = getPool();
+      const result = await p.query('SELECT * FROM payments WHERE id = $1', [paymentId]);
+      return result.rows.length ? normalizePayment(result.rows[0]) : null;
+    } catch (error) {
+      dbAvailable = false;
+      pool = null;
+    }
+  }
+  const payments = await readJsonFile(PAYMENTS_FILE);
+  return payments[paymentId] ? normalizePayment(payments[paymentId]) : null;
+}
+
+async function findPaymentByGatewayRef(gatewayRef) {
+  if (!gatewayRef) return null;
+  if (useDatabase()) {
+    try {
+      const p = getPool();
+      const result = await p.query('SELECT * FROM payments WHERE gateway_ref = $1 ORDER BY created_at DESC LIMIT 1', [gatewayRef]);
+      return result.rows.length ? normalizePayment(result.rows[0]) : null;
+    } catch (error) {
+      dbAvailable = false;
+      pool = null;
+    }
+  }
+  const payments = await readJsonFile(PAYMENTS_FILE);
+  const ids = Object.keys(payments).sort((a, b) => String(payments[b].createdAt).localeCompare(String(payments[a].createdAt)));
+  for (const id of ids) {
+    if (payments[id].gatewayRef === gatewayRef) return normalizePayment(payments[id]);
+  }
+  return null;
+}
+
+async function updatePayment(paymentId, fields) {
+  const current = await getPayment(paymentId);
+  if (!current) return null;
+  const updated = { ...current, ...fields };
+
+  if (useDatabase()) {
+    try {
+      const p = getPool();
+      await p.query(
+        `UPDATE payments SET status = $1, gateway_ref = $2, copy_paste = $3, qr_code = $4, paid_at = $5 WHERE id = $6`,
+        [
+          updated.status,
+          updated.gatewayRef,
+          updated.copyPaste,
+          updated.qrCode,
+          updated.paidAt,
+          paymentId
+        ]
+      );
+      return updated;
+    } catch (error) {
+      dbAvailable = false;
+      pool = null;
+    }
+  }
+
+  const payments = await readJsonFile(PAYMENTS_FILE);
+  payments[paymentId] = updated;
+  await writeJsonFile(PAYMENTS_FILE, payments);
+  return updated;
+}
+
+async function listPaymentsForUser(userId) {
+  if (!userId) return [];
+  if (useDatabase()) {
+    try {
+      const p = getPool();
+      const result = await p.query('SELECT * FROM payments WHERE user_id = $1 ORDER BY created_at DESC LIMIT 20', [userId]);
+      return result.rows.map(normalizePayment);
+    } catch (error) {
+      dbAvailable = false;
+      pool = null;
+    }
+  }
+  const payments = await readJsonFile(PAYMENTS_FILE);
+  return Object.values(payments)
+    .filter(payment => payment.userId === userId)
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+    .slice(0, 20)
+    .map(normalizePayment);
 }
 
 /* ------------------------------------------------------------------
@@ -986,6 +1194,12 @@ module.exports = {
   searchUsersByQuery,
   createOrUpdateUserFromGoogle,
   updateUserProfile,
+  activatePremium,
+  createPayment,
+  getPayment,
+  findPaymentByGatewayRef,
+  updatePayment,
+  listPaymentsForUser,
   createSession,
   getSessionUser,
   destroySession,

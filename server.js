@@ -4,8 +4,10 @@ const http = require('http');
 const fs = require('fs/promises');
 const fss = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
 const db = require('./db');
+const pix = require('./pix');
 
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
@@ -17,6 +19,31 @@ const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const COOKIE_NAME = 'luud_session';
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7;
+
+/* -------------------------------------------------------------
+   CONTA PREMIUM (pagamento único via Pix, acesso vitalício)
+------------------------------------------------------------- */
+const PREMIUM_PLAN_NAME = process.env.PREMIUM_PLAN_NAME || 'Conta Premium';
+const PREMIUM_PRICE_BRL = Number(process.env.PREMIUM_PRICE_BRL || 19.90);
+const PREMIUM_CURRENCY = 'BRL';
+const PREMIUM_TRIAL_NOTE = 'Pagamento único. Sem mensalidade. Acesso vitalício.';
+const PREMIUM_BENEFITS = [
+  'Cor terciária desbloqueada (3 cores no perfil)',
+  'Nickname editável a qualquer momento',
+  'Selo Premium no perfil e no placar',
+  'Cores e personalizações exclusivas',
+  'Acesso vitalício, sem renovação'
+];
+
+// Gateway de pagamento: 'mercadopago' | 'stub'
+const PIX_GATEWAY = (process.env.PIX_GATEWAY || (NODE_ENV === 'production' ? '' : 'stub')).trim().toLowerCase();
+const PIX_API_TOKEN = process.env.PIX_API_TOKEN || '';
+const PIX_WEBHOOK_SECRET = process.env.PIX_WEBHOOK_SECRET || '';
+const PIX_KEY = process.env.PIX_KEY || '';
+const PIX_MERCHANT_NAME = process.env.PIX_MERCHANT_NAME || 'LUUD';
+const PIX_MERCHANT_CITY = process.env.PIX_MERCHANT_CITY || 'SAO PAULO';
+const PUBLIC_URL = (process.env.PUBLIC_URL || '').replace(/\/+$/, '');
+const PAYMENT_EXPIRY_MINUTES = Number(process.env.PAYMENT_EXPIRY_MINUTES || 30);
 
 /* -------------------------------------------------------------
    SALAS DE JOGO ONLINE (multiplayer entre computadores)
@@ -744,6 +771,282 @@ async function handleSession(request, response) {
 }
 
 /* -------------------------------------------------------------
+   CONTA PREMIUM - COMPRA VIA PIX
+   O servidor é a fonte de verdade: o cliente apenas pede a cobrança
+   e consulta o status. O Premium só é liberado depois que o gateway
+   confirma o pagamento (webhook ou consulta de status).
+------------------------------------------------------------- */
+function premiumPublicInfo() {
+  return {
+    planName: PREMIUM_PLAN_NAME,
+    price: PREMIUM_PRICE_BRL,
+    currency: PREMIUM_CURRENCY,
+    note: PREMIUM_TRIAL_NOTE,
+    benefits: PREMIUM_BENEFITS,
+    gatewayReady: Boolean(PIX_GATEWAY === 'mercadopago' && PIX_API_TOKEN) || (PIX_GATEWAY === 'stub' && NODE_ENV !== 'production')
+  };
+}
+
+function generatePaymentId() {
+  return `pix_${Date.now().toString(36)}_${crypto.randomBytes(6).toString('hex')}`;
+}
+
+// Ativa o Premium e devolve o usuário atualizado
+async function grantPremium(userId, paymentId) {
+  const { user } = await db.activatePremium(userId, paymentId);
+  await db.updatePayment(paymentId, { status: 'paid', paidAt: new Date().toISOString() });
+  return user;
+}
+
+// Consulta o status da cobrança no gateway e libera o Premium se aprovado
+async function refreshPaymentStatus(payment) {
+  if (!payment || payment.status === 'paid') return payment;
+
+  if (payment.gateway === 'mercadopago' && PIX_API_TOKEN && payment.gatewayRef) {
+    const data = await pix.getMercadoPagoPayment({ token: PIX_API_TOKEN, paymentId: payment.gatewayRef });
+    if (data && data.status === 'approved') {
+      await grantPremium(payment.userId, payment.id);
+      return db.getPayment(payment.id);
+    }
+    if (data && data.status && data.status !== 'pending') {
+      return db.updatePayment(payment.id, { status: data.status });
+    }
+  }
+
+  // Cobrança expirada
+  if (payment.expiresAt && new Date(payment.expiresAt).getTime() < Date.now() && payment.status === 'pending') {
+    return db.updatePayment(payment.id, { status: 'expired' });
+  }
+
+  return payment;
+}
+
+async function handlePremiumInfo(request, response) {
+  sendJson(response, 200, { premium: premiumPublicInfo() });
+}
+
+async function handlePremiumCheckout(request, response) {
+  const user = await getSessionUser(request);
+  if (!user) {
+    sendJson(response, 401, { error: 'Sessão expirada. Entre com a conta Google para assinar.' });
+    return;
+  }
+
+  if (user.isPaid) {
+    sendJson(response, 200, { alreadyPaid: true, user, premium: premiumPublicInfo() });
+    return;
+  }
+
+  if (!PIX_GATEWAY) {
+    sendJson(response, 503, { error: 'O pagamento via Pix ainda não está disponível.' });
+    return;
+  }
+
+  if (PIX_GATEWAY === 'mercadopago' && !PIX_API_TOKEN) {
+    sendJson(response, 503, { error: 'O gateway Pix não está configurado.' });
+    return;
+  }
+
+  if (PIX_GATEWAY === 'stub' && NODE_ENV === 'production') {
+    sendJson(response, 503, { error: 'O gateway Pix não está configurado.' });
+    return;
+  }
+
+  // Qualquer gateway desconhecido (erro de digitação) é recusado
+  if (PIX_GATEWAY !== 'mercadopago' && PIX_GATEWAY !== 'stub') {
+    sendJson(response, 503, { error: 'O gateway Pix não está configurado.' });
+    return;
+  }
+
+  try {
+    const paymentId = generatePaymentId();
+    const expiresAt = new Date(Date.now() + PAYMENT_EXPIRY_MINUTES * 60 * 1000).toISOString();
+
+    let qrCode = '';
+    let copyPaste = '';
+    let gatewayRef = '';
+
+    if (PIX_GATEWAY === 'mercadopago') {
+      const notificationUrl = PUBLIC_URL ? `${PUBLIC_URL}/api/premium/webhook` : undefined;
+      const created = await pix.createMercadoPagoPayment({
+        token: PIX_API_TOKEN,
+        amount: PREMIUM_PRICE_BRL,
+        description: `${PREMIUM_PLAN_NAME} LUUD - pagamento unico`,
+        email: user.email,
+        externalReference: paymentId,
+        notificationUrl,
+        metadata: { user_id: user.id, payment_id: paymentId }
+      });
+      qrCode = created.qrCode || '';
+      copyPaste = created.copyPaste || '';
+      gatewayRef = created.id || '';
+    } else {
+      // Modo de desenvolvimento: gera um BR Code estático para testar a interface
+      const key = PIX_KEY || 'luud.premium@pix.test';
+      copyPaste = pix.buildPixPayload({
+        key,
+        name: PIX_MERCHANT_NAME,
+        city: PIX_MERCHANT_CITY,
+        amount: PREMIUM_PRICE_BRL,
+        txid: paymentId
+      });
+      gatewayRef = paymentId;
+    }
+
+    const payment = await db.createPayment({
+      id: paymentId,
+      userId: user.id,
+      gateway: PIX_GATEWAY,
+      amount: PREMIUM_PRICE_BRL,
+      status: 'pending',
+      gatewayRef,
+      copyPaste,
+      qrCode,
+      expiresAt
+    });
+
+    sendJson(response, 200, {
+      payment: {
+        id: payment.id,
+        amount: payment.amount,
+        currency: PREMIUM_CURRENCY,
+        status: payment.status,
+        qrCode: payment.qrCode,
+        copyPaste: payment.copyPaste,
+        expiresAt: payment.expiresAt,
+        gateway: payment.gateway,
+        testMode: PIX_GATEWAY === 'stub'
+      },
+      premium: premiumPublicInfo()
+    });
+  } catch (error) {
+    sendJson(response, 400, { error: error.message || 'Não foi possível gerar a cobrança Pix.' });
+  }
+}
+
+async function handlePremiumStatus(request, response) {
+  const user = await getSessionUser(request);
+  if (!user) {
+    sendJson(response, 401, { error: 'Sessão expirada.' });
+    return;
+  }
+
+  const requestUrl = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
+  const paymentId = requestUrl.searchParams.get('id');
+
+  try {
+    let payment = paymentId ? await db.getPayment(paymentId) : null;
+    if (!payment && !paymentId) {
+      const payments = await db.listPaymentsForUser(user.id);
+      payment = payments.find(item => item.status === 'pending') || payments[0] || null;
+    }
+
+    // A cobrança precisa pertencer ao jogador logado
+    if (payment && payment.userId !== user.id) {
+      sendJson(response, 403, { error: 'Cobrança não encontrada.' });
+      return;
+    }
+
+    if (payment) {
+      payment = await refreshPaymentStatus(payment);
+    }
+
+    const currentUser = await getSessionUser(request);
+    sendJson(response, 200, {
+      status: payment ? payment.status : 'none',
+      paid: Boolean(currentUser && currentUser.isPaid),
+      plan: currentUser ? currentUser.plan : 'free',
+      user: currentUser,
+      payment: payment ? {
+        id: payment.id,
+        amount: payment.amount,
+        status: payment.status,
+        expiresAt: payment.expiresAt,
+        qrCode: payment.qrCode,
+        copyPaste: payment.copyPaste
+      } : null,
+      premium: premiumPublicInfo()
+    });
+  } catch (error) {
+    sendJson(response, 400, { error: error.message });
+  }
+}
+
+// Confirmação manual de pagamento (somente em desenvolvimento/testes)
+async function handlePremiumDevConfirm(request, response) {
+  if (NODE_ENV === 'production' || PIX_GATEWAY !== 'stub') {
+    sendJson(response, 404, { error: 'Rota não disponível.' });
+    return;
+  }
+
+  const user = await getSessionUser(request);
+  if (!user) {
+    sendJson(response, 401, { error: 'Sessão expirada.' });
+    return;
+  }
+
+  try {
+    const body = await readJsonBody(request);
+    const paymentId = body.id;
+    const payment = paymentId ? await db.getPayment(paymentId) : null;
+    if (!payment || payment.userId !== user.id) {
+      sendJson(response, 404, { error: 'Cobrança não encontrada.' });
+      return;
+    }
+
+    const updatedUser = await grantPremium(user.id, payment.id);
+    sendJson(response, 200, { paid: true, plan: updatedUser.plan, user: updatedUser });
+  } catch (error) {
+    sendJson(response, 400, { error: error.message });
+  }
+}
+
+// Webhook do gateway: confirma o pagamento e libera o Premium
+async function handlePremiumWebhook(request, response) {
+  try {
+    const body = await readJsonBody(request);
+    const gatewayPaymentId = (body && body.data && body.data.id) || (body && body.id) || '';
+    const signature = request.headers['x-signature'];
+    const requestId = request.headers['x-request-id'];
+
+    if (!pix.verifyMercadoPagoSignature({
+      secret: PIX_WEBHOOK_SECRET,
+      signatureHeader: signature,
+      requestId,
+      paymentId: gatewayPaymentId
+    })) {
+      sendJson(response, 401, { error: 'Assinatura inválida.' });
+      return;
+    }
+
+    if (!gatewayPaymentId) {
+      sendJson(response, 400, { error: 'Pagamento não informado.' });
+      return;
+    }
+
+    // Confirma o pagamento direto no gateway (nunca confia no corpo do webhook)
+    let approved = false;
+    if (PIX_GATEWAY === 'mercadopago' && PIX_API_TOKEN) {
+      const data = await pix.getMercadoPagoPayment({ token: PIX_API_TOKEN, paymentId: gatewayPaymentId });
+      approved = Boolean(data && data.status === 'approved');
+    } else if (PIX_GATEWAY === 'stub' && NODE_ENV !== 'production') {
+      approved = true;
+    }
+
+    if (approved) {
+      const payment = await db.findPaymentByGatewayRef(String(gatewayPaymentId));
+      if (payment) {
+        await grantPremium(payment.userId, payment.id);
+      }
+    }
+
+    sendJson(response, 200, { ok: true });
+  } catch (error) {
+    sendJson(response, 400, { error: error.message });
+  }
+}
+
+/* -------------------------------------------------------------
    CORES DO PERFIL
    As cores do perfil (primária, secundária e terciária) só podem
    ser salvas quando pertencem a categorias diferentes.
@@ -1214,6 +1517,32 @@ async function handleRequest(request, response) {
 
     if (request.method === 'GET' && urlPath === '/api/session') {
       await handleSession(request, response);
+      return;
+    }
+
+    // CONTA PREMIUM (Pix)
+    if (request.method === 'GET' && urlPath === '/api/premium/info') {
+      await handlePremiumInfo(request, response);
+      return;
+    }
+
+    if (request.method === 'POST' && urlPath === '/api/premium/checkout') {
+      await handlePremiumCheckout(request, response);
+      return;
+    }
+
+    if (request.method === 'GET' && urlPath === '/api/premium/status') {
+      await handlePremiumStatus(request, response);
+      return;
+    }
+
+    if (request.method === 'POST' && urlPath === '/api/premium/webhook') {
+      await handlePremiumWebhook(request, response);
+      return;
+    }
+
+    if (request.method === 'POST' && urlPath === '/api/premium/dev/confirm') {
+      await handlePremiumDevConfirm(request, response);
       return;
     }
 
