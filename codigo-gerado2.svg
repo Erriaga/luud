@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 160" width="520" height="160" role="img" aria-label="LUUD">
+  <title>LUUD</title>
+  <g fill="none" stroke="#FFFFFF" stroke-width="5" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M 80 26 L 128 50 L 80 74 L 32 50 Z"/>
+    <path d="M 32 50 L 32 102 L 80 126 L 80 74 Z"/>
+    <path d="M 128 50 L 128 102 L 80 126 L 80 74 Z"/>
+  </g>
+  <circle cx="80" cy="50" r="7" fill="#E01B24"/>
+  <circle cx="48" cy="76" r="4.5" fill="#FFFFFF"/>
+  <circle cx="48" cy="98" r="4.5" fill="#FFFFFF"/>
+  <circle cx="112" cy="76" r="4.5" fill="#FFFFFF"/>
+  <circle cx="112" cy="98" r="4.5" fill="#FFFFFF"/>
+  <circle cx="96" cy="110" r="4.5" fill="#FFFFFF"/>
+  <g fill="#FFFFFF">
+    <path d="M 176 42 h 24 v 60 h 32 v 22 h -56 z"/>
+    <path d="M 248 42 h 24 v 52 c 0 7 4 11 11 11 c 7 0 11 -4 11 -11 v -52 h 24 v 52 c 0 19 -14 32 -35 32 c -21 0 -35 -13 -35 -32 z"/>
+    <path d="M 334 42 h 24 v 52 c 0 7 4 11 11 11 c 7 0 11 -4 11 -11 v -52 h 24 v 52 c 0 19 -14 32 -35 32 c -21 0 -35 -13 -35 -32 z"/>
+    <path d="M 420 42 h 32 c 25 0 42 17 42 41 c 0 24 -17 41 -42 41 h -32 z M 444 62 v 42 h 8 c 12 0 20 -8 20 -21 c 0 -13 -8 -21 -20 -21 z"/>
+  </g>
+</svg>

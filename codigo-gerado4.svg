@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 152" width="512" height="152" role="img" aria-label="LUUD">
+  <title>LUUD</title>
+  <defs>
+    <style>
+      .ink { fill: #FFFFFF; }
+      .line { fill: none; stroke: #FFFFFF; stroke-width: 7; stroke-linejoin: round; stroke-linecap: round; }
+      .accent { fill: #E01B24; }
+    </style>
+  </defs>
+  <g class="line">
+    <path d="M80 20 L132 46 L80 72 L28 46 Z"/>
+    <path d="M28 46 L28 102 L80 128 L80 72 Z"/>
+    <path d="M132 46 L132 102 L80 128 L80 72 Z"/>
+  </g>
+  <circle class="accent" cx="80" cy="46" r="8"/>
+  <g class="ink">
+    <circle cx="46" cy="74" r="5.5"/>
+    <circle cx="46" cy="98" r="5.5"/>
+    <circle cx="114" cy="74" r="5.5"/>
+    <circle cx="114" cy="98" r="5.5"/>
+    <circle cx="96" cy="110" r="5.5"/>
+  </g>
+  <g class="ink">
+    <path d="M176 38 h26 v62 h34 v24 h-60 z"/>
+    <path d="M250 38 h26 v54 c0 6 4 10 10 10 s10-4 10-10 v-54 h26 v54 c0 20-15 34-36 34 s-36-14-36-34 z"/>
+    <path d="M336 38 h26 v54 c0 6 4 10 10 10 s10-4 10-10 v-54 h26 v54 c0 20-15 34-36 34 s-36-14-36-34 z"/>
+    <path d="M422 38 h34 c26 0 44 18 44 43 s-18 43-44 43 h-34 z M448 60 v42 h8 c12 0 20-8 20-21 s-8-21-20-21 z"/>
+  </g>
+</svg>
