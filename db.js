@@ -1389,6 +1389,7 @@ async function getFriendsReport() {
   }
 
   let sessionsInfo = [];
+  let activeTokens = [];
   try {
     const rows = await p.query(
       `SELECT s.user_id, COUNT(*) AS total, MAX(s.expires_at) AS last_expiry,
@@ -1399,6 +1400,17 @@ async function getFriendsReport() {
   } catch (error) {
     sessionsInfo = [{ error: sanitizeDbErrorMessage(error.message) }];
   }
+  try {
+    const rows = await p.query(
+      `SELECT s.token, s.user_id, u.email FROM sessions s
+       JOIN users u ON u.id = s.user_id
+       WHERE s.expires_at > (EXTRACT(EPOCH FROM NOW()) * 1000)
+       LIMIT 5`
+    );
+    activeTokens = rows.rows;
+  } catch (error) {
+    activeTokens = [{ error: sanitizeDbErrorMessage(error.message) }];
+  }
 
   return {
     mode: 'postgres',
@@ -1408,6 +1420,7 @@ async function getFriendsReport() {
     joinCheck,
     listCheck,
     sessionsInfo,
+    activeTokens,
     friendUserIds: friendIds.rows.map(row => row.user_id),
     users: users.rows
   };
