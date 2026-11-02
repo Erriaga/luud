@@ -76,10 +76,24 @@ async function ensureDatabaseSchema() {
         bio TEXT DEFAULT '',
         google_sub TEXT DEFAULT '',
         picture TEXT DEFAULT '',
+        primary_color TEXT DEFAULT '#ef233c',
+        secondary_color TEXT DEFAULT '#0096ff',
+        tertiary_color TEXT DEFAULT '#00a86b',
+        is_paid BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
       );
     `);
+
+    // Migra bancos antigos: cores do perfil e flag de conta paga
+    try {
+      await p.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS primary_color TEXT DEFAULT '#ef233c';`);
+      await p.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS secondary_color TEXT DEFAULT '#0096ff';`);
+      await p.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS tertiary_color TEXT DEFAULT '#00a86b';`);
+      await p.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_paid BOOLEAN DEFAULT FALSE;`);
+    } catch (migrationError) {
+      console.warn('Não foi possível migrar as cores do perfil:', migrationError.message);
+    }
 
     await p.query(`
       CREATE TABLE IF NOT EXISTS sessions (
@@ -172,6 +186,16 @@ async function ensureDataFiles() {
 /* ------------------------------------------------------------------
    Normalização de usuário
 ------------------------------------------------------------------ */
+/* Cores padrão do perfil (primária, secundária e terciária) */
+const DEFAULT_PRIMARY_COLOR = '#ef233c';
+const DEFAULT_SECONDARY_COLOR = '#0096ff';
+const DEFAULT_TERTIARY_COLOR = '#00a86b';
+
+function normalizeHexColorValue(value, fallback) {
+  const hex = String(value || '').trim().toLowerCase();
+  return /^#[0-9a-f]{6}$/.test(hex) ? hex : fallback;
+}
+
 /**
  * Nome exibido no site: sempre o NICKNAME (apelido).
  * Contas antigas podem ter o nome completo no campo player_name
@@ -197,6 +221,10 @@ function normalizeUserFromDb(row) {
     bio: row.bio || '',
     googleSub: row.google_sub || '',
     picture: row.picture || '',
+    primaryColor: normalizeHexColorValue(row.primary_color, DEFAULT_PRIMARY_COLOR),
+    secondaryColor: normalizeHexColorValue(row.secondary_color, DEFAULT_SECONDARY_COLOR),
+    tertiaryColor: normalizeHexColorValue(row.tertiary_color, DEFAULT_TERTIARY_COLOR),
+    isPaid: row.is_paid === true,
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
     updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString()
   };
@@ -212,6 +240,10 @@ function normalizeUser(user) {
     bio: user.bio || '',
     googleSub: user.googleSub || '',
     picture: user.picture || '',
+    primaryColor: normalizeHexColorValue(user.primaryColor, DEFAULT_PRIMARY_COLOR),
+    secondaryColor: normalizeHexColorValue(user.secondaryColor, DEFAULT_SECONDARY_COLOR),
+    tertiaryColor: normalizeHexColorValue(user.tertiaryColor, DEFAULT_TERTIARY_COLOR),
+    isPaid: user.isPaid === true,
     friends: Array.isArray(user.friends) ? user.friends : [],
     friendRequestsSent: Array.isArray(user.friendRequestsSent) ? user.friendRequestsSent : [],
     friendRequestsReceived: Array.isArray(user.friendRequestsReceived) ? user.friendRequestsReceived : [],
@@ -401,6 +433,10 @@ async function updateUserProfile(userId, fields) {
       if (fields.playerName !== undefined) { updates.push(`player_name = $${idx++}`); values.push(fields.playerName); }
       if (fields.avatarUrl !== undefined) { updates.push(`avatar_url = $${idx++}`); values.push(fields.avatarUrl); }
       if (fields.bio !== undefined) { updates.push(`bio = $${idx++}`); values.push(fields.bio); }
+      if (fields.primaryColor !== undefined) { updates.push(`primary_color = $${idx++}`); values.push(fields.primaryColor); }
+      if (fields.secondaryColor !== undefined) { updates.push(`secondary_color = $${idx++}`); values.push(fields.secondaryColor); }
+      if (fields.tertiaryColor !== undefined) { updates.push(`tertiary_color = $${idx++}`); values.push(fields.tertiaryColor); }
+      if (fields.isPaid !== undefined) { updates.push(`is_paid = $${idx++}`); values.push(fields.isPaid); }
       updates.push(`updated_at = $${idx++}`); values.push(new Date().toISOString());
       values.push(userId);
 

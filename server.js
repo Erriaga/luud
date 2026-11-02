@@ -723,6 +723,60 @@ async function handleSession(request, response) {
   sendJson(response, 200, { authenticated: true, user });
 }
 
+/* -------------------------------------------------------------
+   CORES DO PERFIL
+   As cores do perfil (primária, secundária e terciária) só podem
+   ser salvas quando pertencem a categorias diferentes.
+   A categoria é identificada pelo matiz/saturação/luminosidade,
+   espelhando a mesma identificação usada na interface.
+------------------------------------------------------------- */
+function sanitizeProfileColor(value) {
+  const hex = String(value || '').trim().toLowerCase();
+  return /^#[0-9a-f]{6}$/.test(hex) ? hex : null;
+}
+
+function profileColorCategory(hex) {
+  const normalized = sanitizeProfileColor(hex);
+  if (!normalized) return '';
+  const r = parseInt(normalized.slice(1, 3), 16);
+  const g = parseInt(normalized.slice(3, 5), 16);
+  const b = parseInt(normalized.slice(5, 7), 16);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const delta = max - min;
+  const lightness = (max + min) / 510;
+
+  if (delta < 18) {
+    if (lightness < 0.16) return 'Preto';
+    if (lightness < 0.38) return 'Cinza Escuro';
+    if (lightness < 0.68) return 'Cinza';
+    if (lightness < 0.9) return 'Cinza Claro';
+    return 'Branco';
+  }
+
+  const saturation = max === 0 ? 0 : delta / max;
+  let hue;
+  if (max === r) hue = 60 * (((g - b) / delta) % 6);
+  else if (max === g) hue = 60 * (((b - r) / delta) + 2);
+  else hue = 60 * (((r - g) / delta) + 4);
+  if (hue < 0) hue += 360;
+
+  if (hue < 12 || hue >= 345) return lightness < 0.3 ? 'Vermelho Escuro' : 'Vermelho';
+  if (hue < 40) return lightness < 0.38 ? 'Marrom' : 'Laranja';
+  if (hue < 68) return lightness < 0.3 ? 'Marrom' : 'Amarelo';
+  if (hue < 95) return 'Verde-limão';
+  if (hue < 160) return lightness < 0.32 ? 'Verde Escuro' : 'Verde';
+  if (hue < 190) return 'Ciano';
+  if (hue < 215) return 'Azul-claro';
+  if (hue < 250) return lightness < 0.3 ? 'Azul-marinho' : 'Azul';
+  if (hue < 285) return lightness < 0.35 && hue > 260 ? 'Roxo' : 'Violeta';
+  if (hue < 320) {
+    if (lightness < 0.35) return 'Roxo';
+    return lightness > 0.68 ? 'Rosa' : 'Magenta';
+  }
+  return 'Rosa';
+}
+
 async function handleProfileUpdate(request, response) {
   const user = await getSessionUser(request);
   if (!user) {
@@ -745,13 +799,57 @@ async function handleProfileUpdate(request, response) {
       return;
     }
 
-    const updatedUser = await db.updateUserProfile(user.id, {
-      displayName: cleanText(body.displayName, 60) || user.displayName,
-      // O nickname (playerName) não pode ser alterado pelo jogador:
-      // a alteração será liberada apenas para contas pagas.
-      avatarUrl,
-      bio: cleanText(body.bio, 280)
-    });
+    // Só os campos enviados são atualizados: assim o salvamento das
+    // cores do perfil não apaga as demais informações da conta.
+    const fields = {};
+    if (body.displayName !== undefined) {
+      fields.displayName = cleanText(body.displayName, 60) || user.displayName;
+    }
+    // O nickname (playerName) não pode ser alterado pelo jogador:
+    // a alteração será liberada apenas para contas pagas.
+    if (body.avatarUrl !== undefined) {
+      fields.avatarUrl = avatarUrl;
+    }
+    if (body.bio !== undefined) {
+      fields.bio = cleanText(body.bio, 280);
+    }
+
+    // CORES DO PERFIL
+    const colorRoles = [
+      { field: 'primaryColor', key: 'primary' },
+      { field: 'secondaryColor', key: 'secondary' },
+      { field: 'tertiaryColor', key: 'tertiary' }
+    ];
+    const colors = {
+      primary: user.primaryColor,
+      secondary: user.secondaryColor,
+      tertiary: user.tertiaryColor
+    };
+
+    for (const role of colorRoles) {
+      if (body[role.field] === undefined) continue;
+      const hex = sanitizeProfileColor(body[role.field]);
+      if (!hex) {
+        sendJson(response, 400, { error: `Cor ${role.key} inválida.` });
+        return;
+      }
+      // A cor terciária só pode ser alterada por contas pagas
+      if (role.key === 'tertiary' && hex !== user.tertiaryColor && !user.isPaid) {
+        sendJson(response, 400, { error: 'A cor terciária está disponível apenas para contas pagas.' });
+        return;
+      }
+      colors[role.key] = hex;
+      fields[role.field] = hex;
+    }
+
+    // As três cores precisam pertencer a categorias diferentes
+    const categories = colorRoles.map(role => profileColorCategory(colors[role.key]));
+    if (new Set(categories).size !== colorRoles.length) {
+      sendJson(response, 400, { error: 'As cores do perfil precisam ser de categorias diferentes.' });
+      return;
+    }
+
+    const updatedUser = await db.updateUserProfile(user.id, fields);
 
     sendJson(response, 200, { user: updatedUser });
   } catch (error) {

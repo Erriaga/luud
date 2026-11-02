@@ -93,11 +93,15 @@ function openProfileModal() {
   if (profilePlayerName) profilePlayerName.value = getAccountNickname(accountUser);
   setAvatarImage(profileAvatarPreview, accountUser.avatarUrl || accountUser.picture || DEFAULT_AVATAR);
   profileStatus.textContent = '';
+  // Carrega as cores do perfil (primária, secundária e terciária)
+  if (typeof initProfileColors === 'function') initProfileColors(accountUser);
   profileModal.classList.remove('hidden');
 }
 
 function closeProfileModal() {
   profileModal.classList.add('hidden');
+  // As alterações de cor que não foram salvas são descartadas
+  if (typeof discardProfileColorChanges === 'function') discardProfileColorChanges();
 }
 
 // O nickname não pode mais ser alterado pelo jogador.

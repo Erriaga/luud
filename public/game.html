@@ -1228,9 +1228,47 @@
           <p class="text-[11px] text-slate-500 mt-2">A alteração do nickname estará disponível para contas pagas em breve.</p>
         </div>
 
+        <!-- CORES DO PERFIL: primária, secundária e terciária -->
+        <div class="space-y-2">
+          <p class="text-[11px] text-slate-500">As três cores precisam ser de categorias diferentes para serem salvas.</p>
+
+          <div class="flex items-center gap-3">
+            <button type="button" id="profile-color-primary-btn" onclick="pickProfileColor('primary')" class="profile-color-btn relative flex items-center gap-2 w-[170px] shrink-0 px-2 py-1.5 bg-slate-900 border border-slate-600 hover:border-slate-400 transition overflow-hidden">
+              <span id="profile-color-primary-swatch" class="w-5 h-5 border border-white shrink-0 pointer-events-none" style="background-color:#ef233c"></span>
+              <span id="profile-color-primary-name" class="text-xs font-bold text-slate-200 truncate pointer-events-none">Vermelho</span>
+              <span id="profile-color-primary-hex" class="text-[10px] font-mono text-slate-400 ml-auto pointer-events-none">#EF233C</span>
+              <input type="color" id="profile-color-primary-input" value="#ef233c" onclick="event.stopPropagation()" class="absolute inset-0 w-full h-full cursor-pointer opacity-0" onchange="setProfileColor('primary', this.value)">
+            </button>
+            <label class="text-xs font-bold uppercase tracking-wider text-slate-300 whitespace-nowrap">Cor primária</label>
+          </div>
+
+          <div class="flex items-center gap-3">
+            <button type="button" id="profile-color-secondary-btn" onclick="pickProfileColor('secondary')" class="profile-color-btn relative flex items-center gap-2 w-[170px] shrink-0 px-2 py-1.5 bg-slate-900 border border-slate-600 hover:border-slate-400 transition overflow-hidden">
+              <span id="profile-color-secondary-swatch" class="w-5 h-5 border border-white shrink-0 pointer-events-none" style="background-color:#0096ff"></span>
+              <span id="profile-color-secondary-name" class="text-xs font-bold text-slate-200 truncate pointer-events-none">Azul</span>
+              <span id="profile-color-secondary-hex" class="text-[10px] font-mono text-slate-400 ml-auto pointer-events-none">#0096FF</span>
+              <input type="color" id="profile-color-secondary-input" value="#0096ff" onclick="event.stopPropagation()" class="absolute inset-0 w-full h-full cursor-pointer opacity-0" onchange="setProfileColor('secondary', this.value)">
+            </button>
+            <label class="text-xs font-bold uppercase tracking-wider text-slate-300 whitespace-nowrap">Cor secundária</label>
+          </div>
+
+          <div class="flex items-center gap-3">
+            <button type="button" id="profile-color-tertiary-btn" onclick="pickProfileColor('tertiary')" class="profile-color-btn relative flex items-center gap-2 w-[170px] shrink-0 px-2 py-1.5 bg-slate-900 border border-slate-600 hover:border-slate-400 transition overflow-hidden">
+              <span id="profile-color-tertiary-swatch" class="w-5 h-5 border border-white shrink-0 pointer-events-none" style="background-color:#00a86b"></span>
+              <span id="profile-color-tertiary-name" class="text-xs font-bold text-slate-200 truncate pointer-events-none">Verde</span>
+              <span id="profile-color-tertiary-hex" class="text-[10px] font-mono text-slate-400 ml-auto pointer-events-none">#00A86B</span>
+              <input type="color" id="profile-color-tertiary-input" value="#00a86b" onclick="event.stopPropagation()" class="absolute inset-0 w-full h-full cursor-pointer opacity-0" onchange="setProfileColor('tertiary', this.value)">
+            </button>
+            <label class="text-xs font-bold uppercase tracking-wider text-slate-300 whitespace-nowrap">Cor terciária</label>
+          </div>
+
+          <p id="profile-color-locked-hint" class="hidden text-[11px] text-amber-400">A cor terciária está disponível apenas para contas pagas.</p>
+        </div>
+
         <p id="profile-status" class="text-xs text-slate-400 min-h-[18px]"></p>
-        <div class="flex flex-col sm:flex-row gap-3 pt-2">
-          <button type="button" onclick="closeProfileModal()" class="flex-1 py-3 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition">Fechar</button>
+        <div class="flex flex-col gap-3 pt-2">
+          <button type="button" onclick="saveProfileColors()" id="profile-save-colors-btn" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition">Salvar</button>
+          <button type="button" onclick="closeProfileModal()" class="w-full py-3 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition">Fechar</button>
         </div>
       </div>
     </div>
@@ -1923,6 +1961,174 @@
       const saturation = max === 0 ? 0 : (max - min) / max;
       const lightness = (max + min) / 510;
       return (saturation < 0.22 && lightness >= 0.68) || min >= 205;
+    }
+
+    /* -------------------------------------------------------------
+       CORES DO PERFIL (primária, secundária e terciária)
+       A seleção fica na interface "PERFIL". As três cores só podem
+       ser salvas quando pertencem a categorias diferentes (ex.: duas
+       cores "Vermelho" impedem o salvamento).
+    ------------------------------------------------------------- */
+    const PROFILE_COLOR_ROLES = ['primary', 'secondary', 'tertiary'];
+    const PROFILE_COLOR_ROLE_LABELS = { primary: 'primária', secondary: 'secundária', tertiary: 'terciária' };
+    const PROFILE_COLOR_DEFAULTS = {
+      primary: '#ef233c',
+      secondary: '#0096ff',
+      tertiary: '#00a86b'
+    };
+    let profileColors = { ...PROFILE_COLOR_DEFAULTS };       // cores em edição
+    let profileSavedColors = { ...PROFILE_COLOR_DEFAULTS };  // cores já salvas
+
+    // Conta paga: libera a personalização da cor terciária
+    function hasPaidAccount(user) {
+      if (!user) return false;
+      return Boolean(user.isPaid || user.paid || user.hasPaidPlan || user.subscription || user.plan === 'paid');
+    }
+
+    function profileColorRoleEnabled(role) {
+      if (role !== 'tertiary') return true;
+      const account = typeof accountUser !== 'undefined' ? accountUser : null;
+      return hasPaidAccount(account);
+    }
+
+    function setProfileStatus(message, tone) {
+      const el = document.getElementById('profile-status');
+      if (!el) return;
+      el.textContent = message || '';
+      el.className = `text-xs min-h-[18px] ${tone || 'text-slate-400'}`;
+    }
+
+    // Carrega as cores da conta ao abrir a interface de perfil
+    function initProfileColors(user) {
+      const saved = {
+        primary: normalizeHexColor((user && user.primaryColor) || '') || PROFILE_COLOR_DEFAULTS.primary,
+        secondary: normalizeHexColor((user && user.secondaryColor) || '') || PROFILE_COLOR_DEFAULTS.secondary,
+        tertiary: normalizeHexColor((user && user.tertiaryColor) || '') || PROFILE_COLOR_DEFAULTS.tertiary
+      };
+      profileSavedColors = { ...saved };
+      profileColors = { ...saved };
+      renderProfileColors();
+      updateProfileColorValidation();
+    }
+
+    // Descarta as alterações que não foram salvas (botão Fechar)
+    function discardProfileColorChanges() {
+      profileColors = { ...profileSavedColors };
+      renderProfileColors();
+      updateProfileColorValidation();
+    }
+
+    function pickProfileColor(role) {
+      if (!profileColorRoleEnabled(role)) {
+        setProfileStatus('A cor terciária está disponível apenas para contas pagas.', 'text-amber-400');
+        return;
+      }
+      const input = document.getElementById(`profile-color-${role}-input`);
+      if (input) input.click();
+    }
+
+    function setProfileColor(role, value) {
+      if (!profileColorRoleEnabled(role)) return;
+      const normalized = normalizeHexColor(value);
+      if (!normalized) return;
+      profileColors[role] = normalized;
+      renderProfileColors();
+      updateProfileColorValidation();
+    }
+
+    function renderProfileColors() {
+      PROFILE_COLOR_ROLES.forEach(role => {
+        const hex = profileColors[role] || PROFILE_COLOR_DEFAULTS[role];
+        const swatch = document.getElementById(`profile-color-${role}-swatch`);
+        const name = document.getElementById(`profile-color-${role}-name`);
+        const hexLabel = document.getElementById(`profile-color-${role}-hex`);
+        const input = document.getElementById(`profile-color-${role}-input`);
+        const btn = document.getElementById(`profile-color-${role}-btn`);
+        const enabled = profileColorRoleEnabled(role);
+
+        if (swatch) swatch.style.backgroundColor = hex;
+        if (name) name.textContent = identifyColorName(hex);
+        if (hexLabel) hexLabel.textContent = hex.toUpperCase();
+        if (input) input.value = hex;
+        if (btn) {
+          btn.disabled = !enabled;
+          btn.classList.toggle('opacity-60', !enabled);
+          btn.classList.toggle('cursor-not-allowed', !enabled);
+          btn.classList.toggle('hover:border-slate-400', enabled);
+          btn.title = enabled
+            ? `Escolher a cor ${PROFILE_COLOR_ROLE_LABELS[role]}`
+            : 'A cor terciária está disponível apenas para contas pagas';
+        }
+      });
+
+      const hint = document.getElementById('profile-color-locked-hint');
+      if (hint) hint.classList.toggle('hidden', profileColorRoleEnabled('tertiary'));
+    }
+
+    // Retorna a categoria repetida entre as três cores (ou null)
+    function profileColorConflict() {
+      const seen = new Set();
+      for (const role of PROFILE_COLOR_ROLES) {
+        const category = identifyColorName(profileColors[role]);
+        if (seen.has(category)) return category;
+        seen.add(category);
+      }
+      return null;
+    }
+
+    // O botão "Salvar" só fica indisponível quando as cores são de
+    // categorias repetidas (ex.: duas cores "Vermelho")
+    function updateProfileColorValidation() {
+      const conflict = profileColorConflict();
+      const saveBtn = document.getElementById('profile-save-colors-btn');
+
+      if (conflict) {
+        setProfileStatus(`As cores precisam ser de categorias diferentes (${conflict} repetido). Escolha outra combinação.`, 'text-red-400');
+        if (saveBtn) saveBtn.disabled = true;
+        return false;
+      }
+
+      if (saveBtn) saveBtn.disabled = false;
+      setProfileStatus('', 'text-slate-400');
+      return true;
+    }
+
+    async function saveProfileColors() {
+      const account = typeof accountUser !== 'undefined' ? accountUser : null;
+      if (!account) return;
+
+      if (!updateProfileColorValidation()) return;
+
+      const saveBtn = document.getElementById('profile-save-colors-btn');
+      setProfileStatus('Salvando...', 'text-slate-400');
+      if (saveBtn) saveBtn.disabled = true;
+
+      try {
+        const response = await fetch('/api/profile', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            primaryColor: profileColors.primary,
+            secondaryColor: profileColors.secondary,
+            tertiaryColor: profileColors.tertiary
+          })
+        });
+
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'Não foi possível salvar as cores.');
+
+        profileSavedColors = { ...profileColors };
+        if (typeof updateAccountUI === 'function') updateAccountUI(data.user);
+
+        setProfileStatus('Cores salvas com sucesso!', 'text-emerald-400');
+        if (saveBtn) saveBtn.disabled = false;
+        setTimeout(() => {
+          if (typeof closeProfileModal === 'function') closeProfileModal();
+        }, 800);
+      } catch (error) {
+        setProfileStatus(error.message, 'text-red-400');
+        if (saveBtn) saveBtn.disabled = false;
+      }
     }
 
     function updatePlayerName(value) {
