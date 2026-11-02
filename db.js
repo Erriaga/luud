@@ -144,6 +144,7 @@ async function ensureDatabaseSchema() {
         email TEXT UNIQUE NOT NULL,
         display_name TEXT,
         player_name TEXT,
+        player_name_customized BOOLEAN DEFAULT FALSE,
         avatar_url TEXT DEFAULT '',
         bio TEXT DEFAULT '',
         google_sub TEXT DEFAULT '',
@@ -184,6 +185,7 @@ async function ensureDatabaseSchema() {
       await p.query(`ALTER TABLE users ALTER COLUMN tertiary_color SET DEFAULT '#ef233c';`);
       await p.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS plan TEXT DEFAULT 'free';`);
       await p.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS paid_at TIMESTAMP;`);
+      await p.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS player_name_customized BOOLEAN DEFAULT FALSE;`);
     } catch (migrationError) {
       console.warn('Não foi possível migrar as cores do perfil:', migrationError.message);
     }
@@ -341,11 +343,14 @@ function normalizeHexColorValue(value, fallback) {
  * Contas antigas podem ter o nome completo no campo player_name
  * (gerado automaticamente a partir do Google): nesse caso o apelido
  * usado é o prefixo do e-mail.
+ * Quando o jogador escolhe o próprio nickname (contas Premium), a
+ * flag "customized" garante que ele seja preservado como é.
  */
-function nicknameFrom(playerName, displayName, email) {
+function nicknameFrom(playerName, displayName, email, customized) {
   const nick = String(playerName || '').trim();
   const display = String(displayName || '').trim();
   const prefix = String(email || '').split('@')[0].trim();
+  if (customized && nick) return nick;
   if (nick && nick !== display) return nick;
   return prefix || nick || display;
 }
@@ -382,7 +387,8 @@ function normalizeUserFromDb(row) {
     id: row.id,
     email: row.email,
     displayName: row.display_name || row.email.split('@')[0],
-    playerName: nicknameFrom(row.player_name, row.display_name, row.email),
+    playerName: nicknameFrom(row.player_name, row.display_name, row.email, row.player_name_customized === true),
+    playerNameCustomized: row.player_name_customized === true,
     avatarUrl: row.avatar_url || '',
     bio: row.bio || '',
     googleSub: row.google_sub || '',
@@ -406,7 +412,8 @@ function normalizeUser(user) {
     id: user.id,
     email: user.email,
     displayName: user.displayName || user.email.split('@')[0],
-    playerName: nicknameFrom(user.playerName, user.displayName, user.email),
+    playerName: nicknameFrom(user.playerName, user.displayName, user.email, user.playerNameCustomized === true),
+    playerNameCustomized: user.playerNameCustomized === true,
     avatarUrl: user.avatarUrl || '',
     bio: user.bio || '',
     googleSub: user.googleSub || '',
@@ -434,7 +441,7 @@ async function getUserProfile(uid) {
   if (!uid) return null;
   const user = await getUserById(uid);
   if (!user) return null;
-  const nickname = nicknameFrom(user.playerName, user.displayName, user.email);
+  const nickname = nicknameFrom(user.playerName, user.displayName, user.email, user.playerNameCustomized);
   return {
     id: user.id,
     uid: user.id,
@@ -580,7 +587,8 @@ async function createOrUpdateUserFromGoogle(payload) {
         // Mantém o nickname escolhido pelo jogador; se ele ainda for o nome
         // completo do Google (gerado automaticamente), troca pelo prefixo do e-mail.
         const currentPlayerName = u.player_name || '';
-        const playerName = (currentPlayerName && currentPlayerName !== (u.display_name || ''))
+        const customized = u.player_name_customized === true;
+        const playerName = (customized || (currentPlayerName && currentPlayerName !== (u.display_name || '')))
           ? currentPlayerName
           : nickname;
         await p.query(
@@ -610,7 +618,8 @@ async function createOrUpdateUserFromGoogle(payload) {
   const users = await readJsonFile(USERS_FILE);
   const existingUser = users[userId];
   const currentPlayerName = existingUser?.playerName || '';
-  const playerName = (currentPlayerName && currentPlayerName !== (existingUser?.displayName || ''))
+  const customized = existingUser?.playerNameCustomized === true;
+  const playerName = (customized || (currentPlayerName && currentPlayerName !== (existingUser?.displayName || '')))
     ? currentPlayerName
     : nickname;
   const updatedUser = normalizeUser({
@@ -618,6 +627,7 @@ async function createOrUpdateUserFromGoogle(payload) {
     email,
     displayName: existingUser?.displayName || displayName,
     playerName,
+    playerNameCustomized: customized,
     avatarUrl: existingUser?.avatarUrl || '',
     bio: existingUser?.bio || '',
     googleSub: payload.sub || '',
@@ -645,6 +655,7 @@ async function updateUserProfile(userId, fields) {
       let idx = 1;
       if (fields.displayName !== undefined) { updates.push(`display_name = $${idx++}`); values.push(fields.displayName); }
       if (fields.playerName !== undefined) { updates.push(`player_name = $${idx++}`); values.push(fields.playerName); }
+      if (fields.playerNameCustomized !== undefined) { updates.push(`player_name_customized = $${idx++}`); values.push(fields.playerNameCustomized); }
       if (fields.avatarUrl !== undefined) { updates.push(`avatar_url = $${idx++}`); values.push(fields.avatarUrl); }
       if (fields.bio !== undefined) { updates.push(`bio = $${idx++}`); values.push(fields.bio); }
       if (fields.primaryColor !== undefined) { updates.push(`primary_color = $${idx++}`); values.push(fields.primaryColor); }
@@ -876,6 +887,8 @@ async function listPaymentsForUser(userId) {
 ------------------------------------------------------------------ */
 async function ensureNickname(user) {
   if (!user) return null;
+  // Nickname escolhido pelo jogador (contas Premium): nunca é alterado
+  if (user.playerNameCustomized) return user;
   const nickname = String(user.playerName || '').trim();
   const displayName = String(user.displayName || '').trim();
   const emailPrefix = String(user.email || '').split('@')[0];

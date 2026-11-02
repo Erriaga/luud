@@ -60,6 +60,47 @@
       letter-spacing: 0.05em;
     }
 
+    /* Selo do plano da conta (PREMIUM / FREE):
+       retangular (sem cantos arredondados) e sempre igual em todos os
+       lugares onde aparece (cabeçalho, menu da conta e modal de perfil). */
+    .plan-badge {
+      padding: 2px 6px;
+      font-size: 10px;
+      line-height: 1.2;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    /* Conta Premium: fundo amarelo e texto preto */
+    .plan-badge-premium {
+      background-color: #fbbf24;
+      color: #0f172a;
+    }
+
+    /* Conta gratuita: fundo preto e texto branco */
+    .plan-badge-free {
+      background-color: #000000;
+      color: #ffffff;
+      border: 1px solid #475569;
+    }
+
+    /* Campo do nickname no perfil:
+       bloqueado por padrão (apenas informativo) e editável
+       para as contas Premium. */
+    #profile-player-name {
+      color: #cbd5e1;
+      border-color: #334155;
+      cursor: not-allowed;
+    }
+
+    #profile-player-name.profile-editable {
+      color: #f1f5f9;
+      border-color: rgba(251, 191, 36, 0.6);
+      cursor: text;
+    }
+
     /* Relógio do turno (30 segundos) */
     .turn-timer {
       position: relative;
@@ -969,13 +1010,14 @@
 
   <!-- CABEÇALHO DO JOGO: logo e botões sempre na mesma linha, sem quebrar -->
   <header id="game-header" class="relative z-40 w-full max-w-4xl flex flex-nowrap items-center justify-between gap-2 px-3 sm:px-4 py-2.5 bg-slate-800/90 backdrop-blur-md mb-2 border border-slate-700 shadow-md">
-    <div class="flex items-center gap-2 shrink-0">
-      <img src="/assets/luud.svg" onerror="this.onerror=null;this.src='/assets/luud.png'" alt="LUUD" class="h-20 sm:h-24 w-auto select-none shrink-0" draggable="false">
+    <div class="flex items-center gap-2 min-w-0">
+      <!-- A logo encolhe nas telas estreitas para o topo nunca quebrar -->
+      <img id="game-header-logo" src="/assets/luud.svg" onerror="this.onerror=null;this.src='/assets/luud.png'" alt="LUUD" class="h-8 min-[360px]:h-12 sm:h-24 w-auto select-none shrink-0" draggable="false">
     </div>
 
     <div class="flex items-center gap-2 shrink-0 flex-nowrap">
-      <button id="pause-menu-button" onclick="openPauseMenu()" class="flex h-10 items-center px-3.5 bg-slate-700 hover:bg-slate-600 text-xs font-bold transition text-slate-200 border border-slate-600 shrink-0">
-        ☰ Menu
+      <button id="pause-menu-button" onclick="openPauseMenu()" class="flex h-10 items-center px-3 bg-slate-700 hover:bg-slate-600 text-xs font-bold transition text-slate-200 border border-slate-600 shrink-0">
+        ☰<span class="hidden sm:inline">&nbsp;Menu</span>
       </button>
       <div id="account-area-holder" class="flex items-center shrink-0"></div>
     </div>
@@ -985,15 +1027,18 @@
   <div id="account-area" class="relative">
     <button type="button" id="account-button" onclick="handleAccountButtonClick(event)" title="Conta" class="flex h-10 items-center gap-2 pl-1.5 pr-3 bg-slate-700 hover:bg-slate-600 text-xs font-bold transition text-slate-100 border border-slate-600 relative">
       <img id="account-avatar" src="/assets/avatar.svg" alt="Foto do perfil" class="w-7 h-7 rounded-full object-cover bg-slate-800 border border-slate-500">
-      <span id="account-name" class="max-w-[90px] truncate">Entrar</span>
-      <span id="account-premium-badge" class="hidden flex items-center px-1.5 py-0.5 bg-amber-400 text-slate-900 text-[9px] font-black tracking-wider rounded">PREMIUM</span>
+      <!-- No celular o cabeçalho mostra apenas foto e plano (FREE/PREMIUM) -->
+      <span id="account-name" class="hidden sm:inline max-w-[90px] truncate">Entrar</span>
+      <span id="account-premium-badge" class="plan-badge plan-badge-premium hidden flex items-center">PREMIUM</span>
+      <span id="account-free-badge" class="plan-badge plan-badge-free hidden flex items-center">FREE</span>
       <span id="account-friends-badge" class="absolute top-1 right-1 hidden w-4 h-4 bg-red-500 text-white text-[9px] rounded-full flex items-center justify-center font-bold">1</span>
     </button>
     <div id="account-dropdown" class="hidden absolute right-0 mt-2 w-60 bg-slate-800 border border-slate-600 shadow-2xl overflow-hidden z-50">
       <div class="px-4 py-3 border-b border-slate-700">
         <div class="flex items-center gap-2">
           <p id="dropdown-account-name" class="text-sm font-bold text-slate-100 truncate">Conta</p>
-          <span id="dropdown-premium-badge" class="hidden flex items-center px-1.5 py-0.5 bg-amber-400 text-slate-900 text-[9px] font-black tracking-wider rounded">PREMIUM</span>
+          <span id="dropdown-premium-badge" class="plan-badge plan-badge-premium hidden flex items-center">PREMIUM</span>
+          <span id="dropdown-free-badge" class="plan-badge plan-badge-free hidden flex items-center">FREE</span>
         </div>
         <p id="dropdown-account-email" class="text-xs text-slate-400 truncate">Não conectado</p>
       </div>
@@ -1221,7 +1266,8 @@
       <div class="flex items-center justify-between gap-3">
         <div class="flex items-center gap-2">
           <h2 class="font-display text-2xl font-black text-slate-100">Perfil</h2>
-          <span id="profile-premium-badge" class="hidden flex items-center px-2 py-0.5 bg-amber-400 text-slate-900 text-[10px] font-black tracking-wider rounded">PREMIUM</span>
+          <span id="profile-premium-badge" class="plan-badge plan-badge-premium hidden flex items-center">PREMIUM</span>
+          <span id="profile-free-badge" class="plan-badge plan-badge-free hidden flex items-center">FREE</span>
         </div>
         <button type="button" onclick="closeProfileModal()" class="w-9 h-9 bg-slate-700 hover:bg-slate-600 text-slate-200 text-lg leading-none">✕</button>
       </div>
@@ -1237,8 +1283,11 @@
       <div class="space-y-4">
         <div>
           <label for="profile-player-name" class="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">Nickname</label>
-          <input id="profile-player-name" type="text" maxlength="24" readonly aria-readonly="true" tabindex="-1" class="w-full bg-slate-900 border border-slate-700 px-3 py-2.5 text-slate-300 cursor-not-allowed outline-none">
-          <p class="text-[11px] text-slate-500 mt-2">A alteração do nickname estará disponível para contas pagas em breve.</p>
+          <div class="flex items-center gap-2">
+            <input id="profile-player-name" type="text" maxlength="24" readonly aria-readonly="true" tabindex="-1" class="w-full bg-slate-900 border px-3 py-2.5 outline-none">
+            <button type="button" id="profile-save-name-btn" onclick="saveProfileNickname()" class="hidden shrink-0 px-3 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition text-sm">Salvar</button>
+          </div>
+          <p id="profile-player-name-hint" class="text-[11px] text-slate-500 mt-2">A alteração do nickname está disponível apenas para contas Premium.</p>
         </div>
 
         <!-- CORES DO PERFIL: primária, secundária e terciária -->
@@ -2204,6 +2253,57 @@
         }, 800);
       } catch (error) {
         setProfileStatus(error.message, 'text-red-400');
+        if (saveBtn) saveBtn.disabled = false;
+      }
+    }
+
+    /* Salva o nickname escolhido pelo jogador (apenas contas Premium) */
+    async function saveProfileNickname() {
+      const account = typeof accountUser !== 'undefined' ? accountUser : null;
+      if (!account) return;
+
+      if (!hasPaidAccount(account)) {
+        setProfileStatus('A alteração do nickname está disponível apenas para contas Premium.', 'text-amber-400');
+        return;
+      }
+
+      const input = document.getElementById('profile-player-name');
+      const nickname = String(input ? input.value : '')
+        .replace(/[\u0000-\u001f\u007f]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 24);
+
+      if (!nickname) {
+        setProfileStatus('Informe um nickname.', 'text-red-400');
+        return;
+      }
+
+      const saveBtn = document.getElementById('profile-save-name-btn');
+      setProfileStatus('Salvando...', 'text-slate-400');
+      if (saveBtn) saveBtn.disabled = true;
+
+      try {
+        const response = await fetch('/api/profile', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ playerName: nickname })
+        });
+
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'Não foi possível salvar o nickname.');
+
+        // Atualiza a conta, o cabeçalho e o nome do jogador na partida
+        if (typeof updateAccountUI === 'function') updateAccountUI(data.user);
+        if (typeof updatePlayerName === 'function') updatePlayerName(nickname);
+        const nameInput = document.getElementById('player-name-input');
+        if (nameInput) nameInput.value = nickname;
+        if (input) input.value = nickname;
+
+        setProfileStatus('Nickname atualizado com sucesso!', 'text-emerald-400');
+      } catch (error) {
+        setProfileStatus(error.message, 'text-red-400');
+      } finally {
         if (saveBtn) saveBtn.disabled = false;
       }
     }

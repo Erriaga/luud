@@ -1447,8 +1447,22 @@ async function handleProfileUpdate(request, response) {
     if (body.displayName !== undefined) {
       fields.displayName = cleanText(body.displayName, 60) || user.displayName;
     }
-    // O nickname (playerName) não pode ser alterado pelo jogador:
-    // a alteração será liberada apenas para contas pagas.
+    // O nickname (playerName) só pode ser alterado por contas Premium.
+    if (body.playerName !== undefined) {
+      if (!user.isPaid) {
+        sendJson(response, 400, { error: 'A alteração do nickname está disponível apenas para contas Premium.' });
+        return;
+      }
+      const playerName = cleanText(body.playerName, 24);
+      if (!playerName) {
+        sendJson(response, 400, { error: 'Informe um nickname.' });
+        return;
+      }
+      fields.playerName = playerName;
+      // Marca o nickname como escolhido pelo jogador: assim ele é
+      // preservado mesmo quando coincide com o nome da conta Google.
+      fields.playerNameCustomized = true;
+    }
     if (body.avatarUrl !== undefined) {
       fields.avatarUrl = avatarUrl;
     }

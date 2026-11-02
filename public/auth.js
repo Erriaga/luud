@@ -15,11 +15,18 @@ const profileEmail = document.getElementById('profile-account-email');
 const profilePlayerName = document.getElementById('profile-player-name');
 const profileStatus = document.getElementById('profile-status');
 
-// Selo "PREMIUM" (conta paga) exibido junto do nickname
+// Selos do plano da conta exibidos junto do nickname
+// (cabeçalho, menu suspenso e modal de perfil)
 const premiumBadges = [
   document.getElementById('account-premium-badge'),
   document.getElementById('dropdown-premium-badge'),
   document.getElementById('profile-premium-badge')
+];
+
+const freeBadges = [
+  document.getElementById('account-free-badge'),
+  document.getElementById('dropdown-free-badge'),
+  document.getElementById('profile-free-badge')
 ];
 
 // O botão "Entrar" do canto superior direito só aparece com login Google
@@ -39,9 +46,14 @@ function isPremiumAccount(user) {
 }
 
 function updatePremiumBadges(user) {
+  const logged = Boolean(user);
   const visible = isPremiumAccount(user);
+  // Premium: selo amarelo; conta gratuita: selo preto
   premiumBadges.forEach(badge => {
     if (badge) badge.classList.toggle('hidden', !visible);
+  });
+  freeBadges.forEach(badge => {
+    if (badge) badge.classList.toggle('hidden', !logged || visible);
   });
 }
 
@@ -115,8 +127,9 @@ function openProfileModal() {
   }
 
   profileEmail.textContent = accountUser.email || '';
-  // O nickname é apenas informativo: não pode ser alterado pelo jogador
+  // O nickname só pode ser alterado por contas Premium
   if (profilePlayerName) profilePlayerName.value = getAccountNickname(accountUser);
+  applyNicknameEditingState(isPremiumAccount(accountUser));
   setAvatarImage(profileAvatarPreview, accountUser.avatarUrl || accountUser.picture || DEFAULT_AVATAR);
   profileStatus.textContent = '';
   // Carrega as cores do perfil (primária, secundária e terciária)
@@ -135,8 +148,29 @@ function closeProfileModal() {
   if (typeof discardProfileColorChanges === 'function') discardProfileColorChanges();
 }
 
-// O nickname não pode mais ser alterado pelo jogador.
-// A alteração será liberada apenas para contas pagas (mecânica em breve).
+// Habilita (Premium) ou bloqueia (conta gratuita) a edição do nickname
+function applyNicknameEditingState(premium) {
+  const saveBtn = document.getElementById('profile-save-name-btn');
+  const hint = document.getElementById('profile-player-name-hint');
+
+  if (profilePlayerName) {
+    profilePlayerName.readOnly = !premium;
+    profilePlayerName.setAttribute('aria-readonly', String(!premium));
+    profilePlayerName.tabIndex = premium ? 0 : -1;
+    profilePlayerName.classList.toggle('profile-editable', premium);
+  }
+
+  if (saveBtn) saveBtn.classList.toggle('hidden', !premium);
+  if (hint) {
+    hint.textContent = premium
+      ? 'Sua conta Premium permite trocar o nickname quando quiser.'
+      : 'A alteração do nickname está disponível apenas para contas Premium.';
+    hint.className = `text-[11px] mt-2 ${premium ? 'text-amber-300' : 'text-slate-500'}`;
+  }
+}
+
+// O nickname não pode ser alterado por contas gratuitas:
+// a edição é liberada para as contas Premium (ver applyNicknameEditingState).
 
 async function logoutAccount() {
   hideAccountDropdown();
