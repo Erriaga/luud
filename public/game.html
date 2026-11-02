@@ -5041,6 +5041,10 @@
           // Resposta do amigo ao convite (aceito ou recusado)
           if (data.status === 'declined') {
             setDuplaStatus('O convite foi recusado.', 'text-amber-400');
+          } else if (data.status === 'joined') {
+            // O convite foi aceito por este jogador: o lobby da dupla abre sozinho
+            setDuplaStatus('Você entrou no lobby da dupla.', 'text-emerald-400');
+            openDuplaLobbyView();
           } else if (data.status === 'accepted') {
             setDuplaStatus('Convite aceito! O amigo entrou no lobby.', 'text-emerald-400');
           } else if (data.status === 'offline') {
@@ -5424,6 +5428,16 @@
       onlineView.classList.remove('hidden');
       duplaView.classList.add('hidden');
       gameAudio.playClick();
+    }
+
+    // Abre o lobby da dupla a partir de qualquer tela (usado quando o
+    // jogador aceita um convite de dupla)
+    function openDuplaLobbyView() {
+      const mainView = document.getElementById('setup-main-view');
+      const onlineView = document.getElementById('online-mode-view');
+      if (mainView) mainView.classList.add('hidden');
+      if (onlineView) onlineView.classList.add('hidden');
+      showOnlineDuplaView();
     }
 
     function showOnlineArenaView() {

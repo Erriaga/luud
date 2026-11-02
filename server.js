@@ -2292,9 +2292,10 @@ async function main() {
           targetId: invite.toUid,
           message: 'Convite aceito! O amigo entrou no lobby.'
         });
+        // Quem aceitou abre automaticamente o lobby da dupla
         sendTo(ws, {
           type: 'dupla_invite_result',
-          status: 'accepted',
+          status: 'joined',
           message: 'Você entrou no lobby da dupla.'
         });
         return;
