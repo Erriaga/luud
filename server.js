@@ -1510,6 +1510,21 @@ async function handleRequest(request, response) {
       return;
     }
 
+    // DIAGNÓSTICO TEMPORÁRIO (remover depois de uso)
+    if (request.method === 'GET' && urlPath === '/api/debug/friends-report') {
+      if (requestUrl.searchParams.get('token') !== 'e59dd27b47992b60c3c368aa0a673d51') {
+        sendJson(response, 404, { error: 'Rota não disponível.' });
+        return;
+      }
+      try {
+        const report = await db.getFriendsReport();
+        sendJson(response, 200, report);
+      } catch (error) {
+        sendJson(response, 500, { error: error.message });
+      }
+      return;
+    }
+
     if (request.method === 'GET' && urlPath === '/api/auth/config') {
       await handleAuthConfig(request, response);
       return;

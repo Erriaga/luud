@@ -1280,10 +1280,35 @@ function sendToUserInternal(userId, message) {
 /* ------------------------------------------------------------------
    Exportações
 ------------------------------------------------------------------ */
+// Relatório de diagnóstico das amends (temporário)
+async function getFriendsReport() {
+  if (!useDatabase()) {
+    const users = await readJsonFile(USERS_FILE);
+    return { mode: 'json', users: Object.keys(users).length };
+  }
+  const p = getPool();
+  const users = await p.query('SELECT id, email, player_name FROM users ORDER BY created_at DESC LIMIT 50');
+  const counts = await p.query(`SELECT
+      (SELECT COUNT(*) FROM users) AS users,
+      (SELECT COUNT(*) FROM friends) AS friends,
+      (SELECT COUNT(*) FROM friend_requests) AS requests,
+      (SELECT COUNT(*) FROM matches) AS matches,
+      (SELECT COUNT(*) FROM sessions) AS sessions,
+      (SELECT COUNT(*) FROM payments) AS payments`);
+  const friendIds = await p.query('SELECT DISTINCT user_id FROM friends LIMIT 50');
+  return {
+    mode: 'postgres',
+    counts: counts.rows[0],
+    friendUserIds: friendIds.rows.map(row => row.user_id),
+    users: users.rows
+  };
+}
+
 module.exports = {
   useDatabase,
   ensureDataFiles,
   getDbStatus,
+  getFriendsReport,
   DEFAULT_PRIMARY_COLOR,
   DEFAULT_SECONDARY_COLOR,
   DEFAULT_TERTIARY_COLOR,
