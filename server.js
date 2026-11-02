@@ -32,7 +32,7 @@ const PREMIUM_BENEFITS = [
   'Nickname editável a qualquer momento',
   'Selo Premium no perfil e no placar',
   'Cores e personalizações exclusivas',
-  'Acesso vitalício, sem renovação'
+  'Acesso ao modo LIGA - jogue partidas classificatórias'
 ];
 
 // Gateway de pagamento: 'mercadopago' | 'stub'
@@ -357,6 +357,8 @@ function buildDuplaLobbyPayload(lobby) {
       teamName: lobby.teamName,
       teamColor: lobby.teamColor,
       teamColorName: lobby.teamColorName,
+      // O lobby fica bloqueado enquanto o criador busca uma partida
+      searching: isDuplaLobbySearching(lobby),
       members: lobby.members.map(member => ({
         id: member.id,
         name: member.name,
@@ -367,6 +369,22 @@ function buildDuplaLobbyPayload(lobby) {
       }))
     }
   };
+}
+
+// O lobby da dupla está na fila de busca de partida?
+function isDuplaLobbySearching(lobby) {
+  if (!lobby) return false;
+  return duplaQueue.some(entry => entry.uid === lobby.hostId);
+}
+
+// Avisa todos os jogadores do lobby que a busca foi encerrada
+function notifyDuplaQueueCanceled(lobby) {
+  if (!lobby) return;
+  const payload = { type: 'dupla_queue_canceled' };
+  sendToUser(lobby.hostId, payload);
+  lobby.members.forEach(member => {
+    if (member.id !== lobby.hostId) sendToUser(member.id, payload);
+  });
 }
 
 async function broadcastDuplaLobby(lobby) {
@@ -629,6 +647,8 @@ function buildArenaLobbyPayload(lobby) {
     type: 'arena_lobby',
     lobby: {
       hostId: lobby.hostId,
+      // O lobby fica bloqueado enquanto o criador busca uma partida
+      searching: isArenaLobbySearching(lobby),
       members: lobby.members.map(member => ({
         id: member.id,
         name: member.name,
@@ -639,6 +659,23 @@ function buildArenaLobbyPayload(lobby) {
       }))
     }
   };
+}
+
+// O lobby da arena está na fila de busca de partida?
+function isArenaLobbySearching(lobby) {
+  if (!lobby) return false;
+  const ids = new Set(lobby.members.map(member => member.id));
+  return arenaQueue.some(entry => ids.has(entry.uid));
+}
+
+// Avisa todos os jogadores do lobby que a busca foi encerrada
+function notifyArenaQueueCanceled(lobby) {
+  if (!lobby) return;
+  const payload = { type: 'arena_queue_canceled' };
+  sendToUser(lobby.hostId, payload);
+  lobby.members.forEach(member => {
+    if (member.id !== lobby.hostId) sendToUser(member.id, payload);
+  });
 }
 
 async function broadcastArenaLobby(lobby) {
@@ -2355,12 +2392,15 @@ async function main() {
         };
         duplaQueue.push(entry);
 
-        sendTo(ws, {
+        // Todos os jogadores do lobby (criador e amigos) entram no modo de
+        // busca: a interface fica bloqueada e só o cancelamento continua ativo
+        const queuedPayload = {
           type: 'dupla_queued',
-          size: players.length,
-          message: players.length >= 2
-            ? 'Na fila: procurando outra dupla...'
-            : 'Na fila: procurando uma dupla adversária...'
+          size: players.length
+        };
+        sendToUser(lobby.hostId, queuedPayload);
+        lobby.members.forEach(member => {
+          if (member.id !== lobby.hostId) sendToUser(member.id, queuedPayload);
         });
 
         await tryDuplaMatchmaking();
@@ -2368,7 +2408,21 @@ async function main() {
       }
 
       if (data.type === 'dupla_leave_queue') {
+        const uid = conn.userId;
+
+        // Cancelar a busca encerra a fila do lobby inteiro e avisa
+        // todos os jogadores presentes para liberarem a interface
+        const lobby = findDuplaLobbyForUser(uid);
+        let canceled = false;
+        if (lobby) {
+          const index = duplaQueue.findIndex(entry => entry.uid === lobby.hostId);
+          if (index !== -1) {
+            duplaQueue.splice(index, 1);
+            canceled = true;
+          }
+        }
         removeFromDuplaQueue(ws);
+        if (canceled) notifyDuplaQueueCanceled(lobby);
         return;
       }
 
@@ -2577,10 +2631,15 @@ async function main() {
           });
         });
 
-        sendTo(ws, {
+        // Todos os jogadores do lobby (criador e amigos) entram no modo de
+        // busca: a interface fica bloqueada e só o cancelamento continua ativo
+        const queuedPayload = {
           type: 'arena_queued',
-          size: players.length,
-          message: 'Na fila: procurando adversários...'
+          size: players.length
+        };
+        sendToUser(lobby.hostId, queuedPayload);
+        lobby.members.forEach(member => {
+          if (member.id !== lobby.hostId) sendToUser(member.id, queuedPayload);
         });
 
         await tryArenaMatchmaking();
@@ -2588,7 +2647,23 @@ async function main() {
       }
 
       if (data.type === 'arena_leave_queue') {
-        removeArenaQueueForUser(conn.userId);
+        const uid = conn.userId;
+
+        // Cancelar a busca encerra a fila do lobby inteiro e avisa
+        // todos os jogadores presentes para liberarem a interface
+        const lobby = findArenaLobbyForUser(uid);
+        let canceled = false;
+        if (lobby) {
+          const ids = new Set(lobby.members.map(member => member.id));
+          for (let i = arenaQueue.length - 1; i >= 0; i--) {
+            if (ids.has(arenaQueue[i].uid)) {
+              arenaQueue.splice(i, 1);
+              canceled = true;
+            }
+          }
+        }
+        removeArenaQueueForUser(uid);
+        if (canceled) notifyArenaQueueCanceled(lobby);
         return;
       }
 

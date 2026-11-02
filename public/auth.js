@@ -34,6 +34,10 @@ function setAccountAreaVisible(visible) {
   const area = document.getElementById('account-area');
   if (!area) return;
   area.classList.toggle('hidden', !visible);
+  // Na tela inicial o botão fica centralizado abaixo da logo: o espaço
+  // reservado some junto quando não há conta conectada.
+  const slot = document.getElementById('setup-account-slot');
+  if (slot) slot.classList.toggle('hidden', !visible);
 }
 
 // Conta com o plano Premium liberado (pagamento único vitalício)
@@ -151,7 +155,6 @@ function closeProfileModal() {
 // Habilita (Premium) ou bloqueia (conta gratuita) a edição do nickname
 function applyNicknameEditingState(premium) {
   const saveBtn = document.getElementById('profile-save-name-btn');
-  const hint = document.getElementById('profile-player-name-hint');
 
   if (profilePlayerName) {
     profilePlayerName.readOnly = !premium;
@@ -161,12 +164,6 @@ function applyNicknameEditingState(premium) {
   }
 
   if (saveBtn) saveBtn.classList.toggle('hidden', !premium);
-  if (hint) {
-    hint.textContent = premium
-      ? 'Sua conta Premium permite trocar o nickname quando quiser.'
-      : 'A alteração do nickname está disponível apenas para contas Premium.';
-    hint.className = `text-[11px] mt-2 ${premium ? 'text-amber-300' : 'text-slate-500'}`;
-  }
 }
 
 // O nickname não pode ser alterado por contas gratuitas:

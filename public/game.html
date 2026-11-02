@@ -94,6 +94,38 @@
       border: 1px solid #475569;
     }
 
+    /* Título da Conta Premium: retângulo amarelo com a fonte Fredoka */
+    .premium-title {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 12px;
+      background-color: #fbbf24;
+      color: #0f172a;
+      font-family: 'Fredoka', sans-serif;
+      font-weight: 700;
+      font-size: 14px;
+      line-height: 1.2;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    /* Palavra "PREMIUM" do botão de assinatura (fonte Fredoka) */
+    .premium-wordmark {
+      font-family: 'Fredoka', sans-serif;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
+    /* Menu da conta: no cabeçalho abre alinhado à direita; na tela inicial
+       (botão centralizado abaixo da logo) abre centralizado sob o botão,
+       sem gerar rolagem horizontal no celular. */
+    #account-area.is-setup #account-dropdown {
+      right: 50%;
+      transform: translateX(50%);
+      max-width: calc(100vw - 1.5rem);
+    }
+
     /* Campo do nickname no perfil:
        bloqueado por padrão (apenas informativo) e editável
        para as contas Premium. */
@@ -542,6 +574,10 @@
       <div class="flex flex-col items-center gap-1">
         <img src="/assets/luud.svg" onerror="this.onerror=null;this.src='/assets/luud.png'" alt="LUUD" class="w-64 sm:w-80 h-auto select-none" draggable="false">
       </div>
+
+      <!-- Botão de perfil: centralizado abaixo da logo LUUD e acima de "MODO DE JOGO".
+           Fica neste ponto fixo da tela inicial (não se move na troca de modos). -->
+      <div id="setup-account-slot" class="flex justify-center"></div>
 
       <div id="setup-main-view" class="space-y-5 sm:space-y-6 w-full">
       <!-- Login Google na tela inicial -->
@@ -1295,12 +1331,11 @@
             <input id="profile-player-name" type="text" maxlength="24" readonly aria-readonly="true" tabindex="-1" class="w-full bg-slate-900 border px-3 py-2.5 outline-none">
             <button type="button" id="profile-save-name-btn" onclick="saveProfileNickname()" class="hidden shrink-0 px-3 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition text-sm">Salvar</button>
           </div>
-          <p id="profile-player-name-hint" class="text-[11px] text-slate-500 mt-2">A alteração do nickname está disponível apenas para contas Premium.</p>
         </div>
 
         <!-- CORES DO PERFIL: primária, secundária e terciária -->
         <div class="space-y-2">
-          <p class="text-[11px] text-slate-500">As três cores precisam ser de categorias diferentes para serem salvas.</p>
+          <p class="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">Preferências</p>
 
           <div class="flex items-center gap-3">
             <button type="button" id="profile-color-primary-btn" onclick="pickProfileColor('primary')" class="profile-color-btn relative flex items-center gap-2 w-[170px] shrink-0 px-2 py-1.5 bg-slate-900 border border-slate-600 hover:border-slate-400 transition overflow-hidden">
@@ -1332,21 +1367,20 @@
             <label class="text-xs font-bold uppercase tracking-wider text-slate-300 whitespace-nowrap">Cor terciária</label>
           </div>
 
-          <p id="profile-color-locked-hint" class="hidden text-[11px] text-amber-400">A cor terciária está disponível apenas para contas pagas.</p>
+          <p class="text-[11px] text-slate-500 mt-2">As três cores precisam ser de categorias diferentes para serem salvas.</p>
         </div>
 
         <!-- CONTA PREMIUM: pagamento único via Pix, acesso vitalício -->
         <div id="profile-premium-box" class="hidden space-y-3 border border-amber-400/40 bg-amber-400/10 p-4">
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
-              <p id="profile-premium-title" class="text-xs font-black uppercase tracking-wider text-amber-300">Conta Premium</p>
+              <p id="profile-premium-title" class="premium-title">PREMIUM</p>
               <p id="profile-premium-note" class="text-[11px] text-slate-300 mt-1">Pagamento único. Sem mensalidade. Acesso vitalício.</p>
             </div>
             <p id="profile-premium-price" class="text-xl font-black text-amber-300 whitespace-nowrap">R$ 19,90</p>
           </div>
           <ul id="profile-premium-benefits" class="space-y-1 text-[11px] text-slate-300"></ul>
-          <button type="button" onclick="openPremiumCheckout()" id="profile-premium-buy-btn" class="w-full py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold transition text-sm">Assinar Conta Premium</button>
-          <p id="profile-premium-active" class="hidden text-[11px] text-emerald-400 font-bold">Sua Conta Premium está ativa. Aproveite!</p>
+          <button type="button" onclick="openPremiumCheckout()" id="profile-premium-buy-btn" class="w-full py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold transition text-sm">Assinar <span class="premium-wordmark">PREMIUM</span></button>
         </div>
 
         <p id="profile-status" class="text-xs text-slate-400 min-h-[18px]"></p>
@@ -1362,7 +1396,7 @@
   <div id="premium-checkout-modal" class="hidden fixed inset-0 z-[110] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="bg-slate-800 border border-slate-600 shadow-2xl w-full max-w-md p-6 space-y-4 max-h-[92vh] overflow-y-auto">
       <div class="flex items-center justify-between gap-3">
-        <h3 id="premium-checkout-title" class="font-display text-xl font-black text-slate-100">Conta Premium</h3>
+        <h3 id="premium-checkout-title" class="premium-title">PREMIUM</h3>
         <button type="button" onclick="closePremiumCheckout()" class="w-9 h-9 bg-slate-700 hover:bg-slate-600 text-slate-200 text-lg leading-none">✕</button>
       </div>
 
@@ -2153,10 +2187,7 @@
     }
 
     function pickProfileColor(role) {
-      if (!profileColorRoleEnabled(role)) {
-        setProfileStatus('A cor terciária está disponível apenas para contas pagas.', 'text-amber-400');
-        return;
-      }
+      if (!profileColorRoleEnabled(role)) return;
       const input = document.getElementById(`profile-color-${role}-input`);
       if (input) input.click();
     }
@@ -2191,7 +2222,7 @@
           btn.classList.toggle('hover:border-slate-400', enabled);
           btn.title = enabled
             ? `Escolher a cor ${PROFILE_COLOR_ROLE_LABELS[role]}`
-            : 'A cor terciária está disponível apenas para contas pagas';
+            : '';
         }
       });
 
@@ -2270,10 +2301,7 @@
       const account = typeof accountUser !== 'undefined' ? accountUser : null;
       if (!account) return;
 
-      if (!hasPaidAccount(account)) {
-        setProfileStatus('A alteração do nickname está disponível apenas para contas Premium.', 'text-amber-400');
-        return;
-      }
+      if (!hasPaidAccount(account)) return;
 
       const input = document.getElementById('profile-player-name');
       const nickname = String(input ? input.value : '')
@@ -2360,30 +2388,29 @@
       const info = premiumState.info;
       const paid = hasPaidAccount(user || (typeof accountUser !== 'undefined' ? accountUser : null));
 
+      // A caixa de venda (preço, benefícios e assinatura) só existe para
+      // as contas gratuitas: quem já é Premium não vê nenhuma dessas informações
+      if (paid) {
+        box.classList.add('hidden');
+        return;
+      }
+
       box.classList.remove('hidden');
 
       const title = document.getElementById('profile-premium-title');
       const note = document.getElementById('profile-premium-note');
       const price = document.getElementById('profile-premium-price');
       const buyBtn = document.getElementById('profile-premium-buy-btn');
-      const activeText = document.getElementById('profile-premium-active');
 
+      if (title) title.textContent = 'PREMIUM';
       if (info) {
-        if (title) title.textContent = info.planName || 'Conta Premium';
         if (note) note.textContent = info.note || 'Pagamento único. Sem mensalidade. Acesso vitalício.';
         if (price) price.textContent = formatBRL(info.price);
       }
       renderPremiumBenefits('profile-premium-benefits');
 
-      if (paid) {
-        if (buyBtn) buyBtn.classList.add('hidden');
-        if (activeText) activeText.classList.remove('hidden');
-        if (price) price.classList.add('hidden');
-      } else {
-        if (buyBtn) buyBtn.classList.remove('hidden');
-        if (activeText) activeText.classList.add('hidden');
-        if (price) price.classList.remove('hidden');
-      }
+      if (buyBtn) buyBtn.classList.remove('hidden');
+      if (price) price.classList.remove('hidden');
     }
 
     function setPremiumCheckoutStatus(message, tone) {
@@ -2423,7 +2450,7 @@
         const title = document.getElementById('premium-checkout-title');
         const note = document.getElementById('premium-checkout-note');
         const price = document.getElementById('premium-checkout-price');
-        if (title) title.textContent = info.planName || 'Conta Premium';
+        if (title) title.textContent = 'PREMIUM';
         if (note) note.textContent = info.note || 'Pagamento único via Pix. Sem mensalidade. Acesso vitalício.';
         if (price) price.textContent = formatBRL(info.price);
       }
@@ -2896,25 +2923,28 @@
     }
 
     // Posiciona o botão de conta conforme a tela:
-    // - tela inicial: flutua sozinho no canto superior direito (sem o
-    //   cabeçalho por cima do menu, evitando telas sobrepostas);
+    // - tela inicial: fica centralizado logo abaixo da logo LUUD (e acima
+    //   de "MODO DE JOGO"), mantendo o mesmo lugar durante a troca de modos;
     // - durante a partida: volta para a posição no cabeçalho.
     function layoutAccountArea() {
       const area = document.getElementById('account-area');
       const setup = document.getElementById('setup-screen');
       const holder = document.getElementById('account-area-holder');
+      const slot = document.getElementById('setup-account-slot');
       if (!area || !setup) return;
 
       // Se o area já está dentro do setup, não adiciona novamente (evita duplicação)
       if (!setup.classList.contains('hidden')) {
-        area.classList.add('absolute', 'top-3', 'right-3', 'sm:top-4', 'sm:right-4', 'z-[85]');
-        area.classList.remove('relative');
-        if (area.parentElement !== setup) {
+        area.classList.add('relative', 'is-setup');
+        area.classList.remove('absolute', 'top-3', 'right-3', 'sm:top-4', 'sm:right-4', 'z-[85]');
+        if (slot) {
+          if (area.parentElement !== slot) slot.appendChild(area);
+        } else if (area.parentElement !== setup) {
           setup.appendChild(area);
         }
       } else {
         area.classList.add('relative');
-        area.classList.remove('absolute', 'top-3', 'right-3', 'sm:top-4', 'sm:right-4', 'z-[85]');
+        area.classList.remove('is-setup', 'absolute', 'top-3', 'right-3', 'sm:top-4', 'sm:right-4', 'z-[85]');
         if (holder && area.parentElement !== holder) holder.appendChild(area);
       }
     }
@@ -5037,10 +5067,20 @@
           break;
 
         case 'dupla_queued':
+          // O criador do lobby iniciou a busca: todos os jogadores presentes
+          // ficam com a interface bloqueada (sem texto de fila e sem VOLTAR)
           duplaQueued = true;
           updateDuplaLobbyControls();
           startDuplaMatchmakingTimer();
-          setDuplaStatus(data.message || 'Na fila: procurando uma dupla adversária...', 'text-emerald-400');
+          setDuplaStatus('');
+          break;
+
+        case 'dupla_queue_canceled':
+          // A busca foi cancelada: a interface volta a ficar utilizável
+          duplaQueued = false;
+          stopDuplaMatchmakingTimer();
+          updateDuplaLobbyControls();
+          setDuplaStatus('');
           break;
 
         case 'dupla_queue_error':
@@ -5064,6 +5104,9 @@
 
         case 'dupla_match_started_elsewhere':
           // A partida começou em outra aba deste mesmo usuário
+          duplaQueued = false;
+          stopDuplaMatchmakingTimer();
+          updateDuplaLobbyControls();
           setDuplaStatus(data.message || 'A partida começou em outra aba.', 'text-amber-400');
           break;
 
@@ -5105,10 +5148,20 @@
           break;
 
         case 'arena_queued':
+          // O criador do lobby iniciou a busca: todos os jogadores presentes
+          // ficam com a interface bloqueada (sem texto de fila e sem VOLTAR)
           arenaQueued = true;
           updateArenaLobbyControls();
           startArenaMatchmakingTimer();
-          setArenaStatus(data.message || 'Na fila: procurando adversários...', 'text-emerald-400');
+          setArenaStatus('');
+          break;
+
+        case 'arena_queue_canceled':
+          // A busca foi cancelada: a interface volta a ficar utilizável
+          arenaQueued = false;
+          stopArenaMatchmakingTimer();
+          updateArenaLobbyControls();
+          setArenaStatus('');
           break;
 
         case 'arena_queue_error':
@@ -5132,6 +5185,9 @@
 
         case 'arena_match_started_elsewhere':
           // A partida começou em outra aba deste mesmo usuário
+          arenaQueued = false;
+          stopArenaMatchmakingTimer();
+          updateArenaLobbyControls();
           setArenaStatus(data.message || 'A partida de arena começou em outra aba.', 'text-amber-400');
           break;
 
@@ -5471,8 +5527,8 @@
           const statusText = isOnline ? 'Online' : 'Offline';
           const statusClass = isOnline ? 'text-emerald-400' : 'text-slate-500';
           const lobbyFull = isDuplaLobbyFull();
-          const disabledAttr = (!isOnline || lobbyFull)
-            ? `disabled title="${lobbyFull ? 'A dupla já está completa (2/2)' : 'O amigo está offline'}"`
+          const disabledAttr = (!isOnline || lobbyFull || duplaQueued)
+            ? `disabled title="${duplaQueued ? 'A busca está em andamento' : (lobbyFull ? 'A dupla já está completa (2/2)' : 'O amigo está offline')}"`
             : '';
           const row = document.createElement('div');
           row.className = 'flex items-center justify-between gap-2 p-2 bg-slate-900 border border-slate-700';
@@ -5496,7 +5552,7 @@
     }
 
     function duplaInviteFriend(targetId) {
-      if (!targetId) return;
+      if (!targetId || duplaQueued) return;
       if (isDuplaLobbyFull()) {
         setDuplaStatus('A dupla já está completa (2/2).');
         return;
@@ -5564,6 +5620,8 @@
     // O dono do lobby pode remover um membro (com confirmação)
     function removeLobbyMember(kind, memberId, memberName) {
       if (!memberId) return;
+      // Durante a busca o lobby fica bloqueado: não é possível remover ninguém
+      if (kind === 'arena' ? arenaQueued : duplaQueued) return;
       const target = { kind: kind || 'dupla', id: memberId, name: memberName || 'Jogador' };
       pendingRemoveTarget = target;
       const nameEl = document.getElementById('remove-player-name');
@@ -5702,6 +5760,8 @@
       }
 
       const isHost = isDuplaLobbyHost();
+      // Durante a busca ninguém pode remover membros do lobby
+      const canRemove = isHost && !duplaQueued;
       list.innerHTML = '';
       roster.forEach(m => {
         const isMe = Boolean(me && m.id === me.id);
@@ -5712,10 +5772,10 @@
           <div class="flex items-center gap-3 min-w-0">
             <img src="${escapeHtmlText(m.picture || '/assets/avatar.svg')}" class="w-8 h-8 rounded-full object-cover shrink-0" onerror="this.onerror=null;this.src='/assets/avatar.svg'" alt="">
             <div class="flex flex-col items-start min-w-0">
-              <span class="text-sm text-slate-100 truncate text-left">${memberIsHost ? '👑 ' : ''}${escapeHtmlText(m.name || 'Jogador')}${isMe ? ' (você)' : ''}</span>
+              <span class="text-sm text-slate-100 truncate text-left">${memberIsHost ? '🚩 ' : ''}${escapeHtmlText(m.name || 'Jogador')}${isMe ? ' (você)' : ''}</span>
             </div>
           </div>
-          ${!memberIsHost && !isMe && isHost ? `<button type="button" onclick="removeLobbyMember('dupla', '${escapeHtmlText(m.id)}', '${escapeHtmlText(m.name || 'Jogador')}')" class="w-7 h-7 shrink-0 flex items-center justify-center bg-red-600 hover:bg-red-500 text-white font-bold text-sm leading-none" title="Remover da dupla" aria-label="Remover da dupla">X</button>` : ''}
+          ${!memberIsHost && !isMe && canRemove ? `<button type="button" onclick="removeLobbyMember('dupla', '${escapeHtmlText(m.id)}', '${escapeHtmlText(m.name || 'Jogador')}')" class="w-7 h-7 shrink-0 flex items-center justify-center bg-red-600 hover:bg-red-500 text-white font-bold text-sm leading-none" title="Remover da dupla" aria-label="Remover da dupla">X</button>` : ''}
         `;
         list.appendChild(row);
       });
@@ -5729,6 +5789,8 @@
     // Botões e permissões do lobby: só o criador edita a dupla e busca partida
     function updateDuplaLobbyControls() {
       const isHost = isDuplaLobbyHost();
+      // Durante a busca a interface do lobby fica bloqueada para todos
+      const searching = Boolean(duplaQueued);
 
       // Criador edita nome/cor; convidado apenas visualiza
       const editor = document.getElementById('dupla-team-editor');
@@ -5736,26 +5798,43 @@
       if (editor) editor.classList.toggle('hidden', !isHost);
       if (info) info.classList.toggle('hidden', isHost);
 
+      // Nome da dupla: bloqueado enquanto a busca está em andamento
+      const nameInput = document.getElementById('dupla-team-name');
+      if (nameInput) nameInput.disabled = searching;
+
+      // Cores da dupla: bloqueadas enquanto a busca está em andamento
+      document.querySelectorAll('#dupla-color-picker .dupla-color-btn').forEach(btn => {
+        btn.disabled = searching;
+        btn.classList.toggle('opacity-50', searching);
+        btn.classList.toggle('cursor-not-allowed', searching);
+      });
+      const customPicker = document.getElementById('dupla-custom-color-picker');
+      if (customPicker) customPicker.disabled = searching;
+
       // Botão de convidar: desabilitado quando a dupla já está completa
       const inviteBtn = document.getElementById('dupla-invite-btn');
       if (inviteBtn) {
-        inviteBtn.disabled = isDuplaLobbyFull();
-        inviteBtn.title = isDuplaLobbyFull() ? 'A dupla já está completa (2/2)' : 'Convidar amigo';
+        inviteBtn.disabled = searching || isDuplaLobbyFull();
+        inviteBtn.title = searching
+          ? 'A busca está em andamento'
+          : (isDuplaLobbyFull() ? 'A dupla já está completa (2/2)' : 'Convidar amigo');
       }
 
-      // Apenas o criador busca partida (o botão vira "CANCELAR BUSCA" na fila)
+      // Na fila o botão é o único controle clicável: "CANCELAR BUSCA"
       const searchBtn = document.getElementById('dupla-search-btn');
       if (searchBtn) {
-        searchBtn.classList.toggle('hidden', !isHost);
-        if (isHost) {
-          searchBtn.disabled = false;
-          searchBtn.textContent = duplaQueued ? 'CANCELAR BUSCA' : 'BUSCAR PARTIDA';
-        }
+        searchBtn.classList.toggle('hidden', !isHost && !searching);
+        searchBtn.disabled = false;
+        searchBtn.textContent = searching ? 'CANCELAR BUSCA' : 'BUSCAR PARTIDA';
       }
 
       // Criador volta para o menu; convidado sai do lobby
+      // (enquanto a busca está em andamento o lobby não pode ser fechado)
       const backBtn = document.getElementById('dupla-back-btn');
-      if (backBtn) backBtn.textContent = isHost ? 'VOLTAR' : 'SAIR';
+      if (backBtn) {
+        backBtn.classList.toggle('hidden', searching);
+        backBtn.textContent = isHost ? 'VOLTAR' : 'SAIR';
+      }
     }
 
     // A dupla está completa quando há duas pessoas no lobby
@@ -5775,6 +5854,8 @@
       if (!lobby) return;
       const me = currentAccountProfile();
       duplaLobbyHostId = lobby.hostId || null;
+      // O servidor avisa quando a busca de partida já está em andamento
+      if (typeof lobby.searching === 'boolean') duplaQueued = lobby.searching;
       // O nome da dupla pode estar vazio (o criador ainda não informou um nome)
       if (typeof lobby.teamName === 'string') duplaTeamName = lobby.teamName;
       if (lobby.teamColor) {
@@ -5799,10 +5880,12 @@
       updateDuplaColorPickerUI();
       renderDuplaMembers();
       loadDuplaFriends();
+      // A busca pode ter começado em outra aba do criador
+      if (duplaQueued) startDuplaMatchmakingTimer();
     }
 
     function duplaEditTeamName() {
-      if (!isDuplaLobbyHost()) return;
+      if (!isDuplaLobbyHost() || duplaQueued) return;
       const input = document.getElementById('dupla-team-name');
       // O campo pode ficar vazio: apenas a busca de partida exige um nome
       duplaTeamName = input ? input.value.trim() : '';
@@ -5810,7 +5893,7 @@
     }
 
     function duplaPickColor(hex, colorName) {
-      if (!isDuplaLobbyHost()) return;
+      if (!isDuplaLobbyHost() || duplaQueued) return;
       const normalized = normalizeHexColor(hex);
       if (!normalized) return;
       duplaTeamColor = normalized;
@@ -5831,14 +5914,14 @@
     }
 
     function duplaPickCustomColor() {
-      if (!isDuplaLobbyHost()) return;
+      if (!isDuplaLobbyHost() || duplaQueued) return;
       const picker = document.getElementById('dupla-custom-color-picker');
       if (picker) picker.click();
     }
 
     // Cor personalizada escolhida no seletor (5ª opção da dupla)
     function duplaPickCustomColorValue(hex) {
-      if (!isDuplaLobbyHost()) return;
+      if (!isDuplaLobbyHost() || duplaQueued) return;
       const normalized = normalizeHexColor(hex);
       if (!normalized) return;
       duplaCustomColor = normalized;
@@ -5939,19 +6022,19 @@
       const btn = document.getElementById('dupla-search-btn');
       if (!btn) return;
 
-      // Somente o criador do lobby pode iniciar o matchmaking
-      if (!isDuplaLobbyHost()) {
-        setDuplaStatus('Apenas o criador do lobby pode buscar partida.');
-        return;
-      }
-
       if (duplaQueued) {
-        // Cancelar a busca
+        // Cancelar a busca: o lobby volta a ficar utilizável
         sendOnline({ type: 'dupla_leave_queue' });
         duplaQueued = false;
         stopDuplaMatchmakingTimer();
         updateDuplaLobbyControls();
-        setDuplaStatus('Busca cancelada.');
+        setDuplaStatus('');
+        return;
+      }
+
+      // Somente o criador do lobby pode iniciar o matchmaking
+      if (!isDuplaLobbyHost()) {
+        setDuplaStatus('Apenas o criador do lobby pode buscar partida.');
         return;
       }
 
@@ -5978,7 +6061,7 @@
       });
       duplaQueued = true;
       updateDuplaLobbyControls();
-      setDuplaStatus('Procurando uma dupla adversária...');
+      setDuplaStatus('');
     }
 
     /* ================================================================
@@ -6029,8 +6112,8 @@
           const statusText = isOnline ? 'Online' : 'Offline';
           const statusClass = isOnline ? 'text-emerald-400' : 'text-slate-500';
           const lobbyFull = isArenaLobbyFull();
-          const disabledAttr = (!isOnline || lobbyFull)
-            ? `disabled title="${lobbyFull ? 'O lobby já está completo (4/4)' : 'O amigo está offline'}"`
+          const disabledAttr = (!isOnline || lobbyFull || arenaQueued)
+            ? `disabled title="${arenaQueued ? 'A busca está em andamento' : (lobbyFull ? 'O lobby já está completo (4/4)' : 'O amigo está offline')}"`
             : '';
           const row = document.createElement('div');
           row.className = 'flex items-center justify-between gap-2 p-2 bg-slate-900 border border-slate-700';
@@ -6054,7 +6137,7 @@
     }
 
     function arenaInviteFriend(targetId) {
-      if (!targetId) return;
+      if (!targetId || arenaQueued) return;
       if (isArenaLobbyFull()) {
         setArenaStatus('O lobby já está completo (4/4).');
         return;
@@ -6076,6 +6159,8 @@
       }
 
       const isHost = isArenaLobbyHost();
+      // Durante a busca ninguém pode remover membros do lobby
+      const canRemove = isHost && !arenaQueued;
       list.innerHTML = '';
       roster.forEach(m => {
         const isMe = Boolean(me && m.id === me.id);
@@ -6086,10 +6171,10 @@
           <div class="flex items-center gap-3 min-w-0">
             <img src="${escapeHtmlText(m.picture || '/assets/avatar.svg')}" class="w-8 h-8 rounded-full object-cover shrink-0" onerror="this.onerror=null;this.src='/assets/avatar.svg'" alt="">
             <div class="flex flex-col items-start min-w-0">
-              <span class="text-sm text-slate-100 truncate text-left">${memberIsHost ? '👑 ' : ''}${escapeHtmlText(m.name || 'Jogador')}${isMe ? ' (você)' : ''}</span>
+              <span class="text-sm text-slate-100 truncate text-left">${memberIsHost ? '🚩 ' : ''}${escapeHtmlText(m.name || 'Jogador')}${isMe ? ' (você)' : ''}</span>
             </div>
           </div>
-          ${!memberIsHost && !isMe && isHost ? `<button type="button" onclick="removeLobbyMember('arena', '${escapeHtmlText(m.id)}', '${escapeHtmlText(m.name || 'Jogador')}')" class="w-7 h-7 shrink-0 flex items-center justify-center bg-red-600 hover:bg-red-500 text-white font-bold text-sm leading-none" title="Remover da arena" aria-label="Remover da arena">X</button>` : ''}
+          ${!memberIsHost && !isMe && canRemove ? `<button type="button" onclick="removeLobbyMember('arena', '${escapeHtmlText(m.id)}', '${escapeHtmlText(m.name || 'Jogador')}')" class="w-7 h-7 shrink-0 flex items-center justify-center bg-red-600 hover:bg-red-500 text-white font-bold text-sm leading-none" title="Remover da arena" aria-label="Remover da arena">X</button>` : ''}
         `;
         list.appendChild(row);
       });
@@ -6103,27 +6188,33 @@
     // Botões e permissões do lobby: só o criador convida e busca partida
     function updateArenaLobbyControls() {
       const isHost = isArenaLobbyHost();
+      // Durante a busca a interface do lobby fica bloqueada para todos
+      const searching = Boolean(arenaQueued);
 
       // Botão de convidar: desabilitado quando o lobby já está completo
       const inviteBtn = document.getElementById('arena-invite-btn');
       if (inviteBtn) {
-        inviteBtn.disabled = isArenaLobbyFull();
-        inviteBtn.title = isArenaLobbyFull() ? 'O lobby já está completo (4/4)' : 'Convidar amigo';
+        inviteBtn.disabled = searching || isArenaLobbyFull();
+        inviteBtn.title = searching
+          ? 'A busca está em andamento'
+          : (isArenaLobbyFull() ? 'O lobby já está completo (4/4)' : 'Convidar amigo');
       }
 
-      // Apenas o criador busca partida (o botão vira "CANCELAR BUSCA" na fila)
+      // Na fila o botão é o único controle clicável: "CANCELAR BUSCA"
       const searchBtn = document.getElementById('arena-search-btn');
       if (searchBtn) {
-        searchBtn.classList.toggle('hidden', !isHost);
-        if (isHost) {
-          searchBtn.disabled = false;
-          searchBtn.textContent = arenaQueued ? 'CANCELAR BUSCA' : 'BUSCAR PARTIDA';
-        }
+        searchBtn.classList.toggle('hidden', !isHost && !searching);
+        searchBtn.disabled = false;
+        searchBtn.textContent = searching ? 'CANCELAR BUSCA' : 'BUSCAR PARTIDA';
       }
 
       // Criador volta para o menu; convidado sai do lobby
+      // (enquanto a busca está em andamento o lobby não pode ser fechado)
       const backBtn = document.getElementById('arena-back-btn');
-      if (backBtn) backBtn.textContent = isHost ? 'VOLTAR' : 'SAIR';
+      if (backBtn) {
+        backBtn.classList.toggle('hidden', searching);
+        backBtn.textContent = isHost ? 'VOLTAR' : 'SAIR';
+      }
     }
 
     // O lobby está completo quando há quatro pessoas no lobby
@@ -6143,6 +6234,8 @@
       if (!lobby) return;
       const me = currentAccountProfile();
       arenaLobbyHostId = lobby.hostId || null;
+      // O servidor avisa quando a busca de partida já está em andamento
+      if (typeof lobby.searching === 'boolean') arenaQueued = lobby.searching;
       arenaLobbyRoster = Array.isArray(lobby.members) ? lobby.members.map(m => ({
         id: m.id,
         name: m.name || 'Jogador',
@@ -6153,6 +6246,8 @@
       arenaMembers = arenaLobbyRoster.filter(m => !me || m.id !== me.id);
       renderArenaMembers();
       loadArenaFriends();
+      // A busca pode ter começado em outra aba do criador
+      if (arenaQueued) startArenaMatchmakingTimer();
     }
 
     /* -------------------------------------------------------------
@@ -6207,19 +6302,19 @@
       const btn = document.getElementById('arena-search-btn');
       if (!btn) return;
 
-      // Somente o criador do lobby pode iniciar o matchmaking
-      if (!isArenaLobbyHost()) {
-        setArenaStatus('Apenas o criador do lobby pode buscar partida.');
-        return;
-      }
-
       if (arenaQueued) {
-        // Cancelar a busca
+        // Cancelar a busca: o lobby volta a ficar utilizável
         sendOnline({ type: 'arena_leave_queue' });
         arenaQueued = false;
         stopArenaMatchmakingTimer();
         updateArenaLobbyControls();
-        setArenaStatus('Busca cancelada.');
+        setArenaStatus('');
+        return;
+      }
+
+      // Somente o criador do lobby pode iniciar o matchmaking
+      if (!isArenaLobbyHost()) {
+        setArenaStatus('Apenas o criador do lobby pode buscar partida.');
         return;
       }
 
@@ -6233,7 +6328,7 @@
       sendOnline({ type: 'arena_queue' });
       arenaQueued = true;
       updateArenaLobbyControls();
-      setArenaStatus('Procurando adversários...');
+      setArenaStatus('');
     }
 
     // Inicia a partida de dupla online (1 vs 1 com duplas de um jogador
@@ -6948,7 +7043,7 @@
       initGoogleLoginSetup();
       // Tela inicial: sem partida em andamento, o Menu fica oculto
       setMenuButtonVisible(false);
-      // Botão de conta flutuando no canto da tela inicial
+      // Botão de conta centralizado abaixo da logo na tela inicial
       layoutAccountArea();
 
       // Se já estiver logado, habilita o botão Single Player Online.
