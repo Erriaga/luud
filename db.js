@@ -1309,9 +1309,57 @@ async function getFriendsReport() {
   };
 
   const friendIds = await p.query('SELECT DISTINCT user_id FROM friends LIMIT 50');
+
+  let columns = [];
+  try {
+    const cols = await p.query(
+      `SELECT table_name, column_name, data_type FROM information_schema.columns
+       WHERE table_name IN ('users','friends','friend_requests','sessions','matches')
+       ORDER BY table_name, ordinal_position`
+    );
+    columns = cols.rows;
+  } catch (error) {
+    columns = [{ error: sanitizeDbErrorMessage(error.message) }];
+  }
+
+  let friendsRows = [];
+  try {
+    const rows = await p.query('SELECT * FROM friends LIMIT 30');
+    friendsRows = rows.rows;
+  } catch (error) {
+    friendsRows = [{ error: sanitizeDbErrorMessage(error.message) }];
+  }
+
+  let joinCheck = [];
+  try {
+    const rows = await p.query(
+      `SELECT f.user_id, f.friend_id, (u.id IS NOT NULL) AS friend_found
+       FROM friends f LEFT JOIN users u ON u.id = f.friend_id LIMIT 30`
+    );
+    joinCheck = rows.rows;
+  } catch (error) {
+    joinCheck = [{ error: sanitizeDbErrorMessage(error.message) }];
+  }
+
+  let listCheck = null;
+  try {
+    const rows = await p.query(
+      `SELECT u.id, u.email FROM friends f JOIN users u ON u.id = f.friend_id
+       WHERE f.user_id = $1 LIMIT 10`,
+      ['104370288773011851406']
+    );
+    listCheck = rows.rows;
+  } catch (error) {
+    listCheck = [{ error: sanitizeDbErrorMessage(error.message) }];
+  }
+
   return {
     mode: 'postgres',
     counts,
+    columns,
+    friendsRows,
+    joinCheck,
+    listCheck,
     friendUserIds: friendIds.rows.map(row => row.user_id),
     users: users.rows
   };
