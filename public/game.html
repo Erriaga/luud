@@ -501,8 +501,8 @@
         <div id="login-status-setup" class="status" role="status"></div>
       </div>
 
-      <!-- Escolha da Cor do Jogador Humano -->
-      <div class="space-y-2 text-center">
+      <!-- Escolha da Cor do Jogador Humano (somente para quem não está logado) -->
+      <div id="setup-color-section" class="space-y-2 text-center">
         <label class="text-xs font-bold uppercase tracking-wider text-slate-300">SUA COR</label>
         <div class="grid grid-cols-4 gap-2">
           <button type="button" onclick="selectHumanColor('RED')" id="color-btn-RED" class="color-select-btn p-3 border-2 border-transparent flex flex-col items-center justify-center bg-red-500/20 hover:bg-red-500/30 transition">
@@ -1755,7 +1755,7 @@
           ? ['BLUE', 'GREEN', 'RED']
           : ['RED', 'BLUE', 'GREEN'];
         const opponentTheme = preferredOpponentThemes.find(theme => {
-          return !areColorsSimilar(humanHex, PLAYER_COLORS[theme].hex);
+          return PLAYER_COLORS[theme].name !== humanName && !areColorsSimilar(humanHex, PLAYER_COLORS[theme].hex);
         }) || preferredOpponentThemes[0];
         const opponentHex = PLAYER_COLORS[opponentTheme].hex;
         const opponentName = PLAYER_COLORS[opponentTheme].name;
@@ -1781,22 +1781,34 @@
             name: customColorName,
             custom: true
           };
-
-          activePlayers.forEach(player => {
-            if (playerTypes[player] === 'CPU' && areColorsSimilar(humanHex, assignments[player].hex)) {
-              const alternativeTheme = ['RED', 'BLUE', 'GREEN', 'YELLOW'].find(theme => {
-                return !areColorsSimilar(humanHex, PLAYER_COLORS[theme].hex);
-              });
-              if (alternativeTheme) {
-                assignments[player] = {
-                  hex: PLAYER_COLORS[alternativeTheme].hex,
-                  name: PLAYER_COLORS[alternativeTheme].name,
-                  custom: false
-                };
-              }
-            }
-          });
         }
+
+        // Nenhuma CPU pode usar uma cor com o mesmo nome da cor do jogador
+        // (ex.: o jogador usa "Vermelho" e a CPU não pode usar "Vermelho")
+        const humanColorName = assignments[humanPlayer] ? assignments[humanPlayer].name : '';
+        const usedColorNames = new Set([humanColorName]);
+        activePlayers.forEach(player => {
+          if (playerTypes[player] !== 'CPU') return;
+          const current = assignments[player];
+          const conflict = usedColorNames.has(current.name) || areColorsSimilar(humanHex, current.hex);
+          if (!conflict) {
+            usedColorNames.add(current.name);
+            return;
+          }
+          const alternativeTheme = ['RED', 'BLUE', 'GREEN', 'YELLOW'].find(theme => {
+            return !usedColorNames.has(PLAYER_COLORS[theme].name) && !areColorsSimilar(humanHex, PLAYER_COLORS[theme].hex);
+          });
+          if (alternativeTheme) {
+            assignments[player] = {
+              hex: PLAYER_COLORS[alternativeTheme].hex,
+              name: PLAYER_COLORS[alternativeTheme].name,
+              custom: false
+            };
+            usedColorNames.add(PLAYER_COLORS[alternativeTheme].name);
+          } else {
+            usedColorNames.add(current.name);
+          }
+        });
 
         // No modo online, pinta o slot do oponente com a cor que ele escolheu
         // (sincronizada via WebSocket), preservando a escolha de cada jogador.
@@ -1972,9 +1984,9 @@
     const PROFILE_COLOR_ROLES = ['primary', 'secondary', 'tertiary'];
     const PROFILE_COLOR_ROLE_LABELS = { primary: 'primária', secondary: 'secundária', tertiary: 'terciária' };
     const PROFILE_COLOR_DEFAULTS = {
-      primary: '#ef233c',
-      secondary: '#0096ff',
-      tertiary: '#00a86b'
+      primary: '#0096ff',   // Azul
+      secondary: '#00a86b', // Verde
+      tertiary: '#ef233c'   // Vermelho
     };
     let profileColors = { ...PROFILE_COLOR_DEFAULTS };       // cores em edição
     let profileSavedColors = { ...PROFILE_COLOR_DEFAULTS };  // cores já salvas
@@ -2129,6 +2141,22 @@
         setProfileStatus(error.message, 'text-red-400');
         if (saveBtn) saveBtn.disabled = false;
       }
+    }
+
+    /* -------------------------------------------------------------
+       CORES DO PERFIL NAS PARTIDAS LOCAIS
+       Quem tem conta Google usa a cor primária do perfil (editável
+       em "PERFIL"). Quem não está logado mantém a cor escolhida
+       na tela inicial.
+    ------------------------------------------------------------- */
+    function applyProfileColorForLocalGame() {
+      const account = typeof accountUser !== 'undefined' ? accountUser : null;
+      if (!account) return;
+
+      const primary = normalizeHexColor(account.primaryColor) || PROFILE_COLOR_DEFAULTS.primary;
+      customColorHex = primary;
+      customColorName = identifyColorName(primary);
+      usingCustomColor = true;
     }
 
     function updatePlayerName(value) {
@@ -4038,6 +4066,10 @@
       onlineMatchEnded = false;
       movementSession++;
 
+      // Partidas locais: quem tem conta Google joga com a cor primária
+      // do perfil (a seleção da tela inicial fica oculta para logados).
+      if (!isOnlineGame) applyProfileColorForLocalGame();
+
       if (activeDiceAnimation) {
         activeDiceAnimation.cancel();
         activeDiceAnimation = null;
@@ -5851,14 +5883,37 @@
         customColorName
       };
 
+      // SOLO 1 vs 1: a cor é resolvida pelo servidor a partir das
+      // preferências do perfil. Quem começa usa a cor primária e o
+      // oponente só usa a primária se ela não tiver o mesmo nome.
+      const myEntry = Array.isArray(players) ? players.find(p => Number(p.id) === Number(onlinePlayerIdx)) : null;
+      const opponentEntry = Array.isArray(players) ? players.find(p => Number(p.id) !== Number(onlinePlayerIdx)) : null;
+      if (myEntry && myEntry.color && myEntry.color.hex) {
+        const hex = normalizeHexColor(myEntry.color.hex);
+        if (hex) {
+          customColorHex = hex;
+          customColorName = String(myEntry.color.name || identifyColorName(hex));
+          usingCustomColor = true;
+        }
+      }
+      if (opponentEntry && opponentEntry.color && opponentEntry.color.hex) {
+        const hex = normalizeHexColor(opponentEntry.color.hex);
+        if (hex) {
+          onlineOpponentColor = {
+            hex,
+            name: String(opponentEntry.color.name || identifyColorName(hex)),
+            custom: true
+          };
+        }
+      }
+
       // O jogador ocupa o slot definido pelo servidor, mas mantém a cor
-      // personalizada escolhida na tela inicial. NÃO sobrescreve selectedHumanColor
+      // definida para a partida. NÃO sobrescreve selectedHumanColor
       // com a cor do slot - a cor visual vem da escolha do usuário.
       updateColorVariables();
       updateColorSelectionUI();
 
       // Guarda o nome e o perfil completo do oponente (vindo do room_ready)
-      const opponentEntry = Array.isArray(players) ? players.find(p => p.id !== onlinePlayerIdx) : null;
       if (opponentEntry) {
         onlineOpponentName = opponentEntry.name || 'Oponente';
         onlineOpponentProfile = {
@@ -6007,6 +6062,17 @@
         if (googleBtnSetup) googleBtnSetup.style.display = 'none';
         const statusEl = document.getElementById('login-status-setup');
         if (statusEl) statusEl.textContent = '';
+      }
+
+      // A seleção de cor da tela inicial só aparece para quem não está
+      // logado: quem tem conta Google edita as cores em "PERFIL".
+      const colorSection = document.getElementById('setup-color-section');
+      if (colorSection) colorSection.classList.toggle('hidden', loggedIn);
+
+      // Ao sair da conta, a cor escolhida na tela inicial volta a valer
+      if (!loggedIn && typeof restoreColorPreference === 'function') {
+        restoreColorPreference();
+        if (typeof updateColorVariables === 'function') updateColorVariables();
       }
 
       updateOnlineSingleButton();

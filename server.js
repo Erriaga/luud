@@ -224,8 +224,14 @@ async function startQuickMatchRoom(a, b) {
     { id: 1, uid: profileB.uid, name: profileB.name, email: profileB.email, picture: profileB.picture, playerName: profileB.playerName }
   ];
 
-  sendTo(a.ws, { type: 'room_created', room: code, player: 0, name: room.names[0], quick: true, opponentProfile: profileB });
-  sendTo(b.ws, { type: 'room_created', room: code, player: 1, name: room.names[1], quick: true, opponentProfile: profileA });
+  // SOLO 1 vs 1: quem começa usa a cor primária do perfil e o oponente
+  // só usa a primária se ela não tiver o mesmo nome da cor do iniciante.
+  const soloColors = await resolveSoloMatchColors([room.userIds[0], room.userIds[1]]);
+  players[0].color = soloColors.starterColor;
+  players[1].color = soloColors.opponentColor;
+
+  sendTo(a.ws, { type: 'room_created', room: code, player: 0, name: room.names[0], quick: true, opponentProfile: { ...profileB, color: soloColors.opponentColor } });
+  sendTo(b.ws, { type: 'room_created', room: code, player: 1, name: room.names[1], quick: true, opponentProfile: { ...profileA, color: soloColors.starterColor } });
   sendTo(a.ws, { type: 'room_ready', players });
   sendTo(b.ws, { type: 'room_ready', players });
 }
@@ -430,7 +436,7 @@ function resolveDuplaPlayers(members, fallbackUid, fallbackWs) {
   return players;
 }
 
-function tryDuplaMatchmaking() {
+async function tryDuplaMatchmaking() {
   // Resolve quem está online em cada dupla que está na fila
   const valid = [];
   duplaQueue.forEach(entry => {
@@ -458,11 +464,11 @@ function tryDuplaMatchmaking() {
     const second = duplaQueue[matchIndex];
     duplaQueue.splice(matchIndex, 1);
     duplaQueue.shift();
-    startDuplaMatch(first, second);
+    await startDuplaMatch(first, second);
   }
 }
 
-function startDuplaMatch(entryA, entryB) {
+async function startDuplaMatch(entryA, entryB) {
   const teamA = entryA.players || [];
   const teamB = entryB.players || [];
   if (!teamA.length || !teamB.length) return;
@@ -528,6 +534,20 @@ function startDuplaMatch(entryA, entryB) {
       teamColorName: source.teamColorName
     };
   });
+
+  // SOLO 1 vs 1 (lobby de dupla com um jogador de cada lado): as cores
+  // vêm das preferências do perfil. Quem começa usa a cor primária e o
+  // oponente só usa a primária se ela não tiver o mesmo nome.
+  if (soloMatch) {
+    const soloColors = await resolveSoloMatchColors([
+      seats[0].player.id,
+      seats[1].player.id
+    ]);
+    roster[0].teamColor = soloColors.starterColor.hex;
+    roster[0].teamColorName = soloColors.starterColor.name;
+    roster[1].teamColor = soloColors.opponentColor.hex;
+    roster[1].teamColorName = soloColors.opponentColor.name;
+  }
 
   seats.forEach(seat => {
     const matchMessage = {
@@ -777,6 +797,48 @@ function profileColorCategory(hex) {
   return 'Rosa';
 }
 
+/* -------------------------------------------------------------
+   CORES DA PARTIDA SOLO (1 vs 1)
+   Quem começa a partida usa a cor primária do seu perfil.
+   O oponente só usa a cor primária se ela não tiver o mesmo nome
+   (mesma categoria) da cor de quem começou: nesse caso passa para
+   a cor secundária e, se ainda assim repetir, para a terciária.
+------------------------------------------------------------- */
+async function getProfileColorPreferences(userId) {
+  const user = userId ? await db.getUserById(userId) : null;
+  return {
+    primary: (user && user.primaryColor) || db.DEFAULT_PRIMARY_COLOR,
+    secondary: (user && user.secondaryColor) || db.DEFAULT_SECONDARY_COLOR,
+    tertiary: (user && user.tertiaryColor) || db.DEFAULT_TERTIARY_COLOR
+  };
+}
+
+// playerIds[0] é quem começa a partida
+async function resolveSoloMatchColors(playerIds) {
+  const preferences = [];
+  for (const uid of playerIds) {
+    preferences.push(await getProfileColorPreferences(uid));
+  }
+
+  const starter = preferences[0] || {};
+  const starterHex = sanitizeProfileColor(starter.primary) || db.DEFAULT_PRIMARY_COLOR;
+  const starterColor = { hex: starterHex, name: profileColorCategory(starterHex) };
+
+  const opponent = preferences[1] || {};
+  const candidates = [opponent.primary, opponent.secondary, opponent.tertiary]
+    .map(hex => sanitizeProfileColor(hex))
+    .filter(Boolean);
+
+  // A cor do oponente não pode ter o mesmo nome da cor de quem começou
+  const usedNames = new Set([starterColor.name]);
+  const opponentHex = candidates.find(hex => !usedNames.has(profileColorCategory(hex)))
+    || candidates[0]
+    || db.DEFAULT_PRIMARY_COLOR;
+  const opponentColor = { hex: opponentHex, name: profileColorCategory(opponentHex) };
+
+  return { starterColor, opponentColor };
+}
+
 async function handleProfileUpdate(request, response) {
   const user = await getSessionUser(request);
   if (!user) {
@@ -821,11 +883,12 @@ async function handleProfileUpdate(request, response) {
       { field: 'tertiaryColor', key: 'tertiary' }
     ];
     const colors = {
-      primary: user.primaryColor,
-      secondary: user.secondaryColor,
-      tertiary: user.tertiaryColor
+      primary: user.primaryColor || db.DEFAULT_PRIMARY_COLOR,
+      secondary: user.secondaryColor || db.DEFAULT_SECONDARY_COLOR,
+      tertiary: user.tertiaryColor || db.DEFAULT_TERTIARY_COLOR
     };
 
+    let hasColorChange = false;
     for (const role of colorRoles) {
       if (body[role.field] === undefined) continue;
       const hex = sanitizeProfileColor(body[role.field]);
@@ -834,12 +897,13 @@ async function handleProfileUpdate(request, response) {
         return;
       }
       // A cor terciária só pode ser alterada por contas pagas
-      if (role.key === 'tertiary' && hex !== user.tertiaryColor && !user.isPaid) {
+      if (role.key === 'tertiary' && hex !== colors.tertiary && !user.isPaid) {
         sendJson(response, 400, { error: 'A cor terciária está disponível apenas para contas pagas.' });
         return;
       }
       colors[role.key] = hex;
       fields[role.field] = hex;
+      hasColorChange = true;
     }
 
     // As três cores precisam pertencer a categorias diferentes
@@ -848,6 +912,9 @@ async function handleProfileUpdate(request, response) {
       sendJson(response, 400, { error: 'As cores do perfil precisam ser de categorias diferentes.' });
       return;
     }
+
+    // A partir de agora as cores salvas são as preferências do jogador
+    if (hasColorChange) fields.colorsCustomized = true;
 
     const updatedUser = await db.updateUserProfile(user.id, fields);
 
@@ -1411,11 +1478,14 @@ async function main() {
             id: room.userIds[1] || null, uid: room.userIds[1] || null,
             name: room.names[1], email: '', picture: '', playerName: room.names[1]
           };
+          // SOLO 1 vs 1: cores resolvidas pelo servidor (quem começa usa a
+          // cor primária; o oponente só usa a primária se o nome diferir)
+          const soloColors = await resolveSoloMatchColors([room.userIds[0], room.userIds[1]]);
           broadcastRoom(code, {
             type: 'room_ready',
             players: [
-              { id: 0, uid: profile0.uid, name: profile0.name, email: profile0.email, picture: profile0.picture, playerName: profile0.playerName },
-              { id: 1, uid: profile1.uid, name: profile1.name, email: profile1.email, picture: profile1.picture, playerName: profile1.playerName }
+              { id: 0, uid: profile0.uid, name: profile0.name, email: profile0.email, picture: profile0.picture, playerName: profile0.playerName, color: soloColors.starterColor },
+              { id: 1, uid: profile1.uid, name: profile1.name, email: profile1.email, picture: profile1.picture, playerName: profile1.playerName, color: soloColors.opponentColor }
             ]
           });
         }
@@ -1656,7 +1726,7 @@ async function main() {
             : 'Na fila: procurando uma dupla adversária...'
         });
 
-        tryDuplaMatchmaking();
+        await tryDuplaMatchmaking();
         return;
       }
 

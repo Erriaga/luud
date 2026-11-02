@@ -76,9 +76,10 @@ async function ensureDatabaseSchema() {
         bio TEXT DEFAULT '',
         google_sub TEXT DEFAULT '',
         picture TEXT DEFAULT '',
-        primary_color TEXT DEFAULT '#ef233c',
-        secondary_color TEXT DEFAULT '#0096ff',
-        tertiary_color TEXT DEFAULT '#00a86b',
+        primary_color TEXT DEFAULT '#0096ff',
+        secondary_color TEXT DEFAULT '#00a86b',
+        tertiary_color TEXT DEFAULT '#ef233c',
+        colors_customized BOOLEAN DEFAULT FALSE,
         is_paid BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
@@ -87,10 +88,14 @@ async function ensureDatabaseSchema() {
 
     // Migra bancos antigos: cores do perfil e flag de conta paga
     try {
-      await p.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS primary_color TEXT DEFAULT '#ef233c';`);
-      await p.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS secondary_color TEXT DEFAULT '#0096ff';`);
-      await p.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS tertiary_color TEXT DEFAULT '#00a86b';`);
+      await p.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS primary_color TEXT DEFAULT '#0096ff';`);
+      await p.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS secondary_color TEXT DEFAULT '#00a86b';`);
+      await p.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS tertiary_color TEXT DEFAULT '#ef233c';`);
+      await p.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS colors_customized BOOLEAN DEFAULT FALSE;`);
       await p.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_paid BOOLEAN DEFAULT FALSE;`);
+      await p.query(`ALTER TABLE users ALTER COLUMN primary_color SET DEFAULT '#0096ff';`);
+      await p.query(`ALTER TABLE users ALTER COLUMN secondary_color SET DEFAULT '#00a86b';`);
+      await p.query(`ALTER TABLE users ALTER COLUMN tertiary_color SET DEFAULT '#ef233c';`);
     } catch (migrationError) {
       console.warn('Não foi possível migrar as cores do perfil:', migrationError.message);
     }
@@ -187,9 +192,17 @@ async function ensureDataFiles() {
    Normalização de usuário
 ------------------------------------------------------------------ */
 /* Cores padrão do perfil (primária, secundária e terciária) */
-const DEFAULT_PRIMARY_COLOR = '#ef233c';
-const DEFAULT_SECONDARY_COLOR = '#0096ff';
-const DEFAULT_TERTIARY_COLOR = '#00a86b';
+const DEFAULT_PRIMARY_COLOR = '#0096ff';   // Azul
+const DEFAULT_SECONDARY_COLOR = '#00a86b'; // Verde
+const DEFAULT_TERTIARY_COLOR = '#ef233c';  // Vermelho
+
+/* Contas que já nascem com o plano pago liberado (usadas em testes) */
+const PAID_TEST_EMAILS = ['ifsp.raphael@gmail.com'];
+
+function isPaidEmail(email) {
+  const value = String(email || '').trim().toLowerCase();
+  return PAID_TEST_EMAILS.includes(value);
+}
 
 function normalizeHexColorValue(value, fallback) {
   const hex = String(value || '').trim().toLowerCase();
@@ -210,8 +223,33 @@ function nicknameFrom(playerName, displayName, email) {
   return prefix || nick || display;
 }
 
+/**
+ * Cores do perfil: enquanto o jogador não salvar as próprias
+ * preferências, valem sempre os padrões (Azul, Verde e Vermelho).
+ */
+function profileColorsFor(user) {
+  const customized = Boolean(user && user.colorsCustomized);
+  return {
+    primaryColor: customized
+      ? normalizeHexColorValue(user.primaryColor, DEFAULT_PRIMARY_COLOR)
+      : DEFAULT_PRIMARY_COLOR,
+    secondaryColor: customized
+      ? normalizeHexColorValue(user.secondaryColor, DEFAULT_SECONDARY_COLOR)
+      : DEFAULT_SECONDARY_COLOR,
+    tertiaryColor: customized
+      ? normalizeHexColorValue(user.tertiaryColor, DEFAULT_TERTIARY_COLOR)
+      : DEFAULT_TERTIARY_COLOR
+  };
+}
+
 function normalizeUserFromDb(row) {
   if (!row) return null;
+  const colors = profileColorsFor({
+    colorsCustomized: row.colors_customized === true,
+    primaryColor: row.primary_color,
+    secondaryColor: row.secondary_color,
+    tertiaryColor: row.tertiary_color
+  });
   return {
     id: row.id,
     email: row.email,
@@ -221,16 +259,18 @@ function normalizeUserFromDb(row) {
     bio: row.bio || '',
     googleSub: row.google_sub || '',
     picture: row.picture || '',
-    primaryColor: normalizeHexColorValue(row.primary_color, DEFAULT_PRIMARY_COLOR),
-    secondaryColor: normalizeHexColorValue(row.secondary_color, DEFAULT_SECONDARY_COLOR),
-    tertiaryColor: normalizeHexColorValue(row.tertiary_color, DEFAULT_TERTIARY_COLOR),
-    isPaid: row.is_paid === true,
+    primaryColor: colors.primaryColor,
+    secondaryColor: colors.secondaryColor,
+    tertiaryColor: colors.tertiaryColor,
+    colorsCustomized: row.colors_customized === true,
+    isPaid: row.is_paid === true || isPaidEmail(row.email),
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
     updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString()
   };
 }
 
 function normalizeUser(user) {
+  const colors = profileColorsFor(user);
   return {
     id: user.id,
     email: user.email,
@@ -240,10 +280,11 @@ function normalizeUser(user) {
     bio: user.bio || '',
     googleSub: user.googleSub || '',
     picture: user.picture || '',
-    primaryColor: normalizeHexColorValue(user.primaryColor, DEFAULT_PRIMARY_COLOR),
-    secondaryColor: normalizeHexColorValue(user.secondaryColor, DEFAULT_SECONDARY_COLOR),
-    tertiaryColor: normalizeHexColorValue(user.tertiaryColor, DEFAULT_TERTIARY_COLOR),
-    isPaid: user.isPaid === true,
+    primaryColor: colors.primaryColor,
+    secondaryColor: colors.secondaryColor,
+    tertiaryColor: colors.tertiaryColor,
+    colorsCustomized: Boolean(user.colorsCustomized),
+    isPaid: user.isPaid === true || isPaidEmail(user.email),
     friends: Array.isArray(user.friends) ? user.friends : [],
     friendRequestsSent: Array.isArray(user.friendRequestsSent) ? user.friendRequestsSent : [],
     friendRequestsReceived: Array.isArray(user.friendRequestsReceived) ? user.friendRequestsReceived : [],
@@ -267,7 +308,11 @@ async function getUserProfile(uid) {
     name: nickname,
     email: user.email,
     picture: user.picture || user.avatarUrl || '',
-    playerName: nickname
+    playerName: nickname,
+    primaryColor: user.primaryColor,
+    secondaryColor: user.secondaryColor,
+    tertiaryColor: user.tertiaryColor,
+    isPaid: user.isPaid === true
   };
 }
 
@@ -414,6 +459,12 @@ async function createOrUpdateUserFromGoogle(payload) {
     bio: existingUser?.bio || '',
     googleSub: payload.sub || '',
     picture: existingUser?.picture || picture,
+    // Preserva as preferências de cor e a condição de conta paga
+    primaryColor: existingUser?.primaryColor,
+    secondaryColor: existingUser?.secondaryColor,
+    tertiaryColor: existingUser?.tertiaryColor,
+    colorsCustomized: existingUser?.colorsCustomized === true,
+    isPaid: existingUser?.isPaid === true || isPaidEmail(email),
     createdAt: existingUser?.createdAt || now,
     updatedAt: now
   });
@@ -436,6 +487,7 @@ async function updateUserProfile(userId, fields) {
       if (fields.primaryColor !== undefined) { updates.push(`primary_color = $${idx++}`); values.push(fields.primaryColor); }
       if (fields.secondaryColor !== undefined) { updates.push(`secondary_color = $${idx++}`); values.push(fields.secondaryColor); }
       if (fields.tertiaryColor !== undefined) { updates.push(`tertiary_color = $${idx++}`); values.push(fields.tertiaryColor); }
+      if (fields.colorsCustomized !== undefined) { updates.push(`colors_customized = $${idx++}`); values.push(fields.colorsCustomized); }
       if (fields.isPaid !== undefined) { updates.push(`is_paid = $${idx++}`); values.push(fields.isPaid); }
       updates.push(`updated_at = $${idx++}`); values.push(new Date().toISOString());
       values.push(userId);
@@ -923,6 +975,9 @@ function sendToUserInternal(userId, message) {
 module.exports = {
   useDatabase,
   ensureDataFiles,
+  DEFAULT_PRIMARY_COLOR,
+  DEFAULT_SECONDARY_COLOR,
+  DEFAULT_TERTIARY_COLOR,
   normalizeUser,
   normalizeUserFromDb,
   getUserById,
