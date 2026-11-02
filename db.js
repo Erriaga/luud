@@ -1288,7 +1288,7 @@ async function getFriendsReport() {
     return { mode: 'json', users: Object.keys(users).length };
   }
   const p = getPool();
-  const users = await p.query('SELECT id, email, player_name FROM users ORDER BY created_at DESC LIMIT 50');
+  const users = await p.query('SELECT id, email, player_name, display_name, google_sub, is_paid, plan FROM users ORDER BY created_at DESC LIMIT 50');
 
   const count = async (sql) => {
     try {
@@ -1353,6 +1353,18 @@ async function getFriendsReport() {
     listCheck = [{ error: sanitizeDbErrorMessage(error.message) }];
   }
 
+  let sessionsInfo = [];
+  try {
+    const rows = await p.query(
+      `SELECT s.user_id, COUNT(*) AS total, MAX(s.expires_at) AS last_expiry,
+              (SELECT u.email FROM users u WHERE u.id = s.user_id) AS email
+       FROM sessions s GROUP BY s.user_id ORDER BY total DESC LIMIT 20`
+    );
+    sessionsInfo = rows.rows;
+  } catch (error) {
+    sessionsInfo = [{ error: sanitizeDbErrorMessage(error.message) }];
+  }
+
   return {
     mode: 'postgres',
     counts,
@@ -1360,6 +1372,7 @@ async function getFriendsReport() {
     friendsRows,
     joinCheck,
     listCheck,
+    sessionsInfo,
     friendUserIds: friendIds.rows.map(row => row.user_id),
     users: users.rows
   };
