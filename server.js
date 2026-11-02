@@ -1800,11 +1800,14 @@ async function serveStatic(request, response, urlPath) {
     const contentType = MIME_TYPES[extension] || 'application/octet-stream';
     const data = await fs.readFile(filePath);
 
-    // Em desenvolvimento os arquivos não são cacheados (evita servir
-    // versões antigas depois de uma alteração); em produção o cache
-    // continua valendo para os arquivos estáticos.
+    // HTML, JS e CSS nunca ficam em cache longo: assim uma nova versão
+    // publicada aparece imediatamente no navegador do usuário (sem precisar
+    // recarregar com cache limpo). Só os demais arquivos (imagens, ícones)
+    // aproveitam o cache longo.
     const cacheControl = NODE_ENV === 'production'
-      ? (extension === '.html' ? 'no-store' : 'public, max-age=3600')
+      ? (extension === '.html' || extension === '.js' || extension === '.css'
+        ? 'no-store'
+        : 'public, max-age=3600')
       : 'no-store';
 
     response.writeHead(200, {
