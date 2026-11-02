@@ -3282,7 +3282,7 @@
       }
 
       // Sincroniza o contador de notificações com as solicitações recebidas do servidor
-      pendingFriendRequestsCount = Array.isArray(data.friendRequestsReceived) ? data.friendRequestsReceived.length : 0;
+      pendingFriendRequestsCount = Array.isArray(data.received) ? data.received.length : 0;
       updateFriendsBadge();
 
       document.getElementById('friends-list-title').textContent = `Lista de amigos (${data.friends.length})`;

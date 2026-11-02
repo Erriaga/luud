@@ -752,6 +752,11 @@ async function handleGoogleLogin(request, response) {
     const token = await db.createSession(user.id);
     sendJson(response, 200, { user }, { 'Set-Cookie': createSessionCookie(token) });
   } catch (error) {
+    if (error && error.dbError) {
+      console.error('[login] erro de banco de dados:', error.message);
+      sendJson(response, 503, { error: 'Não foi possível acessar o banco de dados. Tente novamente em instantes.' });
+      return;
+    }
     sendJson(response, 401, { error: error.message });
   }
 }
@@ -1496,7 +1501,12 @@ async function handleRequest(request, response) {
 
   try {
     if (request.method === 'GET' && urlPath === '/healthz') {
-      sendJson(response, 200, { ok: true });
+      // Diagnóstico do banco: mostra se o PostgreSQL está em uso e o último erro
+      const dbStatus = db.getDbStatus();
+      sendJson(response, 200, {
+        ok: true,
+        db: dbStatus
+      });
       return;
     }
 
@@ -1623,7 +1633,10 @@ async function handleRequest(request, response) {
     response.writeHead(405, { 'Content-Type': 'text/plain; charset=utf-8' });
     response.end('Method not allowed');
   } catch (error) {
-    sendJson(response, 500, { error: error.message });
+    console.error('[servidor] erro ao tratar requisição:', error && error.message);
+    // Erros de banco não expõem dados sensíveis: usamos a mensagem já sanitizada
+    const message = error && error.safeMessage ? error.safeMessage : (error && error.message) || 'Erro interno do servidor.';
+    sendJson(response, 500, { error: message });
   }
 }
 

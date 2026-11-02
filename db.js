@@ -16,16 +16,70 @@ const MATCHES_FILE = path.join(DATA_DIR, 'matches.json');
 const PAYMENTS_FILE = path.join(DATA_DIR, 'payments.json');
 
 let pool = null;
-let dbAvailable = false; // true apenas se DATABASE_URL estiver definida E acessível
+let dbAvailable = false; // true quando o banco externo respondeu bem alguma vez
+let dbLastError = null;  // último erro do banco (usado no diagnóstico)
+
+/* O banco externo é usado SEMPRE que DATABASE_URL estiver definida.
+   Nunca caímos silenciosamente no JSON local quando ele está configurado:
+   o JSON local não tem os dados de produção e zeraria listas
+   (ex.: a lista de amigos), parecendo que o dado foi apagado. */
+function dbIsConfigured() {
+  return Boolean(process.env.DATABASE_URL);
+}
 
 function useDatabase() {
-  return dbAvailable;
+  return dbIsConfigured();
+}
+
+// Remove credenciais/host de mensagens de erro antes de expor/logar
+function sanitizeDbErrorMessage(message) {
+  const text = String(message || '').replace(/postgres(?:ql)?:\/\/[^\s"']+/gi, 'postgres://<oculto>');
+  return text.slice(0, 200);
+}
+
+// Registra o erro do banco e devolve a exceção para o chamador tratar
+function recordDbError(error, context) {
+  const safeMessage = sanitizeDbErrorMessage(error && error.message);
+  dbLastError = {
+    context: String(context || 'consulta ao banco').slice(0, 120),
+    code: error && error.code ? String(error.code) : null,
+    message: safeMessage,
+    at: new Date().toISOString()
+  };
+  try {
+    error.dbError = true;
+    error.safeMessage = safeMessage;
+  } catch (ignored) {
+    // erro sem propriedades graváveis: segue o fluxo normal
+  }
+  console.error(`[banco] falha em ${dbLastError.context}:`, error && error.message);
+  return error;
+}
+
+// Estado do banco para o endpoint de diagnóstico (/healthz)
+function getDbStatus() {
+  return {
+    configured: dbIsConfigured(),
+    connected: dbAvailable,
+    lastError: dbLastError
+  };
 }
 
 function getPool() {
   if (!pool && process.env.DATABASE_URL) {
     try {
-      pool = new Pool({ connectionString: process.env.DATABASE_URL });
+      pool = new Pool({
+        connectionString: process.env.DATABASE_URL,
+        connectionTimeoutMillis: 10000
+      });
+      // O Pool reconecta sozinho; basta refletir o estado real no diagnóstico
+      pool.on('connect', () => {
+        dbAvailable = true;
+        dbLastError = null;
+      });
+      pool.on('error', (error) => {
+        recordDbError(error, 'pool');
+      });
     } catch (error) {
       pool = null;
     }
@@ -66,8 +120,24 @@ async function ensureDatabaseSchema() {
   const p = getPool();
   if (!p) return;
 
+  // Cada tabela é criada por conta própria: uma tabela que falha não pode
+  // derrubar o site inteiro (e sim aparecer no log/diagnóstico).
+  let schemaProblems = 0;
+  const createTable = async (label, sql) => {
+    try {
+      await p.query(sql);
+      return true;
+    } catch (error) {
+      schemaProblems += 1;
+      console.warn(`[banco] não foi possível preparar a tabela "${label}":`, error.message);
+      recordDbError(error, `schema:${label}`);
+      return false;
+    }
+  };
+
   try {
-    await p.query(`
+    // Tabelas essenciais: sem elas o servidor não funciona
+    const usersReady = await createTable('users', `
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
         email TEXT UNIQUE NOT NULL,
@@ -89,6 +159,18 @@ async function ensureDatabaseSchema() {
       );
     `);
 
+    const sessionsReady = await createTable('sessions', `
+      CREATE TABLE IF NOT EXISTS sessions (
+        token TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        expires_at BIGINT NOT NULL
+      );
+    `);
+
+    if (!usersReady || !sessionsReady) {
+      throw new Error('Tabelas essenciais (users/sessions) não puderam ser criadas.');
+    }
+
     // Migra bancos antigos: cores do perfil e flag de conta paga
     try {
       await p.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS primary_color TEXT DEFAULT '#0096ff';`);
@@ -106,35 +188,23 @@ async function ensureDatabaseSchema() {
     }
 
     // Tabela de cobranças Pix (pagamento único da Conta Premium)
-    try {
-      await p.query(`
-        CREATE TABLE IF NOT EXISTS payments (
-          id TEXT PRIMARY KEY,
-          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-          gateway TEXT DEFAULT 'pix',
-          amount NUMERIC DEFAULT 0,
-          status TEXT DEFAULT 'pending',
-          gateway_ref TEXT DEFAULT '',
-          copy_paste TEXT DEFAULT '',
-          qr_code TEXT DEFAULT '',
-          created_at TIMESTAMP DEFAULT NOW(),
-          expires_at TIMESTAMP DEFAULT DEFAULT NOW(),
-          paid_at TIMESTAMP
-        );
-      `);
-    } catch (paymentsError) {
-      console.warn('Não foi possível criar a tabela de pagamentos:', paymentsError.message);
-    }
-
-    await p.query(`
-      CREATE TABLE IF NOT EXISTS sessions (
-        token TEXT PRIMARY KEY,
+    await createTable('payments', `
+      CREATE TABLE IF NOT EXISTS payments (
+        id TEXT PRIMARY KEY,
         user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        expires_at BIGINT NOT NULL
+        gateway TEXT DEFAULT 'pix',
+        amount NUMERIC DEFAULT 0,
+        status TEXT DEFAULT 'pending',
+        gateway_ref TEXT DEFAULT '',
+        copy_paste TEXT DEFAULT '',
+        qr_code TEXT DEFAULT '',
+        created_at TIMESTAMP DEFAULT NOW(),
+        expires_at TIMESTAMP DEFAULT DEFAULT NOW(),
+        paid_at TIMESTAMP
       );
     `);
 
-    await p.query(`
+    await createTable('matches', `
       CREATE TABLE IF NOT EXISTS matches (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -147,7 +217,7 @@ async function ensureDatabaseSchema() {
       );
     `);
 
-    await p.query(`
+    await createTable('friends', `
       CREATE TABLE IF NOT EXISTS friends (
         user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         friend_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -156,7 +226,7 @@ async function ensureDatabaseSchema() {
       );
     `);
 
-    await p.query(`
+    await createTable('friend_requests', `
       CREATE TABLE IF NOT EXISTS friend_requests (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         from_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -179,23 +249,34 @@ async function ensureDatabaseSchema() {
       console.warn('Não foi possível migrar matches.finished_at:', migrationError.message);
     }
 
-    await p.query(`CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);`);
-    await p.query(`CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);`);
-    await p.query(`CREATE INDEX IF NOT EXISTS idx_matches_user_id ON matches(user_id);`);
-    await p.query(`CREATE INDEX IF NOT EXISTS idx_friends_user_id ON friends(user_id);`);
-    await p.query(`CREATE INDEX IF NOT EXISTS idx_friends_friend_id ON friends(friend_id);`);
-    await p.query(`CREATE INDEX IF NOT EXISTS idx_friend_requests_from ON friend_requests(from_user_id);`);
-    await p.query(`CREATE INDEX IF NOT EXISTS idx_friend_requests_to ON friend_requests(to_user_id);`);
-    await p.query(`CREATE INDEX IF NOT EXISTS idx_friend_requests_status ON friend_requests(status);`);
+    try {
+      await p.query(`CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);`);
+      await p.query(`CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);`);
+      await p.query(`CREATE INDEX IF NOT EXISTS idx_matches_user_id ON matches(user_id);`);
+      await p.query(`CREATE INDEX IF NOT EXISTS idx_friends_user_id ON friends(user_id);`);
+      await p.query(`CREATE INDEX IF NOT EXISTS idx_friends_friend_id ON friends(friend_id);`);
+      await p.query(`CREATE INDEX IF NOT EXISTS idx_friend_requests_from ON friend_requests(from_user_id);`);
+      await p.query(`CREATE INDEX IF NOT EXISTS idx_friend_requests_to ON friend_requests(to_user_id);`);
+      await p.query(`CREATE INDEX IF NOT EXISTS idx_friend_requests_status ON friend_requests(status);`);
+    } catch (indexError) {
+      console.warn('Não foi possível criar os índices do banco:', indexError.message);
+    }
 
     dbAvailable = true;
+    // Só limpa o último erro se nenhuma tabela deu problema
+    if (!schemaProblems) dbLastError = null;
     console.log('Banco de dados externo conectado com sucesso.');
+    if (schemaProblems) {
+      console.warn(`[banco] ${schemaProblems} tabela(s) não puderam ser verificadas. Veja /healthz para o detalle.`);
+    }
   } catch (error) {
-    pool = null;
+    // Não abandona o pool: ele reconecta sozinho nas próximas tentativas.
+    // Registra o erro para o diagnóstico (/healthz).
     dbAvailable = false;
-    console.warn('AVISO: Não foi possível conectar ao banco de dados externo (DATABASE_URL).');
-    console.warn('Usando arquivos JSON locais como fallback.');
-    console.warn('Erro:', error.message);
+    recordDbError(error, 'ensureDatabaseSchema');
+    console.warn('AVISO: Não foi possível preparar o banco de dados externo (DATABASE_URL).');
+    console.warn('O servidor NÃO usará os arquivos JSON locais enquanto DATABASE_URL estiver definido,');
+    console.warn('porque eles não contêm os dados de produção (a lista de amigos apareceria vazia).');
   }
 }
 
@@ -204,14 +285,23 @@ async function ensureDatabaseSchema() {
 ------------------------------------------------------------------ */
 async function ensureDataFiles() {
   if (process.env.DATABASE_URL) {
-    await ensureDatabaseSchema();
+    // Tenta algumas vezes: em deploys o banco pode demorar alguns segundos
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      await ensureDatabaseSchema();
+      if (dbAvailable) break;
+      if (attempt < 3) {
+        console.warn(`Tentativa ${attempt} de conectar ao banco falhou. Tentando de novo...`);
+        await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
+      }
+    }
   }
-  // Se DATABASE_URL não estiver definida ou o banco estiver inacessível,
-  // garante que os arquivos JSON locais existam
+  // Sem DATABASE_URL o servidor usa os arquivos JSON locais.
+  // (Com DATABASE_URL definido eles NUNCA são usados para dados de produção.)
   await fs.mkdir(DATA_DIR, { recursive: true });
   if (!fss.existsSync(USERS_FILE)) await fs.writeFile(USERS_FILE, JSON.stringify({}, null, 2), 'utf8');
   if (!fss.existsSync(SESSIONS_FILE)) await fs.writeFile(SESSIONS_FILE, JSON.stringify({}, null, 2), 'utf8');
   if (!fss.existsSync(MATCHES_FILE)) await fs.writeFile(MATCHES_FILE, JSON.stringify({}, null, 2), 'utf8');
+  if (!fss.existsSync(PAYMENTS_FILE)) await fs.writeFile(PAYMENTS_FILE, JSON.stringify({}, null, 2), 'utf8');
 }
 
 /* ------------------------------------------------------------------
@@ -368,8 +458,7 @@ async function getUserById(id) {
       const result = await p.query('SELECT * FROM users WHERE id = $1', [id]);
       return result.rows[0] ? normalizeUserFromDb(result.rows[0]) : null;
     } catch (error) {
-      dbAvailable = false;
-      pool = null;
+      throw recordDbError(error, "getUserById");
     }
   }
   const users = await readJsonFile(USERS_FILE);
@@ -384,8 +473,7 @@ async function getUserByEmail(email) {
       const result = await p.query('SELECT * FROM users WHERE LOWER(email) = LOWER($1)', [email]);
       return result.rows[0] ? normalizeUserFromDb(result.rows[0]) : null;
     } catch (error) {
-      dbAvailable = false;
-      pool = null;
+      throw recordDbError(error, "getUserByEmail");
     }
   }
   const users = await readJsonFile(USERS_FILE);
@@ -407,14 +495,26 @@ async function searchUsersByQuery(query, excludeUserId) {
       const result = await p.query(
         `SELECT * FROM users 
          WHERE id <> $1 
-           AND (LOWER(email) = LOWER($2) OR LOWER(player_name) = LOWER($2) OR LOWER(display_name) = LOWER($2) OR LOWER(player_name) LIKE LOWER($3))
+           AND (
+             LOWER(email) = LOWER($2)
+             OR LOWER(player_name) = LOWER($2)
+             OR LOWER(display_name) = LOWER($2)
+             OR LOWER(player_name) LIKE LOWER($3)
+             OR LOWER(display_name) LIKE LOWER($3)
+             OR LOWER(email) LIKE LOWER($3)
+           )
+         ORDER BY CASE
+           WHEN LOWER(email) = LOWER($2) THEN 0
+           WHEN LOWER(player_name) = LOWER($2) THEN 1
+           WHEN LOWER(display_name) = LOWER($2) THEN 2
+           ELSE 3
+         END
          LIMIT 1`,
         [excludeUserId, qLower, `%${qLower}%`]
       );
       return result.rows[0] ? normalizeUserFromDb(result.rows[0]) : null;
     } catch (error) {
-      dbAvailable = false;
-      pool = null;
+      throw recordDbError(error, "searchUsersByQuery");
     }
   }
 
@@ -428,16 +528,19 @@ async function searchUsersByQuery(query, excludeUserId) {
     for (const id of Object.keys(users)) {
       if (id === excludeUserId) continue;
       const u = users[id];
-      const display = String(u.playerName || u.displayName || '').toLowerCase();
-      if (display === qLower) { target = u; break; }
+      const player = String(u.playerName || '').toLowerCase();
+      const display = String(u.displayName || '').toLowerCase();
+      if (player === qLower || display === qLower) { target = u; break; }
     }
   }
   if (!target) {
     for (const id of Object.keys(users)) {
       if (id === excludeUserId) continue;
       const u = users[id];
-      const display = String(u.playerName || u.displayName || '').toLowerCase();
-      if (display.includes(qLower)) { target = u; break; }
+      const player = String(u.playerName || '').toLowerCase();
+      const display = String(u.displayName || '').toLowerCase();
+      const email = String(u.email || '').toLowerCase();
+      if (player.includes(qLower) || display.includes(qLower) || email.includes(qLower)) { target = u; break; }
     }
   }
   return target ? normalizeUser(target) : null;
@@ -456,9 +559,23 @@ async function createOrUpdateUserFromGoogle(payload) {
   if (useDatabase()) {
     try {
       const p = getPool();
-      const existing = await p.query('SELECT * FROM users WHERE id = $1', [userId]);
+      // Procura a conta pelo id do Google, pelo e-mail ou pelo google_sub.
+      // Se a conta já existir com outro id (ex.: id antigo = e-mail), usamos
+      // o id que já está no banco: é ele que guarda as friendships,
+      // as sessões e o histórico. Trocar o id apagaria a lista de amigos.
+      const existing = await p.query(
+        `SELECT * FROM users
+         WHERE id = $1
+            OR LOWER(email) = LOWER($2)
+            OR ($3 <> '' AND google_sub = $3)
+         ORDER BY CASE WHEN id = $1 THEN 0 WHEN LOWER(email) = LOWER($2) THEN 1 ELSE 2 END
+         LIMIT 1`,
+        [userId, email, payload.sub || '']
+      );
+
       if (existing.rows.length > 0) {
         const u = existing.rows[0];
+        const existingId = u.id;
         // Mantém o nickname escolhido pelo jogador; se ele ainda for o nome
         // completo do Google (gerado automaticamente), troca pelo prefixo do e-mail.
         const currentPlayerName = u.player_name || '';
@@ -466,22 +583,25 @@ async function createOrUpdateUserFromGoogle(payload) {
           ? currentPlayerName
           : nickname;
         await p.query(
-          `UPDATE users SET email = $1, display_name = COALESCE($2, display_name), player_name = $3, picture = COALESCE($4, picture), google_sub = COALESCE($5, google_sub), updated_at = $6 WHERE id = $7`,
-          [email, displayName, playerName, picture, payload.sub, now, userId]
+          `UPDATE users SET email = $1, display_name = COALESCE($2, display_name), player_name = $3, picture = COALESCE($4, picture), google_sub = COALESCE(NULLIF($5, ''), google_sub), updated_at = $6 WHERE id = $7`,
+          [email, displayName, playerName, picture, payload.sub || '', now, existingId]
         );
-        const row = await p.query('SELECT * FROM users WHERE id = $1', [userId]);
-        return normalizeUserFromDb(row.rows[0]);
+        const row = await p.query('SELECT * FROM users WHERE id = $1', [existingId]);
+        const updated = normalizeUserFromDb(row.rows[0]);
+        if (existingId !== userId) {
+          console.log(`[banco] conta ${email} encontrada com id ${existingId} (id do Google: ${userId}). Mantido o id original.`);
+        }
+        return updated;
       } else {
         await p.query(
           `INSERT INTO users (id, email, display_name, player_name, avatar_url, bio, google_sub, picture, created_at, updated_at) VALUES ($1, $2, $3, $4, '', '', $5, $6, $7, $8)`,
-          [userId, email, displayName, nickname, payload.sub, picture, now, now]
+          [userId, email, displayName, nickname, payload.sub || '', picture, now, now]
         );
         const row = await p.query('SELECT * FROM users WHERE id = $1', [userId]);
         return normalizeUserFromDb(row.rows[0]);
       }
     } catch (error) {
-      dbAvailable = false;
-      pool = null;
+      throw recordDbError(error, "createOrUpdateUserFromGoogle");
     }
   }
 
@@ -540,8 +660,7 @@ async function updateUserProfile(userId, fields) {
       const row = await p.query('SELECT * FROM users WHERE id = $1', [userId]);
       return normalizeUserFromDb(row.rows[0]);
     } catch (error) {
-      dbAvailable = false;
-      pool = null;
+      throw recordDbError(error, "updateUserProfile");
     }
   }
 
@@ -619,8 +738,7 @@ async function createPayment(payment) {
       );
       return record;
     } catch (error) {
-      dbAvailable = false;
-      pool = null;
+      throw recordDbError(error, "createPayment");
     }
   }
 
@@ -638,8 +756,7 @@ async function getPayment(paymentId) {
       const result = await p.query('SELECT * FROM payments WHERE id = $1', [paymentId]);
       return result.rows.length ? normalizePayment(result.rows[0]) : null;
     } catch (error) {
-      dbAvailable = false;
-      pool = null;
+      throw recordDbError(error, "getPayment");
     }
   }
   const payments = await readJsonFile(PAYMENTS_FILE);
@@ -654,8 +771,7 @@ async function findPaymentByGatewayRef(gatewayRef) {
       const result = await p.query('SELECT * FROM payments WHERE gateway_ref = $1 ORDER BY created_at DESC LIMIT 1', [gatewayRef]);
       return result.rows.length ? normalizePayment(result.rows[0]) : null;
     } catch (error) {
-      dbAvailable = false;
-      pool = null;
+      throw recordDbError(error, "findPaymentByGatewayRef");
     }
   }
   const payments = await readJsonFile(PAYMENTS_FILE);
@@ -687,8 +803,7 @@ async function updatePayment(paymentId, fields) {
       );
       return updated;
     } catch (error) {
-      dbAvailable = false;
-      pool = null;
+      throw recordDbError(error, "updatePayment");
     }
   }
 
@@ -706,8 +821,7 @@ async function listPaymentsForUser(userId) {
       const result = await p.query('SELECT * FROM payments WHERE user_id = $1 ORDER BY created_at DESC LIMIT 20', [userId]);
       return result.rows.map(normalizePayment);
     } catch (error) {
-      dbAvailable = false;
-      pool = null;
+      throw recordDbError(error, "listPaymentsForUser");
     }
   }
   const payments = await readJsonFile(PAYMENTS_FILE);
@@ -753,8 +867,7 @@ async function createSession(userId) {
       const p = getPool();
       await p.query('INSERT INTO sessions (token, user_id, expires_at) VALUES ($1, $2, $3)', [token, userId, expiresAt]);
     } catch (error) {
-      dbAvailable = false;
-      pool = null;
+      throw recordDbError(error, "createSession");
     }
   } else {
     const sessions = await readJsonFile(SESSIONS_FILE);
@@ -779,8 +892,7 @@ async function getSessionUser(token) {
       }
       return ensureNickname(await getUserById(session.user_id));
     } catch (error) {
-      dbAvailable = false;
-      pool = null;
+      throw recordDbError(error, "getSessionUser");
     }
   } else {
     const sessions = await readJsonFile(SESSIONS_FILE);
@@ -802,8 +914,7 @@ async function destroySession(token) {
       const p = getPool();
       await p.query('DELETE FROM sessions WHERE token = $1', [token]);
     } catch (error) {
-      dbAvailable = false;
-      pool = null;
+      throw recordDbError(error, "destroySession");
     }
   } else {
     const sessions = await readJsonFile(SESSIONS_FILE);
@@ -831,8 +942,7 @@ async function createMatchRecord(userId, record) {
       );
       return;
     } catch (error) {
-      dbAvailable = false;
-      pool = null;
+      throw recordDbError(error, "createMatchRecord");
     }
   }
 
@@ -853,8 +963,7 @@ async function listMatchRecords(userId) {
       );
       return { matches: result.rows };
     } catch (error) {
-      dbAvailable = false;
-      pool = null;
+      throw recordDbError(error, "listMatchRecords");
     }
   }
   const matches = await readJsonFile(MATCHES_FILE);
@@ -885,8 +994,7 @@ async function getFriends(userId) {
       );
       return result.rows.map(normalizeUserFromDb);
     } catch (error) {
-      dbAvailable = false;
-      pool = null;
+      throw recordDbError(error, "getFriends");
     }
   }
 
@@ -923,8 +1031,7 @@ async function getSentRequests(userId) {
       );
       return result.rows.map(normalizeUserFromDb);
     } catch (error) {
-      dbAvailable = false;
-      pool = null;
+      throw recordDbError(error, "getSentRequests");
     }
   }
 
@@ -950,8 +1057,7 @@ async function getReceivedRequests(userId) {
       );
       return result.rows.map(normalizeUserFromDb);
     } catch (error) {
-      dbAvailable = false;
-      pool = null;
+      throw recordDbError(error, "getReceivedRequests");
     }
   }
 
@@ -977,8 +1083,7 @@ async function getRelation(currentUserId, targetUserId) {
       if (receivedRes.rows.length > 0) return 'received';
       return 'none';
     } catch (error) {
-      dbAvailable = false;
-      pool = null;
+      throw recordDbError(error, "getRelation");
     }
   }
 
@@ -1011,8 +1116,7 @@ async function sendFriendRequest(fromUserId, toUserId) {
       );
     } catch (error) {
       if (error.message.includes('já') || error.message.includes('não encontrada')) throw error;
-      dbAvailable = false;
-      pool = null;
+      throw recordDbError(error, "sendFriendRequest");
     }
   } else {
     const users = await readJsonFile(USERS_FILE);
@@ -1050,8 +1154,7 @@ async function acceptFriendRequest(toUserId, fromUserId) {
       await p.query('INSERT INTO friends (user_id, friend_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [fromUserId, toUserId]);
     } catch (error) {
       if (error.message === 'Solicitação de amizade não encontrada.') throw error;
-      dbAvailable = false;
-      pool = null;
+      throw recordDbError(error, "acceptFriendRequest");
     }
   } else {
     const users = await readJsonFile(USERS_FILE);
@@ -1087,8 +1190,7 @@ async function declineFriendRequest(toUserId, fromUserId) {
       await p.query('UPDATE friend_requests SET status = $1 WHERE from_user_id = $2 AND to_user_id = $3 AND status = $4', ['declined', fromUserId, toUserId, 'pending']);
     } catch (error) {
       if (error.message === 'Solicitação de amizade não encontrada.') throw error;
-      dbAvailable = false;
-      pool = null;
+      throw recordDbError(error, "declineFriendRequest");
     }
   } else {
     const users = await readJsonFile(USERS_FILE);
@@ -1117,8 +1219,7 @@ async function cancelFriendRequest(fromUserId, toUserId) {
       await p.query('UPDATE friend_requests SET status = $1 WHERE from_user_id = $2 AND to_user_id = $3 AND status = $4', ['cancelled', fromUserId, toUserId, 'pending']);
     } catch (error) {
       if (error.message === 'Solicitação de amizade não encontrada.') throw error;
-      dbAvailable = false;
-      pool = null;
+      throw recordDbError(error, "cancelFriendRequest");
     }
   } else {
     const users = await readJsonFile(USERS_FILE);
@@ -1148,8 +1249,7 @@ async function removeFriend(userId, friendId) {
       await p.query('DELETE FROM friends WHERE user_id = $1 AND friend_id = $2', [friendId, userId]);
     } catch (error) {
       if (error.message === 'Esta conta não está na sua lista de amigos.') throw error;
-      dbAvailable = false;
-      pool = null;
+      throw recordDbError(error, "removeFriend");
     }
   } else {
     const users = await readJsonFile(USERS_FILE);
@@ -1183,6 +1283,7 @@ function sendToUserInternal(userId, message) {
 module.exports = {
   useDatabase,
   ensureDataFiles,
+  getDbStatus,
   DEFAULT_PRIMARY_COLOR,
   DEFAULT_SECONDARY_COLOR,
   DEFAULT_TERTIARY_COLOR,
