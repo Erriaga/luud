@@ -200,7 +200,7 @@ async function ensureDatabaseSchema() {
         copy_paste TEXT DEFAULT '',
         qr_code TEXT DEFAULT '',
         created_at TIMESTAMP DEFAULT NOW(),
-        expires_at TIMESTAMP DEFAULT DEFAULT NOW(),
+        expires_at TIMESTAMP DEFAULT NOW(),
         paid_at TIMESTAMP
       );
     `);
@@ -694,6 +694,37 @@ async function activatePremium(userId, paymentRef) {
    Cada tentativa de compra gera um registro de pagamento. O registro
    é a fonte de verdade do servidor: o cliente nunca informa que pagou.
 ------------------------------------------------------------------ */
+
+// Garante que a tabela de cobranças exista (auto-correção em tempo de execução)
+let paymentsTableChecked = false;
+async function ensurePaymentsTable() {
+  if (!useDatabase()) return;
+  if (paymentsTableChecked) return;
+  const p = getPool();
+  if (!p) return;
+  try {
+    await p.query(`
+      CREATE TABLE IF NOT EXISTS payments (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        gateway TEXT DEFAULT 'pix',
+        amount NUMERIC DEFAULT 0,
+        status TEXT DEFAULT 'pending',
+        gateway_ref TEXT DEFAULT '',
+        copy_paste TEXT DEFAULT '',
+        qr_code TEXT DEFAULT '',
+        created_at TIMESTAMP DEFAULT NOW(),
+        expires_at TIMESTAMP DEFAULT NOW(),
+        paid_at TIMESTAMP
+      );
+    `);
+    paymentsTableChecked = true;
+    dbLastError = null;
+  } catch (error) {
+    throw recordDbError(error, 'ensurePaymentsTable');
+  }
+}
+
 function normalizePayment(row) {
   if (!row) return null;
   return {
@@ -729,6 +760,7 @@ async function createPayment(payment) {
   if (useDatabase()) {
     try {
       const p = getPool();
+      await ensurePaymentsTable();
       await p.query(
         `INSERT INTO payments (id, user_id, gateway, amount, status, gateway_ref, copy_paste, qr_code, created_at, expires_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
@@ -754,6 +786,7 @@ async function getPayment(paymentId) {
   if (useDatabase()) {
     try {
       const p = getPool();
+      await ensurePaymentsTable();
       const result = await p.query('SELECT * FROM payments WHERE id = $1', [paymentId]);
       return result.rows.length ? normalizePayment(result.rows[0]) : null;
     } catch (error) {
@@ -769,6 +802,7 @@ async function findPaymentByGatewayRef(gatewayRef) {
   if (useDatabase()) {
     try {
       const p = getPool();
+      await ensurePaymentsTable();
       const result = await p.query('SELECT * FROM payments WHERE gateway_ref = $1 ORDER BY created_at DESC LIMIT 1', [gatewayRef]);
       return result.rows.length ? normalizePayment(result.rows[0]) : null;
     } catch (error) {
@@ -819,6 +853,7 @@ async function listPaymentsForUser(userId) {
   if (useDatabase()) {
     try {
       const p = getPool();
+      await ensurePaymentsTable();
       const result = await p.query('SELECT * FROM payments WHERE user_id = $1 ORDER BY created_at DESC LIMIT 20', [userId]);
       return result.rows.map(normalizePayment);
     } catch (error) {

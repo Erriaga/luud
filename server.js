@@ -940,10 +940,19 @@ async function handlePremiumStatus(request, response) {
   const paymentId = requestUrl.searchParams.get('id');
 
   try {
-    let payment = paymentId ? await db.getPayment(paymentId) : null;
-    if (!payment && !paymentId) {
-      const payments = await db.listPaymentsForUser(user.id);
-      payment = payments.find(item => item.status === 'pending') || payments[0] || null;
+    // A consulta das cobranças não pode derrubar a resposta:
+    // se o armazenamento de pagamentos falhar, o jogador ainda vê o
+    // status do plano (e o site continua funcionando).
+    let payment = null;
+    try {
+      payment = paymentId ? await db.getPayment(paymentId) : null;
+      if (!payment && !paymentId) {
+        const payments = await db.listPaymentsForUser(user.id);
+        payment = payments.find(item => item.status === 'pending') || payments[0] || null;
+      }
+    } catch (paymentError) {
+      console.error('[premium] não foi possível consultar as cobranças:', paymentError.message);
+      payment = null;
     }
 
     // A cobrança precisa pertencer ao jogador logado
