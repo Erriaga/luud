@@ -75,7 +75,6 @@ function getPool() {
       // O Pool reconecta sozinho; basta refletir o estado real no diagnóstico
       pool.on('connect', () => {
         dbAvailable = true;
-        dbLastError = null;
       });
       pool.on('error', (error) => {
         recordDbError(error, 'pool');
@@ -119,6 +118,8 @@ function readJsonFileSync(filePath) {
 async function ensureDatabaseSchema() {
   const p = getPool();
   if (!p) return;
+
+  dbLastError = null;
 
   // Cada tabela é criada por conta própria: uma tabela que falha não pode
   // derrubar o site inteiro (e sim aparecer no log/diagnóstico).
@@ -1288,17 +1289,29 @@ async function getFriendsReport() {
   }
   const p = getPool();
   const users = await p.query('SELECT id, email, player_name FROM users ORDER BY created_at DESC LIMIT 50');
-  const counts = await p.query(`SELECT
-      (SELECT COUNT(*) FROM users) AS users,
-      (SELECT COUNT(*) FROM friends) AS friends,
-      (SELECT COUNT(*) FROM friend_requests) AS requests,
-      (SELECT COUNT(*) FROM matches) AS matches,
-      (SELECT COUNT(*) FROM sessions) AS sessions,
-      (SELECT COUNT(*) FROM payments) AS payments`);
+
+  const count = async (sql) => {
+    try {
+      const result = await p.query(sql);
+      return result.rows[0] ? Number(Object.values(result.rows[0])[0]) : null;
+    } catch (error) {
+      return `ERRO: ${sanitizeDbErrorMessage(error.message)}`;
+    }
+  };
+
+  const counts = {
+    users: await count('SELECT COUNT(*) FROM users'),
+    friends: await count('SELECT COUNT(*) FROM friends'),
+    requests: await count('SELECT COUNT(*) FROM friend_requests'),
+    matches: await count('SELECT COUNT(*) FROM matches'),
+    sessions: await count('SELECT COUNT(*) FROM sessions'),
+    payments: await count('SELECT COUNT(*) FROM payments')
+  };
+
   const friendIds = await p.query('SELECT DISTINCT user_id FROM friends LIMIT 50');
   return {
     mode: 'postgres',
-    counts: counts.rows[0],
+    counts,
     friendUserIds: friendIds.rows.map(row => row.user_id),
     users: users.rows
   };
