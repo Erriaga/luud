@@ -640,8 +640,8 @@
       <div id="online-dupla-view" class="hidden space-y-5 sm:space-y-6 w-full">
         <div class="space-y-4 w-full">
           <div class="space-y-2 text-center">
-            <label class="text-xs font-bold uppercase tracking-wider text-slate-300">DUPLA ONLINE</label>
-            <p class="text-xs text-slate-400">Crie uma dupla para jogar 2 vs 2</p>
+            <label class="text-xs font-bold uppercase tracking-wider text-slate-300">DUPLA</label>
+            <p class="text-xs text-slate-400">2 vs 2</p>
           </div>
 
           <!-- Seleção de nome e cor da dupla -->
@@ -649,19 +649,22 @@
             <div class="space-y-3">
               <!-- Criador do lobby: pode editar o nome e a cor -->
               <div id="dupla-team-editor" class="space-y-3">
-                <div class="flex items-center justify-between">
-                  <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Nome da dupla</span>
+                <div class="flex items-center gap-3">
+                  <span class="text-xs font-bold uppercase tracking-wider text-slate-300 whitespace-nowrap">Nome da dupla</span>
                   <input id="dupla-team-name" type="text" maxlength="20" value="Dupla" oninput="duplaEditTeamName()" class="bg-slate-900 border border-slate-600 px-3 py-1.5 text-xs rounded text-slate-100 focus:border-slate-400 w-32" />
                 </div>
-                <div class="flex items-center gap-3">
-                  <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Cor da dupla</span>
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+                  <span class="text-xs font-bold uppercase tracking-wider text-slate-300 whitespace-nowrap">Cor da dupla</span>
                   <div class="flex gap-2" id="dupla-color-picker">
-                    <button type="button" onclick="duplaPickColor('#ef233c', 'Vermelho')" class="dupla-color-btn w-6 h-6 rounded-full border-2 border-slate-600" style="background-color:#ef233c;" data-hex="#ef233c" title="Vermelho"></button>
-                    <button type="button" onclick="duplaPickColor('#00a86b', 'Verde')" class="dupla-color-btn w-6 h-6 rounded-full border-2 border-slate-600" style="background-color:#00a86b;" data-hex="#00a86b" title="Verde"></button>
-                    <button type="button" onclick="duplaPickColor('#ffcc00', 'Amarelo')" class="dupla-color-btn w-6 h-6 rounded-full border-2 border-slate-600" style="background-color:#ffcc00;" data-hex="#ffcc00" title="Amarelo"></button>
-                    <button type="button" onclick="duplaPickColor('#0096ff', 'Azul')" class="dupla-color-btn w-6 h-6 rounded-full border-2 border-slate-600" style="background-color:#0096ff;" data-hex="#0096ff" title="Azul"></button>
-                    <button type="button" onclick="duplaPickCustomColor()" class="dupla-color-btn w-6 h-6 rounded-full border-2 border-slate-600 bg-white" data-hex="#ffffff" title="Quinta cor: escolha uma cor personalizada">
-                      <input type="color" id="dupla-custom-color-picker" value="#ffffff" class="w-full h-full cursor-pointer opacity-0" onchange="duplaPickColor(this.value, identifyColorName(this.value))">
+                    <button type="button" onclick="duplaPickColor('#ef233c', 'Vermelho')" class="dupla-color-btn w-6 h-6 border-2 border-slate-600 transition hover:border-slate-400" style="background-color:#ef233c;" data-hex="#ef233c" title="Vermelho"></button>
+                    <button type="button" onclick="duplaPickColor('#00a86b', 'Verde')" class="dupla-color-btn w-6 h-6 border-2 border-slate-600 transition hover:border-slate-400" style="background-color:#00a86b;" data-hex="#00a86b" title="Verde"></button>
+                    <button type="button" onclick="duplaPickColor('#ffcc00', 'Amarelo')" class="dupla-color-btn w-6 h-6 border-2 border-slate-600 transition hover:border-slate-400" style="background-color:#ffcc00;" data-hex="#ffcc00" title="Amarelo"></button>
+                    <button type="button" onclick="duplaPickColor('#0096ff', 'Azul')" class="dupla-color-btn w-6 h-6 border-2 border-slate-600 transition hover:border-slate-400" style="background-color:#0096ff;" data-hex="#0096ff" title="Azul"></button>
+                    <!-- Quinta cor: botão retangular nos moldes da tela inicial -->
+                    <button type="button" onclick="duplaPickCustomColor()" id="dupla-custom-color-btn" class="dupla-color-btn relative h-6 px-1.5 flex items-center gap-1 border-2 border-slate-600 bg-slate-700 hover:bg-slate-600 transition overflow-hidden" data-hex="#ffffff" title="Quinta cor: escolha uma cor personalizada">
+                      <span id="dupla-custom-color-swatch" class="w-4 h-4 border border-white shrink-0 pointer-events-none" style="background-color:#ffffff"></span>
+                      <span id="dupla-custom-color-hex" class="text-[9px] font-mono text-slate-300 leading-none pointer-events-none">#FFFFFF</span>
+                      <input type="color" id="dupla-custom-color-picker" value="#ffffff" onclick="event.stopPropagation()" class="absolute inset-0 w-full h-full cursor-pointer opacity-0" onchange="duplaPickCustomColorValue(this.value)">
                     </button>
                   </div>
                   <span id="dupla-color-label" class="text-[10px] text-slate-400 whitespace-nowrap">Vermelho</span>
@@ -670,13 +673,13 @@
 
               <!-- Convidado: apenas acompanha as mudanças feitas pelo criador -->
               <div id="dupla-team-info" class="hidden space-y-3">
-                <div class="flex items-center justify-between">
-                  <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Nome da dupla</span>
+                <div class="flex items-center gap-3">
+                  <span class="text-xs font-bold uppercase tracking-wider text-slate-300 whitespace-nowrap">Nome da dupla</span>
                   <span id="dupla-team-name-view" class="text-xs font-bold text-slate-100 truncate">Dupla</span>
                 </div>
-                <div class="flex items-center gap-3">
-                  <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Cor da dupla</span>
-                  <span id="dupla-team-color-view" class="w-6 h-6 border-2 border-slate-600" style="background-color:#ef233c;"></span>
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+                  <span class="text-xs font-bold uppercase tracking-wider text-slate-300 whitespace-nowrap">Cor da dupla</span>
+                  <span id="dupla-team-color-view" class="w-6 h-6 border-2 border-slate-600 shrink-0" style="background-color:#ef233c;"></span>
                   <span id="dupla-team-color-name-view" class="text-[10px] text-slate-400 whitespace-nowrap">Vermelho</span>
                 </div>
               </div>
@@ -1218,18 +1221,18 @@
         </div>
       </div>
 
-      <form id="profile-form" onsubmit="saveProfile(event)" class="space-y-4">
+      <div class="space-y-4">
         <div>
-          <label for="profile-player-name" class="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">Nome no jogo</label>
-          <input id="profile-player-name" type="text" maxlength="24" class="w-full bg-slate-900 border border-slate-600  px-3 py-2.5 text-slate-100 outline-none focus:border-slate-300">
+          <label for="profile-player-name" class="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">Nickname</label>
+          <input id="profile-player-name" type="text" maxlength="24" readonly aria-readonly="true" tabindex="-1" class="w-full bg-slate-900 border border-slate-700 px-3 py-2.5 text-slate-300 cursor-not-allowed outline-none">
+          <p class="text-[11px] text-slate-500 mt-2">A alteração do nickname estará disponível para contas pagas em breve.</p>
         </div>
 
         <p id="profile-status" class="text-xs text-slate-400 min-h-[18px]"></p>
         <div class="flex flex-col sm:flex-row gap-3 pt-2">
-          <button type="submit" class="flex-1 py-3  bg-blue-600 hover:bg-blue-500 text-white font-bold transition">Salvar</button>
-          <button type="button" onclick="closeProfileModal()" class="flex-1 py-3  bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition">Cancelar</button>
+          <button type="button" onclick="closeProfileModal()" class="flex-1 py-3 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition">Fechar</button>
         </div>
-      </form>
+      </div>
     </div>
   </div>
 
@@ -4658,6 +4661,7 @@
     let duplaTeamName = 'Dupla';
     let duplaTeamColor = '#ef233c'; // cor da dupla (vermelho por padrão)
     let duplaTeamColorName = 'Vermelho';
+    let duplaCustomColor = '';       // cor personalizada escolhida (5ª opção)
     let duplaLobbyHostId = null;    // id de quem criou o lobby
     let duplaMatchmakingTimer = null;
     let duplaMatchmakingSeconds = 0;
@@ -4971,6 +4975,8 @@
       if (lobby.teamColor) {
         duplaTeamColor = lobby.teamColor;
         duplaTeamColorName = lobby.teamColorName || identifyColorName(lobby.teamColor);
+        // Cor que não é das 4 fixas vem da opção personalizada
+        if (!isDuplaPresetColor(lobby.teamColor)) duplaCustomColor = String(lobby.teamColor).toLowerCase();
       }
       duplaLobbyRoster = Array.isArray(lobby.members) ? lobby.members.map(m => ({
         id: m.id,
@@ -5025,9 +5031,30 @@
       if (picker) picker.click();
     }
 
+    // Cor personalizada escolhida no seletor (5ª opção da dupla)
+    function duplaPickCustomColorValue(hex) {
+      if (!isDuplaLobbyHost()) return;
+      const normalized = normalizeHexColor(hex);
+      if (!normalized) return;
+      duplaCustomColor = normalized;
+      duplaPickColor(normalized, identifyColorName(normalized));
+    }
+
+    // Uma cor é "personalizada" quando não é nenhuma das 4 cores fixas
+    function isDuplaPresetColor(hex) {
+      return DUPLA_PRESET_COLORS.some(color => color.hex === String(hex || '').toLowerCase());
+    }
+
     // Mantém o destaque da cor selecionada (sem criar botões duplicados)
     // e atualiza as informações exibidas para quem não é o criador
     function updateDuplaColorPickerUI() {
+      // Botão da cor personalizada (nos moldes da tela inicial)
+      const customBtn = document.getElementById('dupla-custom-color-btn');
+      const customSwatch = document.getElementById('dupla-custom-color-swatch');
+      const customHex = document.getElementById('dupla-custom-color-hex');
+      const customColor = duplaCustomColor || '#ffffff';
+      if (customBtn) customBtn.dataset.hex = isDuplaPresetColor(customColor) ? '' : customColor;
+
       document.querySelectorAll('#dupla-color-picker .dupla-color-btn').forEach(btn => {
         const selected = btn.dataset.hex === duplaTeamColor;
         btn.classList.toggle('ring-2', selected);
@@ -5035,8 +5062,11 @@
       });
       const label = document.getElementById('dupla-color-label');
       if (label) label.textContent = duplaTeamColorName;
+
+      if (customSwatch) customSwatch.style.backgroundColor = customColor;
+      if (customHex) customHex.textContent = customColor.toUpperCase();
       const picker = document.getElementById('dupla-custom-color-picker');
-      if (picker) picker.value = duplaTeamColor;
+      if (picker) picker.value = customColor;
 
       // Informações em tempo real para o convidado
       const nameView = document.getElementById('dupla-team-name-view');

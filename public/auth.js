@@ -12,8 +12,15 @@ const dropdownAccountEmail = document.getElementById('dropdown-account-email');
 const profileModal = document.getElementById('account-profile-modal');
 const profileAvatarPreview = document.getElementById('profile-avatar-preview');
 const profileEmail = document.getElementById('profile-account-email');
-const profileForm = document.getElementById('profile-form');
+const profilePlayerName = document.getElementById('profile-player-name');
 const profileStatus = document.getElementById('profile-status');
+
+// O botão "Entrar" do canto superior direito só aparece com login Google
+function setAccountAreaVisible(visible) {
+  const area = document.getElementById('account-area');
+  if (!area) return;
+  area.classList.toggle('hidden', !visible);
+}
 
 function setAvatarImage(imageElement, url) {
   if (!imageElement) return;
@@ -38,6 +45,8 @@ function updateAccountUI(user) {
     setAvatarImage(accountAvatar, DEFAULT_AVATAR);
     dropdownAccountName.textContent = 'Conta';
     dropdownAccountEmail.textContent = 'Não conectado';
+    // Sem login não existe botão de conta no canto superior direito
+    setAccountAreaVisible(false);
     // Sincroniza a tela inicial do jogo com o estado "desconectado".
     if (typeof syncSetupLoginUI === 'function') syncSetupLoginUI();
     return;
@@ -49,6 +58,8 @@ function updateAccountUI(user) {
   setAvatarImage(accountAvatar, user.avatarUrl || user.picture || DEFAULT_AVATAR);
   dropdownAccountName.textContent = getAccountNickname(user) || 'Conta';
   dropdownAccountEmail.textContent = user.email || '';
+  // Com login o botão de conta volta a aparecer no canto superior direito
+  setAccountAreaVisible(true);
   // Sincroniza a tela inicial do jogo (esconde o login Google e habilita
   // o botão Single Player Online) assim que a sessão é carregada.
   if (typeof syncSetupLoginUI === 'function') syncSetupLoginUI();
@@ -78,7 +89,8 @@ function openProfileModal() {
   }
 
   profileEmail.textContent = accountUser.email || '';
-  document.getElementById('profile-player-name').value = accountUser.playerName || '';
+  // O nickname é apenas informativo: não pode ser alterado pelo jogador
+  if (profilePlayerName) profilePlayerName.value = getAccountNickname(accountUser);
   setAvatarImage(profileAvatarPreview, accountUser.avatarUrl || accountUser.picture || DEFAULT_AVATAR);
   profileStatus.textContent = '';
   profileModal.classList.remove('hidden');
@@ -88,46 +100,8 @@ function closeProfileModal() {
   profileModal.classList.add('hidden');
 }
 
-async function saveProfile(event) {
-  event.preventDefault();
-  if (!accountUser) return;
-
-  profileStatus.textContent = 'Salvando...';
-  profileStatus.className = 'text-xs text-slate-400 min-h-[18px]';
-
-  const payload = {
-    playerName: document.getElementById('profile-player-name').value
-  };
-
-  try {
-    const response = await fetch('/api/profile', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Não foi possível salvar o perfil.');
-    }
-
-    const data = await response.json();
-    updateAccountUI(data.user);
-
-    const gameNameInput = document.getElementById('player-name-input');
-    if (gameNameInput && !gameNameInput.value) {
-      gameNameInput.value = data.user.playerName || '';
-      if (typeof updatePlayerName === 'function') updatePlayerName(gameNameInput.value);
-    }
-
-    profileStatus.textContent = 'Perfil atualizado com sucesso!';
-    profileStatus.className = 'text-xs text-emerald-400 min-h-[18px]';
-    setTimeout(closeProfileModal, 700);
-  } catch (error) {
-    profileStatus.textContent = error.message;
-    profileStatus.className = 'text-xs text-red-400 min-h-[18px]';
-  }
-}
+// O nickname não pode mais ser alterado pelo jogador.
+// A alteração será liberada apenas para contas pagas (mecânica em breve).
 
 async function logoutAccount() {
   hideAccountDropdown();

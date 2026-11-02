@@ -747,7 +747,8 @@ async function handleProfileUpdate(request, response) {
 
     const updatedUser = await db.updateUserProfile(user.id, {
       displayName: cleanText(body.displayName, 60) || user.displayName,
-      playerName: cleanText(body.playerName, 24) || user.playerName,
+      // O nickname (playerName) não pode ser alterado pelo jogador:
+      // a alteração será liberada apenas para contas pagas.
       avatarUrl,
       bio: cleanText(body.bio, 280)
     });
