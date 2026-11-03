@@ -67,6 +67,11 @@
       letter-spacing: 0.08em;
     }
 
+    /* Rótulos da interface em Oswald (ex.: PREFERÊNCIAS) */
+    .font-oswald {
+      font-family: 'Oswald', 'Arial Narrow', sans-serif !important;
+    }
+
     .font-bangers {
       font-family: 'Bangers', 'Impact', sans-serif !important;
       letter-spacing: 0.06em;
@@ -122,10 +127,10 @@
       white-space: nowrap;
     }
 
-    /* Palavra "PREMIUM" do botão de assinatura (fonte Fredoka) */
+    /* Palavra "PREMIUM" do botão de assinatura (fonte Fredoka em negrito) */
     .premium-wordmark {
       font-family: 'Fredoka', sans-serif;
-      font-weight: 600;
+      font-weight: 700;
       letter-spacing: 0.02em;
     }
 
@@ -1131,7 +1136,7 @@
       <span id="account-free-badge" class="plan-badge plan-badge-free hidden flex items-center">FREE</span>
       <span id="account-friends-badge" class="absolute top-1 right-1 hidden w-4 h-4 bg-red-500 text-white text-[9px] rounded-full flex items-center justify-center font-bold">1</span>
     </button>
-    <div id="account-dropdown" class="hidden absolute right-0 mt-2 w-60 bg-slate-800 border border-slate-600 shadow-2xl overflow-hidden z-50">
+    <div id="account-dropdown" class="hidden absolute right-0 mt-2 w-60 bg-slate-800 border border-slate-600 shadow-2xl overflow-hidden z-50 text-left">
       <div class="px-4 py-3 border-b border-slate-700">
         <div class="flex items-center gap-2">
           <p id="dropdown-account-name" class="text-sm font-bold text-slate-100 truncate">Conta</p>
@@ -1394,7 +1399,7 @@
 
         <!-- CORES DO PERFIL: primária, secundária e terciária -->
         <div class="space-y-2">
-          <p class="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">Preferências</p>
+          <p class="block font-oswald text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">Preferências</p>
 
           <div class="flex items-center gap-3">
             <button type="button" id="profile-color-primary-btn" onclick="pickProfileColor('primary')" class="profile-color-btn relative flex items-center gap-2 w-[170px] shrink-0 px-2 py-1.5 bg-slate-900 border border-slate-600 hover:border-slate-400 transition overflow-hidden">
@@ -1434,12 +1439,17 @@
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
               <p id="profile-premium-title" class="premium-title">PREMIUM</p>
-              <p id="profile-premium-note" class="text-[11px] text-slate-300 mt-1">Pagamento único. Sem mensalidade. Acesso vitalício.</p>
+              <p id="profile-premium-note" class="text-[11px] text-slate-300 mt-1">Acesso vitalício e sem mensalidades</p>
             </div>
-            <p id="profile-premium-price" class="text-xl font-black text-amber-300 whitespace-nowrap">R$ 19,90</p>
+            <div class="text-right shrink-0">
+              <!-- Preço original (riscado) + preço promocional -->
+              <p id="profile-premium-price-original" class="hidden text-xs text-slate-400 line-through">R$ 19,90</p>
+              <p id="profile-premium-price" class="text-xl font-black text-amber-300 whitespace-nowrap">R$ 19,90</p>
+              <p id="profile-premium-promo-label" class="hidden text-[10px] leading-tight text-amber-200/90 mt-0.5">Desconto temporário até o fim do ano</p>
+            </div>
           </div>
           <ul id="profile-premium-benefits" class="space-y-1 text-[11px] text-slate-300"></ul>
-          <button type="button" onclick="openPremiumCheckout()" id="profile-premium-buy-btn" class="w-full py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold transition text-sm">Assinar <span class="premium-wordmark">PREMIUM</span></button>
+          <button type="button" onclick="openPremiumCheckout()" id="profile-premium-buy-btn" class="w-full py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-900 font-medium transition text-sm">Assinar <span class="premium-wordmark">PREMIUM</span></button>
         </div>
 
         <p id="profile-status" class="text-xs text-slate-400 min-h-[18px]"></p>
@@ -1459,8 +1469,13 @@
         <button type="button" onclick="closePremiumCheckout()" class="w-9 h-9 bg-slate-700 hover:bg-slate-600 text-slate-200 text-lg leading-none">✕</button>
       </div>
 
-      <p id="premium-checkout-note" class="text-xs text-slate-300">Pagamento único via Pix. Sem mensalidade. Acesso vitalício.</p>
-      <p id="premium-checkout-price" class="text-3xl font-black text-amber-300">R$ 19,90</p>
+      <p id="premium-checkout-note" class="text-xs text-slate-300">Acesso vitalício e sem mensalidades</p>
+      <div class="flex items-end justify-center gap-2">
+        <!-- Preço original (riscado) + preço promocional -->
+        <p id="premium-checkout-price-original" class="hidden text-base text-slate-400 line-through">R$ 19,90</p>
+        <p id="premium-checkout-price" class="text-3xl font-black text-amber-300">R$ 19,90</p>
+      </div>
+      <p id="premium-checkout-promo-label" class="hidden text-[11px] text-amber-200 text-center -mt-2">Desconto temporário até o fim do ano</p>
 
       <ul id="premium-checkout-benefits" class="space-y-1 text-xs text-slate-300"></ul>
 
@@ -2440,6 +2455,43 @@
         .join('');
     }
 
+    // Data do fim do desconto (ex.: 31/12/2026)
+    function formatPromoDate(value) {
+      if (!value) return '';
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return '';
+      return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    }
+
+    // Preço do plano: durante o desconto mostra o preço original riscado
+    // ao lado do preço promocional (que é o valor cobrado).
+    function renderPremiumPricing(originalId, priceId, promoId, info) {
+      const originalEl = document.getElementById(originalId);
+      const priceEl = document.getElementById(priceId);
+      const promoEl = document.getElementById(promoId);
+      if (!info) return;
+
+      const original = Number(info.originalPrice) || Number(info.price) || 0;
+      const current = Number(info.price) || 0;
+      const promoActive = Boolean(info.promoActive) && original > current;
+
+      if (originalEl) {
+        originalEl.textContent = formatBRL(original);
+        originalEl.classList.toggle('hidden', !promoActive);
+      }
+      if (priceEl) {
+        priceEl.textContent = formatBRL(current);
+      }
+      if (promoEl) {
+        const until = formatPromoDate(info.promoUntil);
+        const label = info.promoLabel || 'Desconto temporário';
+        promoEl.textContent = promoActive
+          ? `${label}${until ? ` até ${until}` : ''}`
+          : '';
+        promoEl.classList.toggle('hidden', !promoActive);
+      }
+    }
+
     // Bloco de venda dentro do modal de perfil
     function renderPremiumBox(user) {
       const box = document.getElementById('profile-premium-box');
@@ -2459,18 +2511,16 @@
 
       const title = document.getElementById('profile-premium-title');
       const note = document.getElementById('profile-premium-note');
-      const price = document.getElementById('profile-premium-price');
       const buyBtn = document.getElementById('profile-premium-buy-btn');
 
       if (title) title.textContent = 'PREMIUM';
       if (info) {
-        if (note) note.textContent = info.note || 'Pagamento único. Sem mensalidade. Acesso vitalício.';
-        if (price) price.textContent = formatBRL(info.price);
+        if (note) note.textContent = info.note || 'Acesso vitalício e sem mensalidades';
       }
+      renderPremiumPricing('profile-premium-price-original', 'profile-premium-price', 'profile-premium-promo-label', info);
       renderPremiumBenefits('profile-premium-benefits');
 
       if (buyBtn) buyBtn.classList.remove('hidden');
-      if (price) price.classList.remove('hidden');
     }
 
     function setPremiumCheckoutStatus(message, tone) {
@@ -2509,11 +2559,10 @@
       if (info) {
         const title = document.getElementById('premium-checkout-title');
         const note = document.getElementById('premium-checkout-note');
-        const price = document.getElementById('premium-checkout-price');
         if (title) title.textContent = 'PREMIUM';
-        if (note) note.textContent = info.note || 'Pagamento único via Pix. Sem mensalidade. Acesso vitalício.';
-        if (price) price.textContent = formatBRL(info.price);
+        if (note) note.textContent = info.note || 'Acesso vitalício e sem mensalidades';
       }
+      renderPremiumPricing('premium-checkout-price-original', 'premium-checkout-price', 'premium-checkout-promo-label', info);
       renderPremiumBenefits('premium-checkout-benefits');
 
       try {

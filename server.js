@@ -28,14 +28,25 @@ const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7;
 const PREMIUM_PLAN_NAME = process.env.PREMIUM_PLAN_NAME || 'Conta Premium';
 const PREMIUM_PRICE_BRL = Number(process.env.PREMIUM_PRICE_BRL || 19.90);
 const PREMIUM_CURRENCY = 'BRL';
-const PREMIUM_TRIAL_NOTE = 'Pagamento único. Sem mensalidade. Acesso vitalício.';
+const PREMIUM_TRIAL_NOTE = 'Acesso vitalício e sem mensalidades';
 const PREMIUM_BENEFITS = [
   'Cor terciária desbloqueada (3 cores no perfil)',
   'Nickname editável a qualquer momento',
   'Selo Premium no perfil e no placar',
-  'Cores e personalizações exclusivas',
   'Acesso ao modo LIGA - jogue partidas classificatórias'
 ];
+
+/* Desconto temporário do plano Premium (até o fim do ano).
+   O preço normal continua sendo exibido (riscado) ao lado do preço
+   promocional, que é o valor efetivamente cobrado. */
+const PREMIUM_PROMO_UNTIL_DEFAULT = (() => {
+  const year = new Date().getFullYear();
+  // 31 de dezembro do ano corrente, às 23:59:59 (UTC)
+  return new Date(Date.UTC(year, 11, 31, 23, 59, 59)).toISOString();
+})();
+const PREMIUM_PROMO_PRICE_BRL = Number(process.env.PREMIUM_PROMO_PRICE_BRL || 9.90);
+const PREMIUM_PROMO_UNTIL = process.env.PREMIUM_PROMO_UNTIL || PREMIUM_PROMO_UNTIL_DEFAULT;
+const PREMIUM_PROMO_LABEL = process.env.PREMIUM_PROMO_LABEL || 'Desconto temporário';
 
 // Gateway de pagamento: 'mercadopago' | 'stub'
 const PIX_GATEWAY = (process.env.PIX_GATEWAY || (NODE_ENV === 'production' ? '' : 'stub')).trim().toLowerCase();
@@ -1613,10 +1624,36 @@ async function handleLeagueStanding(request, response) {
    e consulta o status. O Premium só é liberado depois que o gateway
    confirma o pagamento (webhook ou consulta de status).
 ------------------------------------------------------------- */
+// Estado do desconto temporário do plano Premium
+function premiumPromoState(now = Date.now()) {
+  const until = Date.parse(PREMIUM_PROMO_UNTIL);
+  const hasDeadline = Number.isFinite(until);
+  const active = Boolean(
+    hasDeadline
+    && now <= until
+    && PREMIUM_PROMO_PRICE_BRL > 0
+    && PREMIUM_PROMO_PRICE_BRL < PREMIUM_PRICE_BRL
+  );
+  return {
+    active,
+    // Preço efetivamente cobrado
+    price: active ? PREMIUM_PROMO_PRICE_BRL : PREMIUM_PRICE_BRL,
+    originalPrice: PREMIUM_PRICE_BRL,
+    promoPrice: PREMIUM_PROMO_PRICE_BRL,
+    promoUntil: active ? new Date(until).toISOString() : ''
+  };
+}
+
 function premiumPublicInfo() {
+  const promo = premiumPromoState();
   return {
     planName: PREMIUM_PLAN_NAME,
-    price: PREMIUM_PRICE_BRL,
+    price: promo.price,
+    originalPrice: promo.originalPrice,
+    promoPrice: promo.promoPrice,
+    promoActive: promo.active,
+    promoUntil: promo.promoUntil,
+    promoLabel: PREMIUM_PROMO_LABEL,
     currency: PREMIUM_CURRENCY,
     note: PREMIUM_TRIAL_NOTE,
     benefits: PREMIUM_BENEFITS,
@@ -1698,6 +1735,9 @@ async function handlePremiumCheckout(request, response) {
   try {
     const paymentId = generatePaymentId();
     const expiresAt = new Date(Date.now() + PAYMENT_EXPIRY_MINUTES * 60 * 1000).toISOString();
+    // Preço cobrado: o promocional enquanto o desconto estiver valendo
+    const promo = premiumPromoState();
+    const amount = promo.price;
 
     let qrCode = '';
     let copyPaste = '';
@@ -1707,7 +1747,7 @@ async function handlePremiumCheckout(request, response) {
       const notificationUrl = PUBLIC_URL ? `${PUBLIC_URL}/api/premium/webhook` : undefined;
       const created = await pix.createMercadoPagoPayment({
         token: PIX_API_TOKEN,
-        amount: PREMIUM_PRICE_BRL,
+        amount: amount,
         description: `${PREMIUM_PLAN_NAME} LUUD - pagamento unico`,
         email: user.email,
         externalReference: paymentId,
@@ -1724,7 +1764,7 @@ async function handlePremiumCheckout(request, response) {
         key,
         name: PIX_MERCHANT_NAME,
         city: PIX_MERCHANT_CITY,
-        amount: PREMIUM_PRICE_BRL,
+        amount: amount,
         txid: paymentId
       });
       gatewayRef = paymentId;
@@ -1734,7 +1774,7 @@ async function handlePremiumCheckout(request, response) {
       id: paymentId,
       userId: user.id,
       gateway: PIX_GATEWAY,
-      amount: PREMIUM_PRICE_BRL,
+      amount: amount,
       status: 'pending',
       gatewayRef,
       copyPaste,

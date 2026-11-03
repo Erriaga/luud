@@ -62,6 +62,68 @@ Versão Node.js do jogo **LUUD**, com:
 O primeiro login com Google cria automaticamente a conta.
 Os logins seguintes entram na mesma conta.
 
+## Conta Premium (pagamento via Pix)
+
+O Premium é um pagamento único (Pix) que libera acesso vitalício ao modo
+**LIGA**, cores extras no perfil, nickname editável e selo Premium.
+
+O servidor é a fonte da verdade: o navegador só pede a cobrança e consulta o
+status. O Premium só é liberado depois que o gateway confirma o pagamento
+(webhook ou consulta de status).
+
+### Teste local (sem cobrança real)
+
+```env
+PIX_GATEWAY=stub
+```
+
+Nesse modo o servidor gera um BR Code fictício e mostra o botão
+**"Confirmar pagamento (teste)"** no modal de compra. O modo `stub` nunca
+funciona com `NODE_ENV=production`.
+
+### Produção (Mercado Pago)
+
+1. Crie a conta em <https://www.mercadopago.com.br/>.
+2. Em **Desenvolvedores > Credenciais**, copie o **Access Token**
+   (Produção ou Teste).
+3. No `.env` (ou nas variáveis de ambiente do Render):
+
+   ```env
+   PIX_GATEWAY=mercadopago
+   PIX_API_TOKEN=APP_USR-seu-token
+   PUBLIC_URL=https://luud.com.br
+   ```
+
+4. No painel do Mercado Pago, cadastre o webhook:
+   - URL: `https://seu-dominio/api/premium/webhook`
+   - Evento: **Pagamentos**
+   - Copie o **segredo** exibido para `PIX_WEBHOOK_SECRET`:
+
+   ```env
+   PIX_WEBHOOK_SECRET=seu-segredo
+   ```
+
+   Sem o segredo o webhook é recusado, então ninguém libera o Premium sem
+   pagar. A confirmação também é refeita direto no gateway antes de liberar.
+
+5. `PIX_KEY`, `PIX_MERCHANT_NAME` e `PIX_MERCHANT_CITY` só são usados no modo
+   de teste (`stub`); no Mercado Pago quem recebe é a conta cadastrada lá.
+
+### Desconto temporário do plano
+
+Enquanto o desconto estiver valendo, a interface mostra o preço original
+riscado ao lado do preço promocional, e o valor cobrado é o promocional:
+
+```env
+PREMIUM_PRICE_BRL=19.90
+PREMIUM_PROMO_PRICE_BRL=9.90
+PREMIUM_PROMO_UNTIL=2026-12-31T23:59:59Z
+PREMIUM_PROMO_LABEL=Desconto temporário
+```
+
+`PREMIUM_PROMO_UNTIL` vazio significa "31 de dezembro do ano atual".
+Depois do prazo, o preço normal volta a valer automaticamente.
+
 ## Estrutura
 
 - `server.js` — servidor Node.js e APIs de conta.
