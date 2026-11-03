@@ -9,6 +9,7 @@ const { WebSocketServer } = require('ws');
 const db = require('./db');
 const pix = require('./pix');
 const rules = require('./game-rules');
+const league = require('./league');
 
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
@@ -96,24 +97,38 @@ const duplaLobbyCleanupTimers = new Map();
 const DUPLA_LOBBY_CLEANUP_MS = 2 * 60 * 1000;
 
 /* -------------------------------------------------------------
-   LOBBY DE ARENA ONLINE (cada um por si, 4 jogadores)
-   - O lobby fica no servidor: quem cria é o host (dono).
-   - Os amigos entram depois de aceitar o convite (até 4 no lobby).
-   - A fila é por jogador: a partida começa com 4 jogadores, cada um
-     por si (ninguém divide tabuleiro com ninguém).
+   LOBBIES ONLINE (arena e partida normal)
+   O lobby fica no servidor: quem cria é o host (dono) e os amigos
+   entram depois de aceitar o convite.
+   - kind 'arena': até 4 jogadores no lobby, partida com 4 jogadores
+     (cada um por si, ninguém divide tabuleiro com ninguém);
+   - kind 'normal': até 2 jogadores no lobby, partida 1 vs 1.
+   A fila é por jogador: a partida começa quando a fila completa.
 ------------------------------------------------------------- */
-const ARENA_LOBBY_MAX_MEMBERS = 4;
-const ARENA_MATCH_SIZE = 4;
+const LOBBY_KINDS = {
+  arena: {
+    maxMembers: 4,
+    matchSize: 4,
+    label: 'ARENA',
+    matchTypeLabel: 'ARENA • Cada um por si'
+  },
+  normal: {
+    maxMembers: 2,
+    matchSize: 2,
+    label: 'PARTIDA NORMAL',
+    matchTypeLabel: 'PARTIDA NORMAL • 1 vs 1'
+  }
+};
 // Cores dos slots da arena (mesma ordem horária do tabuleiro)
 const ARENA_SLOT_COLORS = ['BLUE', 'RED', 'GREEN', 'YELLOW'];
-// hostUid -> { hostId, members: [{ id, name, picture, playerName, ws }] }
-const arenaLobbies = new Map();
-// Convites pendentes: inviteId -> { id, fromUid, toUid, createdAt }
-const arenaPendingInvites = new Map();
-// Fila da arena: [{ ws, uid, name, picture }] (uma entrada por jogador)
-const arenaQueue = [];
-// Limpeza dos lobbies cujo dono ficou offline: hostUid -> timeout
-const arenaLobbyCleanupTimers = new Map();
+// "kind:hostUid" -> { hostId, kind, members: [{ id, name, picture, playerName, ws }] }
+const onlineLobbies = new Map();
+// Convites pendentes: inviteId -> { id, fromUid, toUid, kind, createdAt }
+const lobbyPendingInvites = new Map();
+// Fila de busca por tipo de lobby: [{ ws, uid, name, picture }] (uma entrada por jogador)
+const lobbyQueues = { arena: [], normal: [] };
+// Limpeza dos lobbies cujo dono ficou offline: "kind:hostUid" -> timeout
+const lobbyCleanupTimers = new Map();
 
 function generateRoomCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -398,6 +413,109 @@ function handleRollRequest(ws, conn, room) {
   startRoomTurnTimer(room);
 }
 
+/* -------------------------------------------------------------
+   LIGA (tiers, pontuação e promoção)
+   O servidor é a fonte da verdade da classificação: os pontos de
+   cada partida e a progressão de tier são calculados aqui, a
+   partir do placar oficial da partida.
+   ------------------------------------------------------------- */
+
+// Tier S -> SS: além dos 100 pontos é preciso estar entre os 100
+// melhores jogadores do tier S (o ranking é do próprio tier).
+async function refreshLeaguePromotion(userId, standing) {
+  if (!standing || standing.tier !== 'S' || !standing.promotionPending) return standing;
+  try {
+    const rank = await db.getLeagueTierRank(userId, 'S');
+    if (rank && rank <= league.SS_RANKING_SIZE) {
+      return await db.saveLeagueStanding(userId, {
+        ...standing,
+        tier: 'SS',
+        points: 0,
+        promotionPending: false
+      });
+    }
+  } catch (error) {
+    console.error('[liga] erro ao calcular o ranking do tier S:', error && error.message);
+  }
+  return standing;
+}
+
+// Classificação atual do jogador na Liga (cria no tier F se for a primeira vez)
+async function getLeagueStandingFor(userId) {
+  if (!userId) return null;
+  try {
+    const standing = await db.ensureLeagueStanding(userId);
+    if (!standing) return null;
+    // O tier SS depende do ranking do tier S: reavalia a cada leitura
+    return await refreshLeaguePromotion(userId, standing);
+  } catch (error) {
+    console.error('[liga] erro ao carregar a classificação:', error && error.message);
+    return null;
+  }
+}
+
+// Tier do jogador (usado pelo matchmaking da Liga)
+async function getLeagueTierFor(userId) {
+  const standing = await getLeagueStandingFor(userId);
+  return standing ? league.normalizeTier(standing.tier) : league.TIERS[0];
+}
+
+// Aplica o resultado de uma partida da Liga para um jogador
+async function updateLeaguePlayer(userId, playerScore, opponentScore) {
+  const standing = await getLeagueStandingFor(userId);
+  if (!standing) return null;
+
+  const next = league.applyMatchResult(standing, playerScore, opponentScore);
+  let saved = await db.saveLeagueStanding(userId, next);
+
+  // Tier S -> SS: além dos 100 pontos é preciso estar entre os 100
+  // melhores jogadores do tier S (o ranking é do próprio tier).
+  saved = await refreshLeaguePromotion(userId, saved);
+
+  return saved;
+}
+
+// Aplica o resultado da partida para os dois jogadores da sala da Liga
+async function applyLeagueMatchResult(room, state) {
+  if (!room || room.mode !== 'liga' || !state) return;
+  const uids = Array.isArray(room.userIds) ? room.userIds : [];
+  const colors = Array.isArray(room.slotColors) ? room.slotColors : [];
+  if (uids.length < 2 || colors.length < 2) return;
+
+  const [uidA, uidB] = uids;
+  if (!uidA || !uidB) return;
+
+  const scoreA = Number(state.scores[colors[0]]) || 0;
+  const scoreB = Number(state.scores[colors[1]]) || 0;
+
+  try {
+    const [standingA, standingB] = await Promise.all([
+      updateLeaguePlayer(uidA, scoreA, scoreB),
+      updateLeaguePlayer(uidB, scoreB, scoreA)
+    ]);
+
+    // Avisa os dois jogadores sobre a nova classificação
+    const payloadA = standingA ? league.describeStanding(standingA) : null;
+    const payloadB = standingB ? league.describeStanding(standingB) : null;
+    if (payloadA) {
+      sendToUser(uidA, {
+        type: 'league_update',
+        standing: payloadA,
+        match: { playerScore: scoreA, opponentScore: scoreB, won: scoreA > scoreB }
+      });
+    }
+    if (payloadB) {
+      sendToUser(uidB, {
+        type: 'league_update',
+        standing: payloadB,
+        match: { playerScore: scoreB, opponentScore: scoreA, won: scoreB > scoreA }
+      });
+    }
+  } catch (error) {
+    console.error('[liga] erro ao aplicar o resultado da partida:', error && error.message);
+  }
+}
+
 /**
  * Pedido de movimento. O cliente informa apenas a peça escolhida:
  * o servidor recalcula a jogada com o dado que ele mesmo sorteou.
@@ -442,6 +560,8 @@ function handleMoveRequest(ws, conn, room, data) {
     state.over = true;
     state.winner = winner;
     clearRoomTurnTimer(room);
+    // Partida da Liga: o servidor aplica os pontos e a progressão de tier
+    applyLeagueMatchResult(room, state);
   }
 
   broadcastRoomGame(room, {
@@ -473,17 +593,36 @@ async function tryMatchmaking() {
     for (let i = 0; i < matchmakingQueue.length && !matched; i++) {
       const first = matchmakingQueue[i];
       const firstKey = first.uid || first.ws; // sem login, a própria conexão é a chave
+      const isLeague = queueMode(first) === 'liga';
+      // Na Liga a partida é sempre entre jogadores do mesmo tier: primeiro
+      // busca alguém na mesma situação da melhor de 3 e, se não houver,
+      // aceita qualquer outro jogador do mesmo tier.
+      let fallbackIndex = -1;
       for (let j = i + 1; j < matchmakingQueue.length; j++) {
         const candidate = matchmakingQueue[j];
         // Cada fila só encontra oponente do mesmo modo: quem joga a Liga
         // nunca entra na partida de Jogo Rápido (e vice-versa)
         if (queueMode(candidate) !== queueMode(first)) continue;
         if ((candidate.uid || candidate.ws) === firstKey) continue;
+        if (isLeague) {
+          if (queueLeagueTier(candidate) !== queueLeagueTier(first)) continue;
+          if (queueLeaguePending(candidate) !== queueLeaguePending(first)) {
+            if (fallbackIndex === -1) fallbackIndex = j;
+            continue;
+          }
+        }
         matchmakingQueue.splice(j, 1);
         matchmakingQueue.splice(i, 1);
         await startQuickMatchRoom(first, candidate);
         matched = true;
         break;
+      }
+      if (!matched && fallbackIndex !== -1) {
+        const candidate = matchmakingQueue[fallbackIndex];
+        matchmakingQueue.splice(fallbackIndex, 1);
+        matchmakingQueue.splice(i, 1);
+        await startQuickMatchRoom(first, candidate);
+        matched = true;
       }
     }
   }
@@ -492,6 +631,16 @@ async function tryMatchmaking() {
 // Modo da fila do jogador: 'quick' (Jogo Rápido) ou 'liga' (partida classificatória)
 function queueMode(entry) {
   return entry && entry.mode === 'liga' ? 'liga' : 'quick';
+}
+
+// Tier do jogador na fila da Liga (usado para parear apenas jogadores do mesmo tier)
+function queueLeagueTier(entry) {
+  return league.normalizeTier(entry && entry.tier);
+}
+
+// O jogador está disputando a melhor de 3 da promoção?
+function queueLeaguePending(entry) {
+  return Boolean(entry && entry.pending);
 }
 
 // Verifica se a conta do jogador tem o plano Premium liberado.
@@ -512,14 +661,14 @@ async function isPremiumPlayer(uid) {
   return false;
 }
 
-async function startQuickMatchRoom(a, b) {
+async function startQuickMatchRoom(a, b, forcedMode) {
   let code;
   do {
     code = generateRoomCode();
   } while (rooms.has(code));
 
   // O modo da partida define a fila de origem: 'quick' ou 'liga'
-  const mode = queueMode(a) === 'liga' || queueMode(b) === 'liga' ? 'liga' : 'quick';
+  const mode = forcedMode || (queueMode(a) === 'liga' || queueMode(b) === 'liga' ? 'liga' : 'quick');
 
   const room = {
     code,
@@ -946,18 +1095,33 @@ async function startDuplaMatch(entryA, entryB) {
 }
 
 /* -------------------------------------------------------------
-   LOBBY DE ARENA ONLINE - funções auxiliares
+   LOBBIES ONLINE - funções auxiliares
    O lobby é mantido pelo servidor (o dono cria, os amigos entram
-   depois de aceitar o convite) e a fila é por jogador: quando quatro
-   jogadores estão na fila, a partida começa com um em cada slot.
+   depois de aceitar o convite) e a fila é por jogador: quando a
+   fila completa a partida, ela começa com um jogador em cada slot.
 ------------------------------------------------------------- */
-function buildArenaLobbyPayload(lobby) {
+function lobbyKindConfig(kind) {
+  return LOBBY_KINDS[kind] || LOBBY_KINDS.arena;
+}
+
+// Normaliza o tipo de lobby recebido do cliente (sempre devolve um válido)
+function normalizeLobbyKind(kind) {
+  const value = String(kind || '').trim().toLowerCase();
+  return LOBBY_KINDS[value] ? value : 'arena';
+}
+
+function lobbyMapKey(kind, hostUid) {
+  return `${kind}:${hostUid}`;
+}
+
+function buildLobbyPayload(lobby) {
   return {
-    type: 'arena_lobby',
+    type: 'lobby',
+    kind: lobby.kind,
     lobby: {
       hostId: lobby.hostId,
       // O lobby fica bloqueado enquanto o criador busca uma partida
-      searching: isArenaLobbySearching(lobby),
+      searching: isLobbySearching(lobby),
       members: lobby.members.map(member => ({
         id: member.id,
         name: member.name,
@@ -970,26 +1134,27 @@ function buildArenaLobbyPayload(lobby) {
   };
 }
 
-// O lobby da arena está na fila de busca de partida?
-function isArenaLobbySearching(lobby) {
+// O lobby está na fila de busca de partida?
+function isLobbySearching(lobby) {
   if (!lobby) return false;
+  const queue = lobbyQueues[lobby.kind] || [];
   const ids = new Set(lobby.members.map(member => member.id));
-  return arenaQueue.some(entry => ids.has(entry.uid));
+  return queue.some(entry => ids.has(entry.uid));
 }
 
 // Avisa todos os jogadores do lobby que a busca foi encerrada
-function notifyArenaQueueCanceled(lobby) {
+function notifyLobbyQueueCanceled(lobby) {
   if (!lobby) return;
-  const payload = { type: 'arena_queue_canceled' };
+  const payload = { type: 'lobby_queue_canceled', kind: lobby.kind };
   sendToUser(lobby.hostId, payload);
   lobby.members.forEach(member => {
     if (member.id !== lobby.hostId) sendToUser(member.id, payload);
   });
 }
 
-async function broadcastArenaLobby(lobby) {
+async function broadcastLobby(lobby) {
   await refreshLobbyMembers(lobby);
-  const payload = buildArenaLobbyPayload(lobby);
+  const payload = buildLobbyPayload(lobby);
   sendToUser(lobby.hostId, payload);
   lobby.members.forEach(member => {
     if (member.id !== lobby.hostId) sendToUser(member.id, payload);
@@ -997,68 +1162,74 @@ async function broadcastArenaLobby(lobby) {
 }
 
 // Envia o lobby atual (se existir) para o usuário
-async function sendArenaLobbyToUser(userId) {
+async function sendLobbyToUser(userId, kind) {
   if (!userId) return;
-  for (const lobby of arenaLobbies.values()) {
+  for (const lobby of onlineLobbies.values()) {
+    if (kind && lobby.kind !== kind) continue;
     if (lobby.hostId === userId || lobby.members.some(member => member.id === userId)) {
       await refreshLobbyMembers(lobby);
-      sendToUser(userId, buildArenaLobbyPayload(lobby));
+      sendToUser(userId, buildLobbyPayload(lobby));
       return;
     }
   }
 }
 
 // Encerra o lobby do dono que ficou offline (se ele não voltar a tempo)
-function scheduleArenaLobbyCleanup(hostUid) {
-  clearArenaLobbyCleanup(hostUid);
+function scheduleLobbyCleanup(kind, hostUid) {
+  clearLobbyCleanup(kind, hostUid);
+  const key = lobbyMapKey(kind, hostUid);
   const timer = setTimeout(() => {
-    arenaLobbyCleanupTimers.delete(hostUid);
-    const lobby = arenaLobbies.get(hostUid);
+    lobbyCleanupTimers.delete(key);
+    const lobby = onlineLobbies.get(key);
     if (!lobby) return;
     const host = lobby.members.find(member => member.id === hostUid);
     if (host && host.ws && host.ws.readyState === 1) return; // o dono voltou
-    arenaLobbies.delete(hostUid);
+    onlineLobbies.delete(key);
     lobby.members.forEach(member => {
       if (member.id !== hostUid) {
         sendToUser(member.id, {
-          type: 'arena_lobby_left',
+          type: 'lobby_left',
+          kind: lobby.kind,
           message: 'O criador do lobby saiu. O lobby foi encerrado.'
         });
       }
     });
   }, DUPLA_LOBBY_CLEANUP_MS);
   if (typeof timer.unref === 'function') timer.unref();
-  arenaLobbyCleanupTimers.set(hostUid, timer);
+  lobbyCleanupTimers.set(key, timer);
 }
 
-function clearArenaLobbyCleanup(hostUid) {
-  const timer = arenaLobbyCleanupTimers.get(hostUid);
+function clearLobbyCleanup(kind, hostUid) {
+  const key = lobbyMapKey(kind, hostUid);
+  const timer = lobbyCleanupTimers.get(key);
   if (timer) {
     clearTimeout(timer);
-    arenaLobbyCleanupTimers.delete(hostUid);
+    lobbyCleanupTimers.delete(key);
   }
 }
 
 // Lobby em que o usuário participa (criador ou convidado)
-function findArenaLobbyForUser(uid) {
+function findLobbyForUser(uid, kind) {
   if (!uid) return null;
-  const owned = arenaLobbies.get(uid);
-  if (owned) return owned;
-  for (const lobby of arenaLobbies.values()) {
+  for (const lobby of onlineLobbies.values()) {
+    if (kind && lobby.kind !== kind) continue;
+    if (lobby.hostId === uid) return lobby;
     if (lobby.members.some(member => member.id === uid)) return lobby;
   }
   return null;
 }
 
-async function ensureArenaLobby(hostUid, socket) {
-  let lobby = arenaLobbies.get(hostUid);
+async function ensureLobby(kind, hostUid, socket) {
+  const key = lobbyMapKey(kind, hostUid);
+  let lobby = onlineLobbies.get(key);
   if (!lobby) {
     const host = await getLobbyMemberWithSocket(hostUid, null, socket);
     lobby = {
       hostId: hostUid,
+      kind,
       members: [host]
     };
-    arenaLobbies.set(hostUid, lobby);
+    onlineLobbies.set(key, lobby);
     return lobby;
   }
   // Mantém a aba do dono do lobby conectada
@@ -1067,29 +1238,33 @@ async function ensureArenaLobby(hostUid, socket) {
   return lobby;
 }
 
-// Remove a conexão da fila da arena
-function removeFromArenaQueue(ws) {
-  const index = arenaQueue.findIndex(entry => entry.ws === ws);
+// Remove a conexão da fila de busca do lobby
+function removeFromLobbyQueue(kind, ws) {
+  const queue = lobbyQueues[kind];
+  if (!queue) return false;
+  const index = queue.findIndex(entry => entry.ws === ws);
   if (index === -1) return false;
-  arenaQueue.splice(index, 1);
+  queue.splice(index, 1);
   return true;
 }
 
 // Remove da fila as entradas de um usuário (e do lobby dele, se for o dono)
-function removeArenaQueueForUser(uid) {
+function removeLobbyQueueForUser(kind, uid) {
   if (!uid) return;
+  const queue = lobbyQueues[kind];
+  if (!queue) return;
   const ids = new Set([uid]);
-  const lobby = findArenaLobbyForUser(uid);
+  const lobby = findLobbyForUser(uid, kind);
   if (lobby && lobby.hostId === uid) {
     lobby.members.forEach(member => ids.add(member.id));
   }
-  for (let i = arenaQueue.length - 1; i >= 0; i--) {
-    if (ids.has(arenaQueue[i].uid)) arenaQueue.splice(i, 1);
+  for (let i = queue.length - 1; i >= 0; i--) {
+    if (ids.has(queue[i].uid)) queue.splice(i, 1);
   }
 }
 
-// Descobre as conexões abertas de cada jogador do lobby da arena
-function resolveArenaPlayers(members, fallbackUid, fallbackWs) {
+// Descobre as conexões abertas de cada jogador do lobby
+function resolveLobbyPlayers(members, fallbackUid, fallbackWs) {
   const players = [];
   members.forEach(member => {
     let socket = null;
@@ -1109,24 +1284,28 @@ function resolveArenaPlayers(members, fallbackUid, fallbackWs) {
   return players;
 }
 
-// Junta quatro jogadores da fila e inicia a partida (cada um por si)
-async function tryArenaMatchmaking() {
+// Junta os jogadores da fila e inicia a partida do lobby
+async function tryLobbyMatchmaking(kind) {
+  const config = lobbyKindConfig(kind);
+  const queue = lobbyQueues[kind];
+  if (!queue) return;
+
   // Resolve quem está online em cada entrada da fila
   const valid = [];
-  arenaQueue.forEach(entry => {
+  queue.forEach(entry => {
     const socket = (entry.ws && entry.ws.readyState === 1) ? entry.ws : findUserSocket(entry.uid);
     if (!socket) return; // o jogador ficou offline
     valid.push({ ...entry, ws: socket });
   });
 
-  arenaQueue.length = 0;
-  valid.forEach(entry => arenaQueue.push(entry));
+  queue.length = 0;
+  valid.forEach(entry => queue.push(entry));
 
-  while (arenaQueue.length >= ARENA_MATCH_SIZE) {
+  while (queue.length >= config.matchSize) {
     const seats = [];
     const usedIndexes = [];
-    for (let i = 0; i < arenaQueue.length && seats.length < ARENA_MATCH_SIZE; i++) {
-      const entry = arenaQueue[i];
+    for (let i = 0; i < queue.length && seats.length < config.matchSize; i++) {
+      const entry = queue[i];
       seats.push({
         id: entry.uid,
         uid: entry.uid,
@@ -1137,16 +1316,21 @@ async function tryArenaMatchmaking() {
       });
       usedIndexes.push(i);
     }
-    if (seats.length < ARENA_MATCH_SIZE) break;
+    if (seats.length < config.matchSize) break;
 
     // Tira da fila os jogadores que entraram na partida
-    usedIndexes.reverse().forEach(index => arenaQueue.splice(index, 1));
-    await startArenaMatch(seats);
+    usedIndexes.reverse().forEach(index => queue.splice(index, 1));
+    if (kind === 'normal') {
+      // Partida normal: 1 vs 1 com as cores resolvidas pelo perfil
+      await startQuickMatchRoom(seats[0], seats[1], 'quick');
+    } else {
+      await startArenaMatch(seats);
+    }
   }
 }
 
 async function startArenaMatch(seats) {
-  if (!seats || seats.length < ARENA_MATCH_SIZE) return;
+  if (!seats || seats.length < LOBBY_KINDS.arena.matchSize) return;
 
   let code;
   do {
@@ -1396,6 +1580,31 @@ async function handleSession(request, response) {
     return;
   }
   sendJson(response, 200, { authenticated: true, user });
+}
+
+/* -------------------------------------------------------------
+   LIGA - CLASSIFICAÇÃO DO JOGADOR
+   Devolve o tier (e os pontos) do jogador logado. A Liga é
+   exclusiva para contas Premium: as contas gratuitas não têm tier.
+   ------------------------------------------------------------- */
+async function handleLeagueStanding(request, response) {
+  const user = await getSessionUser(request);
+  if (!user) {
+    sendJson(response, 401, { error: 'Faça login com o Google para ver a sua classificação.' });
+    return;
+  }
+
+  const premium = await isPremiumPlayer(user.id);
+  if (!premium) {
+    sendJson(response, 200, { premium: false, standing: null });
+    return;
+  }
+
+  const standing = await getLeagueStandingFor(user.id);
+  sendJson(response, 200, {
+    premium: true,
+    standing: standing ? league.describeStanding(standing) : null
+  });
 }
 
 /* -------------------------------------------------------------
@@ -2185,6 +2394,12 @@ async function handleRequest(request, response) {
       return;
     }
 
+    // CLASSIFICAÇÃO DA LIGA (tier do jogador)
+    if (request.method === 'GET' && urlPath === '/api/league/standing') {
+      await handleLeagueStanding(request, response);
+      return;
+    }
+
     if (request.method === 'POST' && urlPath === '/api/premium/checkout') {
       await handlePremiumCheckout(request, response);
       return;
@@ -2337,7 +2552,7 @@ async function main() {
           broadcastUserStatus(uid, true);
           // O dono do lobby voltou: não encerra mais o lobby
           clearDuplaLobbyCleanup(uid);
-          clearArenaLobbyCleanup(uid);
+          Object.keys(LOBBY_KINDS).forEach(kind => clearLobbyCleanup(kind, uid));
           // Reenvia o lobby de dupla atual (se o usuário estiver em um)
           // e reanexa a aba que voltou a estar online
           for (const lobby of duplaLobbies.values()) {
@@ -2348,39 +2563,16 @@ async function main() {
             await broadcastDuplaLobby(lobby);
           }
           await sendDuplaLobbyToUser(uid);
-          // Reenvia o lobby da arena atual (se o usuário estiver em um)
-          for (const lobby of arenaLobbies.values()) {
+          // Reenvia o lobby atual (se o usuário estiver em um)
+          for (const lobby of onlineLobbies.values()) {
             const member = lobby.members.find(entry => entry.id === uid);
             if (!member) continue;
             if (!member.ws || member.ws.readyState !== 1) member.ws = ws;
-            await broadcastArenaLobby(lobby);
+            await broadcastLobby(lobby);
           }
-          await sendArenaLobbyToUser(uid);
+          await sendLobbyToUser(uid);
         }
         sendTo(ws, { type: 'ack', original: 'identify' });
-        return;
-      }
-
-      /* --- MATCHMAKING (Jogo Rápido) ------------------------------------ */
-      if (data.type === 'quick_match') {
-        const uid = data.uid || null;
-        const name = String(data.name || 'Jogador').slice(0, 24);
-        conn.userId = uid;
-        conn.name = name;
-
-        // A mesma conta não pode ficar na fila do Jogo Rápido duas vezes
-        if (uid && matchmakingQueue.some(entry => entry.uid === uid && queueMode(entry) === 'quick')) {
-          sendTo(ws, { type: 'error', error: 'Esta conta já está na fila de partida.' });
-          return;
-        }
-
-        removeFromQueue(ws);
-        // Sai de qualquer sala anterior (o oponente que fica é notificado)
-        detachFromRoom(ws);
-
-        matchmakingQueue.push({ ws, uid, name, mode: 'quick' });
-        sendTo(ws, { type: 'queued', mode: 'quick' });
-        await tryMatchmaking();
         return;
       }
 
@@ -2415,8 +2607,18 @@ async function main() {
         // Sai de qualquer sala anterior (o oponente que fica é notificado)
         detachFromRoom(ws);
 
-        matchmakingQueue.push({ ws, uid, name, mode: 'liga' });
+        // A classificação define o tier (e a situação da melhor de 3):
+        // a fila da Liga só pareia jogadores do mesmo tier.
+        const standing = await getLeagueStandingFor(uid);
+        const tier = standing ? league.normalizeTier(standing.tier) : league.TIERS[0];
+        const pending = standing ? Boolean(standing.promotionPending) : false;
+
+        matchmakingQueue.push({ ws, uid, name, mode: 'liga', tier, pending });
         sendTo(ws, { type: 'queued', mode: 'liga' });
+        // O cliente mostra o tier, os pontos e a melhor de 3 na tela da Liga
+        if (standing) {
+          sendTo(ws, { type: 'league_standing', standing: league.describeStanding(standing) });
+        }
         await tryMatchmaking();
         return;
       }
@@ -2813,29 +3015,32 @@ async function main() {
         return;
       }
 
-      /* --- LOBBY DE ARENA ONLINE ---------------------------------------- */
-      if (data.type === 'arena_lobby_request') {
-        await sendArenaLobbyToUser(conn.userId);
+      /* --- LOBBIES ONLINE (arena e partida normal) ---------------------- */
+      if (data.type === 'lobby_request') {
+        await sendLobbyToUser(conn.userId, normalizeLobbyKind(data.kind));
         return;
       }
 
-      if (data.type === 'arena_invite') {
+      if (data.type === 'lobby_invite') {
+        const kind = normalizeLobbyKind(data.kind);
+        const config = lobbyKindConfig(kind);
         const hostUid = conn.userId;
         const targetId = String(data.targetId || '').trim();
 
         if (!hostUid) {
-          sendTo(ws, { type: 'arena_invite_result', status: 'error', message: 'Entre na sua conta para convidar amigos.' });
+          sendTo(ws, { type: 'lobby_invite_result', kind, status: 'error', message: 'Entre na sua conta para convidar amigos.' });
           return;
         }
         if (!targetId || targetId === hostUid) {
-          sendTo(ws, { type: 'arena_invite_result', status: 'error', message: 'Convite inválido.' });
+          sendTo(ws, { type: 'lobby_invite_result', kind, status: 'error', message: 'Convite inválido.' });
           return;
         }
 
         // O convidado precisa estar online para receber o convite
         if (!getUserSockets(targetId).length) {
           sendTo(ws, {
-            type: 'arena_invite_result',
+            type: 'lobby_invite_result',
+            kind,
             status: 'offline',
             targetId,
             message: 'Não foi possível enviar convite: o amigo está offline.'
@@ -2843,11 +3048,12 @@ async function main() {
           return;
         }
 
-        // Só amigos podem ser convidados para a arena
+        // Só amigos podem ser convidados para o lobby
         const relation = await db.getRelation(hostUid, targetId);
         if (relation !== 'friend') {
           sendTo(ws, {
-            type: 'arena_invite_result',
+            type: 'lobby_invite_result',
+            kind,
             status: 'error',
             targetId,
             message: 'Você só pode convidar amigos.'
@@ -2855,39 +3061,43 @@ async function main() {
           return;
         }
 
-        // O lobby da arena aceita no máximo 4 jogadores
-        const lobby = findArenaLobbyForUser(hostUid);
-        if (lobby && lobby.members.length >= ARENA_LOBBY_MAX_MEMBERS) {
+        // O lobby aceita no máximo maxMembers jogadores
+        const lobby = findLobbyForUser(hostUid, kind);
+        if (lobby && lobby.members.length >= config.maxMembers) {
           sendTo(ws, {
-            type: 'arena_invite_result',
+            type: 'lobby_invite_result',
+            kind,
             status: 'error',
             targetId,
-            message: 'O lobby já está completo (4/4).'
+            message: `O lobby já está completo (${config.maxMembers}/${config.maxMembers}).`
           });
           return;
         }
 
         const inviteId = crypto.randomUUID();
-        arenaPendingInvites.set(inviteId, {
+        lobbyPendingInvites.set(inviteId, {
           id: inviteId,
           fromUid: hostUid,
           toUid: targetId,
+          kind,
           createdAt: Date.now()
         });
 
         const hostProfile = await getLobbyMemberProfile(hostUid, conn.name);
         sendToUser(targetId, {
-          type: 'arena_invite',
+          type: 'lobby_invite',
+          kind,
           inviteId,
           fromId: hostUid,
           fromName: hostProfile.name,
           fromPicture: hostProfile.picture,
-          matchType: 'arena',
-          matchTypeLabel: 'ARENA • Cada um por si'
+          matchType: kind,
+          matchTypeLabel: config.matchTypeLabel
         });
 
         sendTo(ws, {
-          type: 'arena_invite_result',
+          type: 'lobby_invite_result',
+          kind,
           status: 'sent',
           targetId,
           inviteId,
@@ -2896,18 +3106,22 @@ async function main() {
         return;
       }
 
-      if (data.type === 'arena_invite_response') {
+      if (data.type === 'lobby_invite_response') {
         const inviteId = String(data.inviteId || '');
-        const invite = arenaPendingInvites.get(inviteId);
+        const invite = lobbyPendingInvites.get(inviteId);
         if (!invite || invite.toUid !== conn.userId) {
-          sendTo(ws, { type: 'arena_invite_result', status: 'error', message: 'Convite inválido ou expirado.' });
+          sendTo(ws, { type: 'lobby_invite_result', kind: normalizeLobbyKind(data.kind), status: 'error', message: 'Convite inválido ou expirado.' });
           return;
         }
-        arenaPendingInvites.delete(inviteId);
+        lobbyPendingInvites.delete(inviteId);
+
+        const kind = invite.kind;
+        const config = lobbyKindConfig(kind);
 
         if (!data.accept) {
           sendToUser(invite.fromUid, {
-            type: 'arena_invite_result',
+            type: 'lobby_invite_result',
+            kind,
             status: 'declined',
             targetId: invite.toUid,
             message: 'O convite foi recusado.'
@@ -2915,9 +3129,14 @@ async function main() {
           return;
         }
 
-        const lobby = await ensureArenaLobby(invite.fromUid, findUserSocket(invite.fromUid));
-        if (!lobby.members.some(member => member.id === invite.toUid) && lobby.members.length >= ARENA_LOBBY_MAX_MEMBERS) {
-          sendTo(ws, { type: 'arena_invite_result', status: 'error', message: 'O lobby já está completo (4/4).' });
+        const lobby = await ensureLobby(kind, invite.fromUid, findUserSocket(invite.fromUid));
+        if (!lobby.members.some(member => member.id === invite.toUid) && lobby.members.length >= config.maxMembers) {
+          sendTo(ws, {
+            type: 'lobby_invite_result',
+            kind,
+            status: 'error',
+            message: `O lobby já está completo (${config.maxMembers}/${config.maxMembers}).`
+          });
           return;
         }
 
@@ -2930,49 +3149,58 @@ async function main() {
           if (existing) existing.ws = ws;
         }
 
-        await broadcastArenaLobby(lobby);
+        await broadcastLobby(lobby);
         // Avisa quem convidou que o convite foi aceito
         sendToUser(invite.fromUid, {
-          type: 'arena_invite_result',
+          type: 'lobby_invite_result',
+          kind,
           status: 'accepted',
           targetId: invite.toUid,
           message: 'Convite aceito! O amigo entrou no lobby.'
         });
         sendTo(ws, {
-          type: 'arena_invite_result',
+          type: 'lobby_invite_result',
+          kind,
           status: 'joined',
-          message: 'Você entrou no lobby da arena.'
+          message: `Você entrou no lobby de ${config.label}.`
         });
         return;
       }
 
-      if (data.type === 'arena_lobby_remove') {
-        const lobby = findArenaLobbyForUser(conn.userId);
+      if (data.type === 'lobby_remove') {
+        const kind = normalizeLobbyKind(data.kind);
+        const lobby = findLobbyForUser(conn.userId, kind);
         if (!lobby || lobby.hostId !== conn.userId) return;
         const memberId = String(data.memberId || '');
         if (memberId === lobby.hostId) return;
         lobby.members = lobby.members.filter(member => member.id !== memberId);
-        // O jogador removido também sai da fila da arena
-        removeArenaQueueForUser(memberId);
-        await broadcastArenaLobby(lobby);
-        sendToUser(memberId, { type: 'arena_lobby_left', message: 'Você foi removido da arena.' });
+        // O jogador removido também sai da fila de busca
+        removeLobbyQueueForUser(kind, memberId);
+        await broadcastLobby(lobby);
+        sendToUser(memberId, {
+          type: 'lobby_left',
+          kind,
+          message: `Você foi removido do lobby de ${lobbyKindConfig(kind).label}.`
+        });
         return;
       }
 
-      if (data.type === 'arena_lobby_leave') {
+      if (data.type === 'lobby_leave') {
+        const kind = normalizeLobbyKind(data.kind);
         const uid = conn.userId;
-        const lobby = findArenaLobbyForUser(uid);
+        const lobby = findLobbyForUser(uid, kind);
         if (!lobby) return;
-        // Sai da fila da arena
-        removeArenaQueueForUser(uid);
+        // Sai da fila de busca
+        removeLobbyQueueForUser(kind, uid);
         if (lobby.hostId === uid) {
           // O criador saiu: o lobby é encerrado
-          arenaLobbies.delete(uid);
-          clearArenaLobbyCleanup(uid);
+          onlineLobbies.delete(lobbyMapKey(kind, uid));
+          clearLobbyCleanup(kind, uid);
           lobby.members.forEach(member => {
             if (member.id !== uid) {
               sendToUser(member.id, {
-                type: 'arena_lobby_left',
+                type: 'lobby_left',
+                kind,
                 message: 'O criador do lobby saiu. O lobby foi encerrado.'
               });
             }
@@ -2981,36 +3209,42 @@ async function main() {
         }
         // O convidado saiu: o lobby continua com o criador
         lobby.members = lobby.members.filter(member => member.id !== uid);
-        await broadcastArenaLobby(lobby);
-        sendToUser(uid, { type: 'arena_lobby_left', message: 'Você saiu do lobby da arena.' });
+        await broadcastLobby(lobby);
+        sendToUser(uid, {
+          type: 'lobby_left',
+          kind,
+          message: `Você saiu do lobby de ${lobbyKindConfig(kind).label}.`
+        });
         return;
       }
 
-      if (data.type === 'arena_queue') {
+      if (data.type === 'lobby_queue') {
+        const kind = normalizeLobbyKind(data.kind);
         const uid = conn.userId;
         if (!uid) {
-          sendTo(ws, { type: 'arena_queue_error', error: 'Entre na sua conta para buscar partida.' });
+          sendTo(ws, { type: 'lobby_queue_error', kind, error: 'Entre na sua conta para buscar partida.' });
           return;
         }
 
-        // Somente o criador do lobby pode colocar a arena na fila
-        const existingLobby = findArenaLobbyForUser(uid);
+        // Somente o criador do lobby pode colocar o lobby na fila
+        const existingLobby = findLobbyForUser(uid, kind);
         if (existingLobby && existingLobby.hostId !== uid) {
-          sendTo(ws, { type: 'arena_queue_error', error: 'Apenas o criador do lobby pode buscar partida.' });
+          sendTo(ws, { type: 'lobby_queue_error', kind, error: 'Apenas o criador do lobby pode buscar partida.' });
           return;
         }
 
-        const lobby = existingLobby || await ensureArenaLobby(uid, ws);
-        const players = resolveArenaPlayers(lobby.members, uid, ws);
+        const lobby = existingLobby || await ensureLobby(kind, uid, ws);
+        const players = resolveLobbyPlayers(lobby.members, uid, ws);
         if (!players.length) {
-          sendTo(ws, { type: 'arena_queue_error', error: 'Não foi possível entrar na fila.' });
+          sendTo(ws, { type: 'lobby_queue_error', kind, error: 'Não foi possível entrar na fila.' });
           return;
         }
 
-        // Cada jogador do lobby entra na fila por si (a partida junta 4)
-        removeArenaQueueForUser(uid);
+        // Cada jogador do lobby entra na fila por si
+        const queue = lobbyQueues[kind];
+        removeLobbyQueueForUser(kind, uid);
         players.forEach(player => {
-          arenaQueue.push({
+          queue.push({
             ws: player.ws,
             uid: player.id,
             name: player.name,
@@ -3021,7 +3255,8 @@ async function main() {
         // Todos os jogadores do lobby (criador e amigos) entram no modo de
         // busca: a interface fica bloqueada e só o cancelamento continua ativo
         const queuedPayload = {
-          type: 'arena_queued',
+          type: 'lobby_queued',
+          kind,
           size: players.length
         };
         sendToUser(lobby.hostId, queuedPayload);
@@ -3029,28 +3264,30 @@ async function main() {
           if (member.id !== lobby.hostId) sendToUser(member.id, queuedPayload);
         });
 
-        await tryArenaMatchmaking();
+        await tryLobbyMatchmaking(kind);
         return;
       }
 
-      if (data.type === 'arena_leave_queue') {
+      if (data.type === 'lobby_leave_queue') {
+        const kind = normalizeLobbyKind(data.kind);
         const uid = conn.userId;
 
         // Cancelar a busca encerra a fila do lobby inteiro e avisa
         // todos os jogadores presentes para liberarem a interface
-        const lobby = findArenaLobbyForUser(uid);
+        const lobby = findLobbyForUser(uid, kind);
+        const queue = lobbyQueues[kind] || [];
         let canceled = false;
         if (lobby) {
           const ids = new Set(lobby.members.map(member => member.id));
-          for (let i = arenaQueue.length - 1; i >= 0; i--) {
-            if (ids.has(arenaQueue[i].uid)) {
-              arenaQueue.splice(i, 1);
+          for (let i = queue.length - 1; i >= 0; i--) {
+            if (ids.has(queue[i].uid)) {
+              queue.splice(i, 1);
               canceled = true;
             }
           }
         }
-        removeArenaQueueForUser(uid);
-        if (canceled) notifyArenaQueueCanceled(lobby);
+        removeLobbyQueueForUser(kind, uid);
+        if (canceled) notifyLobbyQueueCanceled(lobby);
         return;
       }
 
@@ -3112,7 +3349,7 @@ async function main() {
       // Sai da fila e da sala; quem ficou é notificado
       removeFromQueue(ws);
       removeFromDuplaQueue(ws);
-      removeFromArenaQueue(ws);
+      Object.keys(lobbyQueues).forEach(kind => removeFromLobbyQueue(kind, ws));
       detachFromRoom(ws);
       connections.delete(ws);
       if (userId) {
@@ -3141,26 +3378,28 @@ async function main() {
           broadcastDuplaLobby(lobby).catch(() => {});
         });
 
-        // Mesmo tratamento para o lobby da arena
-        const ownedArenaLobby = arenaLobbies.get(userId);
-        if (ownedArenaLobby) {
-          const host = ownedArenaLobby.members.find(member => member.id === userId);
-          if (host) host.ws = null;
-          ownedArenaLobby.members.forEach(member => {
-            if (member.id !== userId) {
-              sendToUser(member.id, {
-                type: 'arena_lobby_left',
-                message: 'O criador do lobby está offline. O lobby será encerrado se ele não voltar.'
-              });
-            }
-          });
-          scheduleArenaLobbyCleanup(userId);
+        // Mesmo tratamento para os lobbies online (arena e partida normal)
+        for (const lobby of onlineLobbies.values()) {
+          const host = lobby.members.find(member => member.id === userId);
+          if (host && lobby.hostId === userId) {
+            host.ws = null;
+            lobby.members.forEach(member => {
+              if (member.id !== userId) {
+                sendToUser(member.id, {
+                  type: 'lobby_left',
+                  kind: lobby.kind,
+                  message: 'O criador do lobby está offline. O lobby será encerrado se ele não voltar.'
+                });
+              }
+            });
+            scheduleLobbyCleanup(lobby.kind, userId);
+          }
         }
-        arenaLobbies.forEach(lobby => {
+        onlineLobbies.forEach(lobby => {
           const member = lobby.members.find(entry => entry.id === userId);
           if (!member) return;
           member.ws = null;
-          broadcastArenaLobby(lobby).catch(() => {});
+          broadcastLobby(lobby).catch(() => {});
         });
 
         untrackUserConnection(ws, userId);

@@ -14,6 +14,7 @@ const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
 const MATCHES_FILE = path.join(DATA_DIR, 'matches.json');
 const PAYMENTS_FILE = path.join(DATA_DIR, 'payments.json');
+const LEAGUE_FILE = path.join(DATA_DIR, 'league.json');
 
 let pool = null;
 let dbAvailable = false; // true quando o banco externo respondeu bem alguma vez
@@ -98,10 +99,45 @@ async function readJsonFile(filePath) {
   }
 }
 
+// Fila de escrita por arquivo: garante que duas gravações simultâneas
+// (por exemplo, os dois jogadores de uma partida da Liga) não se sobreponham.
+const jsonWriteQueues = new Map();
+
+// Escrita atômica: usa um arquivo temporário exclusivo e renomeia por último
+async function writeJsonFileNow(filePath, data) {
+  const temporary = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    await fs.writeFile(temporary, JSON.stringify(data, null, 2), 'utf8');
+    await fs.rename(temporary, filePath);
+  } finally {
+    try {
+      await fs.unlink(temporary);
+    } catch (error) {
+      // o arquivo temporário já foi renomeado: nada a fazer
+    }
+  }
+}
+
 async function writeJsonFile(filePath, data) {
-  const temporary = `${filePath}.tmp`;
-  await fs.writeFile(temporary, JSON.stringify(data, null, 2), 'utf8');
-  await fs.rename(temporary, filePath);
+  const previous = jsonWriteQueues.get(filePath) || Promise.resolve();
+  const run = previous.then(() => writeJsonFileNow(filePath, data));
+  // A fila continua viva mesmo se uma escrita falhar
+  jsonWriteQueues.set(filePath, run.catch(() => {}));
+  return run;
+}
+
+// Lê, altera e grava um arquivo JSON em sequência (sem perder alterações
+// concorrentes: a leitura e a gravação ficam na mesma fila de escrita).
+async function updateJsonFile(filePath, updater) {
+  const previous = jsonWriteQueues.get(filePath) || Promise.resolve();
+  const run = previous.then(async () => {
+    const current = await readJsonFile(filePath);
+    const next = await updater(current);
+    await writeJsonFileNow(filePath, next);
+    return next;
+  });
+  jsonWriteQueues.set(filePath, run.catch(() => {}));
+  return run;
 }
 
 function readJsonFileSync(filePath) {
@@ -229,6 +265,21 @@ async function ensureDatabaseSchema() {
       );
     `);
 
+    // Classificação da Liga: tier, pontos e situação da melhor de 3
+    await createTable('league_standings', `
+      CREATE TABLE IF NOT EXISTS league_standings (
+        user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        tier TEXT NOT NULL DEFAULT 'F',
+        points INTEGER NOT NULL DEFAULT 0,
+        wins INTEGER NOT NULL DEFAULT 0,
+        losses INTEGER NOT NULL DEFAULT 0,
+        series_wins INTEGER NOT NULL DEFAULT 0,
+        series_losses INTEGER NOT NULL DEFAULT 0,
+        promotion_pending BOOLEAN DEFAULT FALSE,
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
     await createTable('friend_requests', `
       CREATE TABLE IF NOT EXISTS friend_requests (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -305,6 +356,7 @@ async function ensureDataFiles() {
   if (!fss.existsSync(SESSIONS_FILE)) await fs.writeFile(SESSIONS_FILE, JSON.stringify({}, null, 2), 'utf8');
   if (!fss.existsSync(MATCHES_FILE)) await fs.writeFile(MATCHES_FILE, JSON.stringify({}, null, 2), 'utf8');
   if (!fss.existsSync(PAYMENTS_FILE)) await fs.writeFile(PAYMENTS_FILE, JSON.stringify({}, null, 2), 'utf8');
+  if (!fss.existsSync(LEAGUE_FILE)) await fs.writeFile(LEAGUE_FILE, JSON.stringify({}, null, 2), 'utf8');
 }
 
 /* ------------------------------------------------------------------
@@ -1024,6 +1076,162 @@ async function listMatchRecordsForUser(targetUserId) {
 }
 
 /* ------------------------------------------------------------------
+   Classificação da Liga (tiers e pontos)
+   ------------------------------------------------------------------ */
+function normalizeLeagueStanding(row) {
+  if (!row) return null;
+  return {
+    userId: row.user_id || row.userId,
+    tier: row.tier || 'F',
+    points: Number(row.points) || 0,
+    wins: Number(row.wins) || 0,
+    losses: Number(row.losses) || 0,
+    seriesWins: Number(row.series_wins !== undefined ? row.series_wins : row.seriesWins) || 0,
+    seriesLosses: Number(row.series_losses !== undefined ? row.series_losses : row.seriesLosses) || 0,
+    promotionPending: row.promotion_pending === true || row.promotionPending === true,
+    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString()
+  };
+}
+
+// Classificação do jogador (null quando ele ainda não jogou a Liga)
+async function getLeagueStanding(userId) {
+  if (!userId) return null;
+  if (useDatabase()) {
+    try {
+      const p = getPool();
+      const result = await p.query(
+        `SELECT user_id, tier, points, wins, losses, series_wins, series_losses, promotion_pending, updated_at
+         FROM league_standings WHERE user_id = $1`,
+        [userId]
+      );
+      return result.rows.length ? normalizeLeagueStanding(result.rows[0]) : null;
+    } catch (error) {
+      throw recordDbError(error, "getLeagueStanding");
+    }
+  }
+  const league = await readJsonFile(LEAGUE_FILE);
+  return normalizeLeagueStanding(league[userId]);
+}
+
+// Cria a classificação do jogador no tier F (todos começam do zero)
+async function ensureLeagueStanding(userId) {
+  if (!userId) return null;
+  const existing = await getLeagueStanding(userId);
+  if (existing) return existing;
+
+  const fresh = {
+    userId,
+    tier: 'F',
+    points: 0,
+    wins: 0,
+    losses: 0,
+    seriesWins: 0,
+    seriesLosses: 0,
+    promotionPending: false,
+    updatedAt: new Date().toISOString()
+  };
+
+  if (useDatabase()) {
+    try {
+      const p = getPool();
+      const result = await p.query(
+        `INSERT INTO league_standings (user_id, tier, points, wins, losses, series_wins, series_losses, promotion_pending, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+         ON CONFLICT (user_id) DO UPDATE SET updated_at = NOW()
+         RETURNING user_id, tier, points, wins, losses, series_wins, series_losses, promotion_pending, updated_at`,
+        [fresh.userId, fresh.tier, fresh.points, fresh.wins, fresh.losses, fresh.seriesWins, fresh.seriesLosses, fresh.promotionPending]
+      );
+      return result.rows.length ? normalizeLeagueStanding(result.rows[0]) : fresh;
+    } catch (error) {
+      throw recordDbError(error, "ensureLeagueStanding");
+    }
+  }
+
+  await updateJsonFile(LEAGUE_FILE, (league) => {
+    league[fresh.userId] = fresh;
+    return league;
+  });
+  return fresh;
+}
+
+// Grava a classificação atualizada do jogador
+async function saveLeagueStanding(userId, standing) {
+  if (!userId || !standing) return null;
+  const row = {
+    userId,
+    tier: standing.tier || 'F',
+    points: Number(standing.points) || 0,
+    wins: Number(standing.wins) || 0,
+    losses: Number(standing.losses) || 0,
+    seriesWins: Number(standing.seriesWins) || 0,
+    seriesLosses: Number(standing.seriesLosses) || 0,
+    promotionPending: Boolean(standing.promotionPending),
+    updatedAt: new Date().toISOString()
+  };
+
+  if (useDatabase()) {
+    try {
+      const p = getPool();
+      const result = await p.query(
+        `INSERT INTO league_standings (user_id, tier, points, wins, losses, series_wins, series_losses, promotion_pending, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+         ON CONFLICT (user_id) DO UPDATE SET
+           tier = EXCLUDED.tier,
+           points = EXCLUDED.points,
+           wins = EXCLUDED.wins,
+           losses = EXCLUDED.losses,
+           series_wins = EXCLUDED.series_wins,
+           series_losses = EXCLUDED.series_losses,
+           promotion_pending = EXCLUDED.promotion_pending,
+           updated_at = NOW()
+         RETURNING user_id, tier, points, wins, losses, series_wins, series_losses, promotion_pending, updated_at`,
+        [row.userId, row.tier, row.points, row.wins, row.losses, row.seriesWins, row.seriesLosses, row.promotionPending]
+      );
+      return result.rows.length ? normalizeLeagueStanding(result.rows[0]) : row;
+    } catch (error) {
+      throw recordDbError(error, "saveLeagueStanding");
+    }
+  }
+
+  await updateJsonFile(LEAGUE_FILE, (league) => {
+    league[row.userId] = row;
+    return league;
+  });
+  return row;
+}
+
+// Lista a classificação de um tier (usada no ranking do tier S)
+async function listLeagueStandingsByTier(tier) {
+  const wanted = String(tier || 'F').toUpperCase();
+  if (useDatabase()) {
+    try {
+      const p = getPool();
+      const result = await p.query(
+        `SELECT user_id, tier, points, wins, losses, series_wins, series_losses, promotion_pending, updated_at
+         FROM league_standings WHERE UPPER(tier) = $1
+         ORDER BY points DESC, updated_at ASC`,
+        [wanted]
+      );
+      return result.rows.map(normalizeLeagueStanding);
+    } catch (error) {
+      throw recordDbError(error, "listLeagueStandingsByTier");
+    }
+  }
+  const league = await readJsonFile(LEAGUE_FILE);
+  return Object.keys(league)
+    .map(key => normalizeLeagueStanding(league[key]))
+    .filter(row => row && String(row.tier).toUpperCase() === wanted)
+    .sort((a, b) => (b.points - a.points) || String(a.updatedAt).localeCompare(String(b.updatedAt)));
+}
+
+// Posição do jogador dentro do tier (1 = melhor pontuação)
+async function getLeagueTierRank(userId, tier) {
+  const list = await listLeagueStandingsByTier(tier);
+  const index = list.findIndex(row => row.userId === userId);
+  return index === -1 ? null : index + 1;
+}
+
+/* ------------------------------------------------------------------
    Amizades
 ------------------------------------------------------------------ */
 async function getFriends(userId) {
@@ -1356,6 +1564,11 @@ module.exports = {
   createMatchRecord,
   listMatchRecords,
   listMatchRecordsForUser,
+  getLeagueStanding,
+  ensureLeagueStanding,
+  saveLeagueStanding,
+  listLeagueStandingsByTier,
+  getLeagueTierRank,
   getFriends,
   getSentRequests,
   getReceivedRequests,

@@ -85,6 +85,8 @@ function updateAccountUI(user) {
     dropdownAccountName.textContent = 'Conta';
     dropdownAccountEmail.textContent = 'Não conectado';
     updatePremiumBadges(null);
+    // Sem login não existe tier de Liga para exibir
+    if (typeof renderProfileLeagueTier === 'function') renderProfileLeagueTier(null);
     // Sem login não existe botão de conta no canto superior direito
     setAccountAreaVisible(false);
     // Sincroniza a tela inicial do jogo com o estado "desconectado".
@@ -102,6 +104,10 @@ function updateAccountUI(user) {
   updatePremiumBadges(user);
   // Com login o botão de conta volta a aparecer no canto superior direito
   setAccountAreaVisible(true);
+  // Tier da Liga (apenas para contas Premium)
+  if (isPremiumAccount(user) && typeof loadLeagueStanding === 'function') {
+    loadLeagueStanding();
+  }
   // Sincroniza a tela inicial do jogo (esconde o login Google e habilita
   // o botão Single Player Online) assim que a sessão é carregada.
   if (typeof syncSetupLoginUI === 'function') syncSetupLoginUI();
@@ -138,6 +144,8 @@ function openProfileModal() {
   profileStatus.textContent = '';
   // Carrega as cores do perfil (primária, secundária e terciária)
   if (typeof initProfileColors === 'function') initProfileColors(accountUser);
+  // Tier da Liga (apenas para contas Premium)
+  if (typeof loadLeagueStanding === 'function') loadLeagueStanding();
   // Bloco da Conta Premium (preço e benefícios)
   if (typeof loadPremiumInfo === 'function') loadPremiumInfo().then(() => {
     if (typeof renderPremiumBox === 'function') renderPremiumBox(accountUser);

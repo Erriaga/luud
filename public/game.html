@@ -9,8 +9,8 @@
   <link rel="icon" href="/assets/luud.png" type="image/png">
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Google Fonts: Anton (display), Oswald (interface) e Fredoka (texto do jogo) -->
-  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Fredoka:wght@400;600;700&family=Oswald:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Google Fonts: Anton (display), Oswald (interface), Fredoka (texto do jogo) e Bangers (tier da Liga) -->
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Bangers&family=Fredoka:wght@400;600;700&family=Oswald:wght@400;500;600;700&display=swap" rel="stylesheet">
   <!-- Google Identity Services (login Conta Google) -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 
@@ -58,6 +58,18 @@
     label {
       font-family: 'Oswald', 'Arial Narrow', sans-serif !important;
       letter-spacing: 0.05em;
+    }
+
+    /* Tier da Liga: "TIER" na fonte Oswald e a letra na fonte Bangers
+       (a cor de cada tier é aplicada pelo código). */
+    .font-tier {
+      font-family: 'Oswald', 'Arial Narrow', sans-serif !important;
+      letter-spacing: 0.08em;
+    }
+
+    .font-bangers {
+      font-family: 'Bangers', 'Impact', sans-serif !important;
+      letter-spacing: 0.06em;
     }
 
     /* Selo do plano da conta (PREMIUM / FREE):
@@ -697,18 +709,14 @@
         </div>
       </div>
 
-      <!-- VISÃO SOLO ONLINE (Jogo Rápido / Convite / Liga) -->
+      <!-- VISÃO SOLO ONLINE (Jogo Rápido / Liga) -->
       <div id="online-solo-view" class="hidden space-y-5 sm:space-y-6 w-full">
         <div class="space-y-2 text-center">
           <label class="text-xs font-bold uppercase tracking-wider text-slate-300">SOLO ONLINE</label>
-          <div class="grid grid-cols-3 gap-2">
-            <button type="button" onclick="startQuickMatch()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
+          <div class="grid grid-cols-2 gap-2">
+            <button type="button" onclick="showOnlineNormalView()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
               <span class="font-bold text-sm text-slate-100">JOGO RÁPIDO</span>
-              <span class="text-xs text-slate-400">Matchmaking automático</span>
-            </button>
-            <button type="button" onclick="openInviteModal()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
-              <span class="font-bold text-sm text-slate-100">CONVITE</span>
-              <span class="text-xs text-slate-400">Criar/Entrar com código</span>
+              <span class="text-xs text-slate-400">Partida normal</span>
             </button>
             <!-- LIGA: liberada apenas para contas Premium (updateLigaModeState ajusta o estado) -->
             <button type="button" id="liga-mode-btn" onclick="startLigaMatch()" disabled title="A Liga é exclusiva para contas Premium." class="p-3 border-2 border-transparent bg-slate-800 transition flex flex-col items-center cursor-not-allowed">
@@ -858,6 +866,55 @@
         </div>
       </div>
 
+      <!-- VISÃO PARTIDA NORMAL ONLINE (Lobby) -->
+      <!-- Mesma interface do lobby da ARENA, mas o lobby aceita no máximo
+           2 jogadores (o criador e um convidado). -->
+      <div id="online-normal-view" class="hidden space-y-5 sm:space-y-6 w-full">
+        <div class="space-y-4 w-full">
+          <div class="space-y-2 text-center">
+            <label class="text-xs font-bold uppercase tracking-wider text-slate-300">PARTIDA NORMAL</label>
+            <p class="text-xs text-slate-400">1 vs 1</p>
+          </div>
+
+          <!-- Botão convidar amigo (abre lista) -->
+          <div class="bg-slate-800 border border-slate-600 p-4 rounded-lg shadow-md">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Convidar amigo</span>
+              <button type="button" id="normal-invite-btn" onclick="normalOpenFriendList()" title="Convidar amigo" aria-label="Convidar amigo" class="w-6 h-6 flex items-center justify-center bg-slate-600 hover:bg-slate-500 text-white font-bold text-xs disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed">+</button>
+            </div>
+            <div id="normal-friends-list-view" class="hidden space-y-1 max-h-40 overflow-y-auto">
+              <!-- lista de amigos online será mostrada aqui -->
+            </div>
+            <div id="normal-invite-status" class="text-xs text-slate-400 text-center mt-2"></div>
+          </div>
+
+          <!-- Jogadores no lobby da partida normal -->
+          <div class="bg-slate-800 border border-slate-600 p-4 rounded-lg shadow-md">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Lobby</span>
+              <span id="normal-team-size" class="text-xs font-bold text-slate-400">1/2</span>
+            </div>
+            <div id="normal-members" class="mt-2 space-y-2">
+              <!-- membros serão listados aqui -->
+            </div>
+          </div>
+
+          <!-- Cronômetro da busca (aparece quando o criador inicia o matchmaking) -->
+          <div id="normal-match-timer-wrap" class="hidden space-y-1 text-center">
+            <p id="normal-match-timer" class="font-mono text-xl text-amber-400 tracking-widest">00:00</p>
+            <p class="text-[10px] uppercase tracking-wider text-slate-500">Procurando adversários</p>
+          </div>
+
+          <!-- Botão buscar partida (apenas o criador do lobby) -->
+          <button id="normal-search-btn" onclick="normalSearchMatch()" class="w-full py-3 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+            BUSCAR PARTIDA
+          </button>
+          <button type="button" id="normal-back-btn" onclick="backOrLeaveLobby('normal')" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
+            VOLTAR
+          </button>
+        </div>
+      </div>
+
       <!-- MODAL DE CONVITE DE PARTIDA (dupla ou arena) -->
       <div id="match-invite-modal" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4">
         <div class="bg-slate-800 border border-slate-600 p-6 rounded-lg shadow-2xl w-full max-w-sm text-center">
@@ -906,22 +963,8 @@
       </div>
 
       <!-- VISÃO DE MODOS ONLINE (Jogo Rápido / Convite) -->
-      <div id="online-modes-view" class="hidden space-y-5 sm:space-y-6 w-full">
-        <p class="text-xs font-bold uppercase tracking-wider text-slate-400">ONLINE</p>
-        <div class="grid grid-cols-2 gap-3">
-          <button type="button" id="quick-match-btn" onclick="startQuickMatch()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
-            <span class="font-bold text-sm text-slate-100">JOGO RÁPIDO</span>
-            <span class="text-xs text-slate-400">Partida aleatória</span>
-          </button>
-          <button type="button" id="invite-btn" onclick="openInviteModal()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
-            <span class="font-bold text-sm text-slate-100">CONVITE</span>
-            <span class="text-xs text-slate-400">Chame um amigo</span>
-          </button>
-        </div>
-        <button type="button" onclick="hideOnlineModes()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
-          VOLTAR
-        </button>
-      </div>
+      <!-- REMOVIDA: a seleção de modos online acontece em MULTIPLAYER ->
+           SOLO (JOGO RÁPIDO / LIGA). -->
     </div>
   </div>
 
@@ -952,6 +995,16 @@
       </div>
 
       <p id="online-status" class="text-xs text-slate-400 min-h-[16px]"></p>
+
+      <!-- LIGA: tier, pontos e situação da melhor de 3 -->
+      <div id="league-standing-box" class="hidden space-y-2 border border-slate-600 bg-slate-900/60 p-3 text-left">
+        <div class="flex items-center justify-center gap-2">
+          <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Tier</span>
+          <span id="league-standing-tier" class="font-bangers text-2xl leading-none">F</span>
+          <span id="league-standing-points" class="text-xs text-slate-300 ml-2">0 pontos</span>
+        </div>
+        <p id="league-standing-series" class="hidden text-center text-[11px] text-amber-300"></p>
+      </div>
 
       <div id="quick-match-timer-wrap" class="hidden space-y-1">
         <p id="quick-match-timer" class="font-mono text-xl text-amber-400 tracking-widest">00:00</p>
@@ -1322,6 +1375,11 @@
         <div class="min-w-0">
           <p id="profile-account-email" class="text-sm text-slate-300 truncate">conta@example.com</p>
           <p class="text-xs text-slate-500">Conta Google conectada</p>
+          <!-- TIER DA LIGA (apenas para contas Premium) -->
+          <div id="profile-league-tier" class="hidden items-center gap-2 mt-1">
+            <span class="font-tier text-xs font-bold uppercase tracking-wider text-slate-300">Tier</span>
+            <span id="profile-league-tier-value" class="font-bangers text-2xl leading-none">F</span>
+          </div>
         </div>
       </div>
 
@@ -3714,16 +3772,15 @@
 
       // Atualiza o estado do botão Single Player Online baseado na sessão atual
       updateOnlineSingleButton();
-      // Garante que a visão de modos online (Jogo Rápido/Convite) volte ao menu
-      resetOnlineModesUI();
       // Garante que a visão de modo CPU volte ao menu
       hideCpuModeSelection();
       // Garante que a visão de seleção de modo online volte ao menu
       hideOnlineModeView();
-      // Garante que sub-visões online (Solo/Dupla/Arena) estejam escondidas
+      // Garante que sub-visões online (Solo/Dupla/Arena/Partida normal) estejam escondidas
       document.getElementById('online-solo-view')?.classList.add('hidden');
       document.getElementById('online-dupla-view')?.classList.add('hidden');
       document.getElementById('online-arena-view')?.classList.add('hidden');
+      document.getElementById('online-normal-view')?.classList.add('hidden');
     }
 
     function getCurrentPlayer() {
@@ -5067,6 +5124,11 @@
             onlineMatchType = data.mode === 'liga' ? 'liga' : 'quick';
             stopQuickMatchTimer();
             pendingQuickStart = null;
+            // A partida normal saía do lobby: a interface do lobby é fechada
+            if (onlineMatchType === 'quick') {
+              resetLobbyState('normal');
+              hideOnlineNormalView();
+            }
             showMatchFoundNotice();
             document.getElementById('online-code-hint').classList.add('hidden');
             document.getElementById('online-waiting').textContent = 'Preparando a partida...';
@@ -5294,72 +5356,83 @@
           setDuplaStatus(data.message || 'A partida começou em outra aba.', 'text-amber-400');
           break;
 
-        case 'arena_invite':
-          // Convite de partida de arena recebido
-          showMatchInvite(data, 'arena');
+        case 'lobby_invite':
+          // Convite de partida recebido (arena ou partida normal)
+          showMatchInvite(data, data.kind || 'arena');
           break;
 
-        case 'arena_invite_result':
-          // Resposta do amigo ao convite de arena (aceito ou recusado)
+        case 'lobby_invite_result': {
+          // Resposta do amigo ao convite do lobby (aceito ou recusado)
+          const lobbyKind = data.kind || 'arena';
+          const setStatus = lobbyKind === 'normal' ? setNormalStatus : setArenaStatus;
           if (data.status === 'declined') {
-            setArenaStatus('O convite foi recusado.', 'text-amber-400');
+            setStatus('O convite foi recusado.', 'text-amber-400');
           } else if (data.status === 'accepted') {
-            setArenaStatus('Convite aceito! O amigo entrou no lobby.', 'text-emerald-400');
+            setStatus('Convite aceito! O amigo entrou no lobby.', 'text-emerald-400');
           } else if (data.status === 'joined') {
-            setArenaStatus('Você entrou no lobby da arena.', 'text-emerald-400');
-            openArenaLobbyView();
+            setStatus('Você entrou no lobby.', 'text-emerald-400');
+            if (lobbyKind === 'normal') openNormalLobbyView();
+            else openArenaLobbyView();
           } else if (data.status === 'offline') {
-            setArenaStatus('Não foi possível enviar convite: o amigo está offline.', 'text-red-400');
+            setStatus('Não foi possível enviar convite: o amigo está offline.', 'text-red-400');
           } else if (data.message) {
-            setArenaStatus(data.message);
+            setStatus(data.message);
           }
           break;
+        }
 
-        case 'arena_lobby':
-          // Lobby da arena sincronizado pelo servidor
-          applyArenaLobby(data.lobby);
+        case 'lobby':
+          // Lobby sincronizado pelo servidor (arena ou partida normal)
+          applyLobby(data.kind || 'arena', data.lobby);
           break;
 
-        case 'arena_lobby_left':
-          // Saiu do lobby da arena (foi removido ou o criador saiu)
-          arenaLobbyRoster = [];
-          arenaMembers = [];
-          arenaLobbyHostId = null;
-          setArenaStatus(data.message || 'Você saiu do lobby da arena.');
-          logStatus(data.message || 'Você saiu do lobby da arena.');
-          hideOnlineArenaView();
+        case 'lobby_left': {
+          // Saiu do lobby (foi removido ou o criador saiu)
+          const lobbyKind = data.kind || 'arena';
+          resetLobbyState(lobbyKind);
+          const setStatus = lobbyKind === 'normal' ? setNormalStatus : setArenaStatus;
+          setStatus(data.message || 'Você saiu do lobby.');
+          logStatus(data.message || 'Você saiu do lobby.');
+          if (lobbyKind === 'normal') hideOnlineNormalView();
+          else hideOnlineArenaView();
           openSetupModal();
           break;
+        }
 
-        case 'arena_queued':
+        case 'lobby_queued': {
           // O criador do lobby iniciou a busca: todos os jogadores presentes
           // ficam com a interface bloqueada (sem texto de fila e sem VOLTAR)
-          arenaQueued = true;
-          updateArenaLobbyControls();
-          startArenaMatchmakingTimer();
-          setArenaStatus('');
+          const lobbyKind = data.kind || 'arena';
+          lobbyState(lobbyKind).queued = true;
+          updateLobbyControls(lobbyKind);
+          startLobbyTimer(lobbyKind);
+          setLobbyStatus(lobbyKind, '');
           break;
+        }
 
-        case 'arena_queue_canceled':
+        case 'lobby_queue_canceled': {
           // A busca foi cancelada: a interface volta a ficar utilizável
-          arenaQueued = false;
-          stopArenaMatchmakingTimer();
-          updateArenaLobbyControls();
-          setArenaStatus('');
+          const lobbyKind = data.kind || 'arena';
+          lobbyState(lobbyKind).queued = false;
+          stopLobbyTimer(lobbyKind);
+          updateLobbyControls(lobbyKind);
+          setLobbyStatus(lobbyKind, '');
           break;
+        }
 
-        case 'arena_queue_error':
-          arenaQueued = false;
-          stopArenaMatchmakingTimer();
-          updateArenaLobbyControls();
-          setArenaStatus(data.error || 'Não foi possível entrar na fila.', 'text-red-400');
+        case 'lobby_queue_error': {
+          const lobbyKind = data.kind || 'arena';
+          lobbyState(lobbyKind).queued = false;
+          stopLobbyTimer(lobbyKind);
+          updateLobbyControls(lobbyKind);
+          setLobbyStatus(lobbyKind, data.error || 'Não foi possível entrar na fila.', 'text-red-400');
           break;
+        }
 
         case 'arena_match_found':
           // Partida da arena encontrada: os quatro jogadores começam juntos
           // ao fim da contagem regressiva
-          arenaQueued = false;
-          stopArenaMatchmakingTimer();
+          resetLobbyState('arena');
           updateArenaLobbyControls();
           setArenaStatus('Partida encontrada!', 'text-emerald-400');
           pendingQuickStart = null;
@@ -5369,10 +5442,23 @@
 
         case 'arena_match_started_elsewhere':
           // A partida começou em outra aba deste mesmo usuário
-          arenaQueued = false;
-          stopArenaMatchmakingTimer();
+          resetLobbyState('arena');
           updateArenaLobbyControls();
           setArenaStatus(data.message || 'A partida de arena começou em outra aba.', 'text-amber-400');
+          break;
+
+        case 'league_standing':
+          // Classificação do jogador na Liga (ao entrar na fila)
+          leagueStanding = data.standing || null;
+          renderLeagueStandingBox(leagueStanding);
+          renderProfileLeagueTier(leagueStanding);
+          break;
+
+        case 'league_update':
+          // Resultado da partida da Liga: pontos, tier e melhor de 3
+          leagueStanding = data.standing || null;
+          renderLeagueStandingBox(leagueStanding);
+          renderProfileLeagueTier(leagueStanding);
           break;
 
         case 'error':
@@ -5509,32 +5595,10 @@
     }
 
     /* -------------------------------------------------------------
-       MODOS ONLINE (tela inicial): Jogo Rápido e Convite
-       O botão Single Player online abre esta visão com três botões:
-       JOGO RÁPIDO (fila de matchmaking), CONVITE (sala com código)
-       e VOLTAR (menu principal).
+       MODOS ONLINE (tela inicial): MULTIPLAYER -> SOLO
+       A seleção acontece em MULTIPLAYER -> SOLO, com JOGO RÁPIDO
+       (partida normal), LIGA (partida classificatória) e VOLTAR.
     ------------------------------------------------------------- */
-    function showOnlineModes() {
-      const mainView = document.getElementById('setup-main-view');
-      const modesView = document.getElementById('online-modes-view');
-      if (!mainView || !modesView) return;
-      mainView.classList.add('hidden');
-      modesView.classList.remove('hidden');
-    }
-
-    function hideOnlineModes() {
-      // Volta ao menu principal da tela inicial
-      resetOnlineModesUI();
-      gameAudio.playClick();
-    }
-
-    function resetOnlineModesUI() {
-      const mainView = document.getElementById('setup-main-view');
-      const modesView = document.getElementById('online-modes-view');
-      if (mainView) mainView.classList.remove('hidden');
-      if (modesView) modesView.classList.add('hidden');
-    }
-
     function showOnlineModeSelection() {
       // Sem login com o Google o MULTIPLAYER fica desabilitado
       const loggedIn = typeof accountUser !== 'undefined' && Boolean(accountUser);
@@ -5585,6 +5649,95 @@
        O botão só fica disponível para contas Premium: para contas
        gratuitas ele continua desabilitado, com o aviso no title.
     ------------------------------------------------------------- */
+    // Cor oficial de cada tier da Liga
+    const LEAGUE_TIER_COLORS = {
+      F: '#76F8F8',
+      E: '#9DF89D',
+      D: '#BFFF7F',
+      C: '#FED4A0',
+      B: '#FFBE7C',
+      A: '#FFA967',
+      S: '#EC6563',
+      SS: '#EF5350'
+    };
+
+    function leagueTierColor(tier) {
+      const key = String(tier || 'F').toUpperCase();
+      return LEAGUE_TIER_COLORS[key] || LEAGUE_TIER_COLORS.F;
+    }
+
+    // Classificação atual do jogador na Liga (vinda do servidor)
+    let leagueStanding = null;
+
+    // Mostra o tier no perfil (abaixo de "Conta Google conectada")
+    function renderProfileLeagueTier(standing) {
+      const box = document.getElementById('profile-league-tier');
+      const value = document.getElementById('profile-league-tier-value');
+      if (!box || !value) return;
+      const premium = typeof isPremiumAccount === 'function'
+        && isPremiumAccount(typeof accountUser !== 'undefined' ? accountUser : null);
+      if (!premium || !standing || !standing.tier) {
+        box.classList.add('hidden');
+        box.classList.remove('flex');
+        return;
+      }
+      value.textContent = standing.tier;
+      value.style.color = leagueTierColor(standing.tier);
+      box.classList.remove('hidden');
+      box.classList.add('flex');
+    }
+
+    // Mostra o tier, os pontos e a melhor de 3 na tela da Liga
+    function renderLeagueStandingBox(standing) {
+      const box = document.getElementById('league-standing-box');
+      if (!box) return;
+      if (!standing || !standing.tier) {
+        box.classList.add('hidden');
+        return;
+      }
+      box.classList.remove('hidden');
+
+      const tierEl = document.getElementById('league-standing-tier');
+      if (tierEl) {
+        tierEl.textContent = standing.tier;
+        tierEl.style.color = leagueTierColor(standing.tier);
+      }
+
+      const pointsEl = document.getElementById('league-standing-points');
+      if (pointsEl) {
+        const points = Number(standing.points) || 0;
+        pointsEl.textContent = `${points} / 100 pontos`;
+      }
+
+      const seriesEl = document.getElementById('league-standing-series');
+      if (seriesEl) {
+        if (standing.seriesInProgress) {
+          seriesEl.textContent = `Melhor de 3 para subir de tier: ${standing.seriesWins} x ${standing.seriesLosses}`;
+          seriesEl.classList.remove('hidden');
+        } else if (standing.tier === 'S' && standing.promotionPending) {
+          seriesEl.textContent = '100 pontos: disputando as 100 vagas do tier SS';
+          seriesEl.classList.remove('hidden');
+        } else {
+          seriesEl.classList.add('hidden');
+        }
+      }
+    }
+
+    // Busca a classificação do jogador no servidor (usado no perfil)
+    async function loadLeagueStanding() {
+      try {
+        const response = await fetch('/api/league/standing');
+        if (!response.ok) return null;
+        const data = await response.json();
+        leagueStanding = data && data.standing ? data.standing : null;
+        renderProfileLeagueTier(leagueStanding);
+        renderLeagueStandingBox(leagueStanding);
+        return leagueStanding;
+      } catch (error) {
+        return null;
+      }
+    }
+
     function updateLigaModeState() {
       const btn = document.getElementById('liga-mode-btn');
       if (!btn) return;
@@ -5668,7 +5821,7 @@
       updateArenaLobbyControls();
       loadArenaFriends();
       // Pede ao servidor o estado atual do lobby (jogadores presentes e criador)
-      sendOnline({ type: 'arena_lobby_request' });
+      sendOnline({ type: 'lobby_request', kind: 'arena' });
       gameAudio.playClick();
     }
 
@@ -5677,9 +5830,9 @@
       const arenaView = document.getElementById('online-arena-view');
       if (!onlineView || !arenaView) return;
       // Sai da fila de busca (se estiver buscando) e esconde o cronômetro
-      if (arenaQueued) {
-        sendOnline({ type: 'arena_leave_queue' });
-        arenaQueued = false;
+      if (lobbyState('arena').queued) {
+        sendOnline({ type: 'lobby_leave_queue', kind: 'arena' });
+        lobbyState('arena').queued = false;
       }
       stopArenaMatchmakingTimer();
       updateArenaLobbyControls();
@@ -5696,6 +5849,57 @@
       if (mainView) mainView.classList.add('hidden');
       if (onlineView) onlineView.classList.add('hidden');
       showOnlineArenaView();
+    }
+
+    /* -------------------------------------------------------------
+       PARTIDA NORMAL (1 vs 1)
+       Mesma interface do lobby da arena, mas o lobby aceita no máximo
+       2 jogadores e a partida é um confronto normal (1 vs 1).
+    ------------------------------------------------------------- */
+    function showOnlineNormalView() {
+      const onlineView = document.getElementById('online-mode-view');
+      const normalView = document.getElementById('online-normal-view');
+      const soloView = document.getElementById('online-solo-view');
+      if (!onlineView || !normalView) return;
+      onlineView.classList.add('hidden');
+      // O lobby ocupa a tela inteira (igual à arena): o menu SOLO fica oculto
+      if (soloView) soloView.classList.add('hidden');
+      normalView.classList.remove('hidden');
+      renderNormalMembers();
+      updateNormalLobbyControls();
+      loadNormalFriends();
+      // Pede ao servidor o estado atual do lobby (jogadores presentes e criador)
+      sendOnline({ type: 'lobby_request', kind: 'normal' });
+      gameAudio.playClick();
+    }
+
+    function hideOnlineNormalView() {
+      const onlineView = document.getElementById('online-mode-view');
+      const normalView = document.getElementById('online-normal-view');
+      const soloView = document.getElementById('online-solo-view');
+      if (!onlineView || !normalView) return;
+      // Sai da fila de busca (se estiver buscando) e esconde o cronômetro
+      if (lobbyState('normal').queued) {
+        sendOnline({ type: 'lobby_leave_queue', kind: 'normal' });
+        lobbyState('normal').queued = false;
+      }
+      stopNormalMatchmakingTimer();
+      updateNormalLobbyControls();
+      onlineView.classList.add('hidden');
+      normalView.classList.add('hidden');
+      // Volta para o menu SOLO (JOGO RÁPIDO / LIGA), de onde o lobby foi aberto
+      if (soloView) soloView.classList.remove('hidden');
+      gameAudio.playClick();
+    }
+
+    // Abre o lobby da partida normal a partir de qualquer tela (usado quando
+    // o jogador aceita um convite de partida normal)
+    function openNormalLobbyView() {
+      const mainView = document.getElementById('setup-main-view');
+      const onlineView = document.getElementById('online-mode-view');
+      if (mainView) mainView.classList.add('hidden');
+      if (onlineView) onlineView.classList.add('hidden');
+      showOnlineNormalView();
     }
 
     /* ================================================================
@@ -5817,15 +6021,18 @@
     function acceptMatchInvite() {
       const invite = pendingMatchInvite;
       if (!invite) return;
-      const isArena = invite.kind === 'arena';
+      const kind = invite.kind || 'dupla';
       sendOnline({
-        type: isArena ? 'arena_invite_response' : 'dupla_invite_response',
+        type: kind === 'dupla' ? 'dupla_invite_response' : 'lobby_invite_response',
+        kind: kind,
         inviteId: invite.inviteId,
         accept: true
       });
       hideMatchInviteModal();
-      if (isArena) {
+      if (kind === 'arena') {
         setArenaStatus('Convite aceito! Entrando no lobby...');
+      } else if (kind === 'normal') {
+        setNormalStatus('Convite aceito! Entrando no lobby...');
       } else {
         setDuplaStatus('Convite aceito! Entrando no lobby...');
       }
@@ -5834,9 +6041,10 @@
     function declineMatchInvite() {
       const invite = pendingMatchInvite;
       if (!invite) return;
-      const isArena = invite.kind === 'arena';
+      const kind = invite.kind || 'dupla';
       sendOnline({
-        type: isArena ? 'arena_invite_response' : 'dupla_invite_response',
+        type: kind === 'dupla' ? 'dupla_invite_response' : 'lobby_invite_response',
+        kind: kind,
         inviteId: invite.inviteId,
         accept: false
       });
@@ -5852,14 +6060,19 @@
     // O dono do lobby pode remover um membro (com confirmação)
     function removeLobbyMember(kind, memberId, memberName) {
       if (!memberId) return;
+      const targetKind = kind || 'dupla';
       // Durante a busca o lobby fica bloqueado: não é possível remover ninguém
-      if (kind === 'arena' ? arenaQueued : duplaQueued) return;
-      const target = { kind: kind || 'dupla', id: memberId, name: memberName || 'Jogador' };
+      if (targetKind === 'dupla' ? duplaQueued : lobbyState(targetKind).queued) return;
+      const target = { kind: targetKind, id: memberId, name: memberName || 'Jogador' };
       pendingRemoveTarget = target;
       const nameEl = document.getElementById('remove-player-name');
       if (nameEl) nameEl.textContent = target.name;
       const lobbyEl = document.getElementById('remove-player-lobby-name');
-      if (lobbyEl) lobbyEl.textContent = target.kind === 'arena' ? 'da arena' : 'da dupla';
+      if (lobbyEl) {
+        lobbyEl.textContent = target.kind === 'dupla'
+          ? 'da dupla'
+          : (lobbyConfig(target.kind).lobbyName || 'do lobby');
+      }
       const modal = document.getElementById('remove-player-modal');
       if (modal) modal.classList.remove('hidden');
     }
@@ -5868,12 +6081,12 @@
       const target = pendingRemoveTarget;
       closeRemovePlayerModal();
       if (!target) return;
-      const isArena = target.kind === 'arena';
-      sendOnline({ type: isArena ? 'arena_lobby_remove' : 'dupla_lobby_remove', memberId: target.id });
-      if (isArena) {
-        setArenaStatus(`${target.name} foi removido da arena.`);
-      } else {
+      if (target.kind === 'dupla') {
+        sendOnline({ type: 'dupla_lobby_remove', memberId: target.id });
         setDuplaStatus(`${target.name} foi removido da dupla.`);
+      } else {
+        sendOnline({ type: 'lobby_remove', kind: target.kind, memberId: target.id });
+        setLobbyStatus(target.kind, `${target.name} foi removido do lobby.`);
       }
     }
 
@@ -5889,38 +6102,42 @@
 
     // Criador volta para a tela de modos online; convidado sai do lobby
     function backOrLeaveLobby(kind) {
-      const isArena = kind === 'arena';
-      if (isArena ? isArenaLobbyHost() : isDuplaLobbyHost()) {
-        if (isArena) {
-          hideOnlineArenaView();
-        } else {
+      const lobbyKind = kind || 'dupla';
+      if (lobbyKind === 'dupla') {
+        if (isDuplaLobbyHost()) {
           hideOnlineDuplaView();
+          return;
         }
+      } else if (isLobbyHost(lobbyKind)) {
+        if (lobbyKind === 'normal') hideOnlineNormalView();
+        else hideOnlineArenaView();
         return;
       }
       const modal = document.getElementById('leave-lobby-modal');
       const nameEl = document.getElementById('leave-lobby-name');
-      if (nameEl) nameEl.textContent = isArena ? ' da arena' : ' da dupla';
+      if (nameEl) {
+        nameEl.textContent = lobbyKind === 'dupla'
+          ? ' da dupla'
+          : (lobbyConfig(lobbyKind).lobbyName || ' do lobby');
+      }
       if (modal) {
-        modal.dataset.kind = isArena ? 'arena' : 'dupla';
+        modal.dataset.kind = lobbyKind;
         modal.classList.remove('hidden');
       }
     }
 
     function confirmLeaveLobbyYes() {
       const modal = document.getElementById('leave-lobby-modal');
-      const isArena = modal && modal.dataset.kind === 'arena';
+      const kind = modal && modal.dataset.kind ? modal.dataset.kind : 'dupla';
       closeLeaveLobbyModal();
-      if (isArena) {
-        sendOnline({ type: 'arena_lobby_leave' });
-        arenaLobbyRoster = [];
-        arenaMembers = [];
-        arenaLobbyHostId = null;
-      } else {
+      if (kind === 'dupla') {
         sendOnline({ type: 'dupla_lobby_leave' });
         duplaLobbyRoster = [];
         duplaMembers = [];
         duplaLobbyHostId = null;
+      } else {
+        sendOnline({ type: 'lobby_leave', kind: kind });
+        resetLobbyState(kind);
       }
       // Volta para a tela inicial do jogo
       openSetupModal();
@@ -5960,6 +6177,9 @@
       // No lobby da arena
       const arenaView = document.getElementById('online-arena-view');
       if (arenaView && !arenaView.classList.contains('hidden')) return true;
+      // No lobby da partida normal
+      const normalView = document.getElementById('online-normal-view');
+      if (normalView && !normalView.classList.contains('hidden')) return true;
       return false;
     }
 
@@ -6297,37 +6517,73 @@
     }
 
     /* ================================================================
-       LOBBY ARENA ONLINE - cada um por si (4 jogadores no tabuleiro)
+       LOBBIES ONLINE (arena e partida normal)
        O lobby é mantido pelo servidor: quem cria o lobby é o "dono"
-       (host) e os amigos entram depois de aceitar o convite (até 4).
+       (host) e os amigos entram depois de aceitar o convite.
+       - kind 'arena': até 4 jogadores no lobby, partida com 4
+         jogadores (cada um por si);
+       - kind 'normal': até 2 jogadores no lobby, partida 1 vs 1.
        ================================================================ */
-    const ARENA_LOBBY_MAX = 4;   // jogadores no lobby (o dono + 3 convidados)
-    const ARENA_MATCH_SIZE = 4;  // jogadores na partida
-    let arenaLobbyRoster = [];       // [{ id, name, picture, isHost }] - jogadores no lobby
-    let arenaMembers = [];           // membros do lobby (sem o dono)
-    let arenaLobbyHostId = null;     // id de quem criou o lobby
-    let arenaMatchmakingTimer = null;
-    let arenaMatchmakingSeconds = 0;
-    let arenaQueued = false;         // está na fila buscando partida
+    const ARENA_MATCH_SIZE = 4;  // jogadores na partida da arena
+    const ONLINE_LOBBIES = {
+      arena: {
+        prefix: 'arena',
+        maxMembers: 4,
+        matchSize: 4,
+        label: 'ARENA',
+        lobbyName: 'da arena',
+        viewId: 'online-arena-view'
+      },
+      normal: {
+        prefix: 'normal',
+        maxMembers: 2,
+        matchSize: 2,
+        label: 'PARTIDA NORMAL',
+        lobbyName: 'da partida normal',
+        viewId: 'online-normal-view'
+      }
+    };
 
-    function setArenaStatus(message, tone) {
-      const el = document.getElementById('arena-invite-status');
+    // Estado de cada lobby: jogadores, dono, cronômetro e fila de busca
+    const lobbyStates = {
+      arena: { roster: [], members: [], hostId: null, timer: null, seconds: 0, queued: false },
+      normal: { roster: [], members: [], hostId: null, timer: null, seconds: 0, queued: false }
+    };
+
+    function lobbyConfig(kind) {
+      return ONLINE_LOBBIES[kind] || ONLINE_LOBBIES.arena;
+    }
+
+    function lobbyState(kind) {
+      return lobbyStates[kind] || lobbyStates.arena;
+    }
+
+    // Elemento do lobby pelo tipo (prefixo "arena"/"normal" + nome do elemento)
+    function lobbyElement(kind, name) {
+      const config = lobbyConfig(kind);
+      return document.getElementById(`${config.prefix}-${name}`);
+    }
+
+    function setLobbyStatus(kind, message, tone) {
+      const el = lobbyElement(kind, 'invite-status');
       if (!el) return;
       el.textContent = message || '';
       el.className = 'text-xs text-center mt-2 ' + (tone || 'text-slate-400');
     }
 
-    function arenaOpenFriendList() {
-      const list = document.getElementById('arena-friends-list-view');
+    function lobbyOpenFriendList(kind) {
+      const list = lobbyElement(kind, 'friends-list-view');
       if (!list) return;
       list.classList.toggle('hidden');
       if (!list.classList.contains('hidden')) {
-        loadArenaFriends();
+        loadLobbyFriends(kind);
       }
     }
 
-    async function loadArenaFriends() {
-      const list = document.getElementById('arena-friends-list-view');
+    async function loadLobbyFriends(kind) {
+      const config = lobbyConfig(kind);
+      const state = lobbyState(kind);
+      const list = lobbyElement(kind, 'friends-list-view');
       if (!list) return;
       try {
         const response = await fetch('/api/friends');
@@ -6339,13 +6595,13 @@
           return;
         }
         friends.forEach(f => {
-          const alreadyMember = arenaMembers.some(m => m.id === f.id);
+          const alreadyMember = state.members.some(m => m.id === f.id);
           const isOnline = f.online === true;
           const statusText = isOnline ? 'Online' : 'Offline';
           const statusClass = isOnline ? 'text-emerald-400' : 'text-slate-500';
-          const lobbyFull = isArenaLobbyFull();
-          const disabledAttr = (!isOnline || lobbyFull || arenaQueued)
-            ? `disabled title="${arenaQueued ? 'A busca está em andamento' : (lobbyFull ? 'O lobby já está completo (4/4)' : 'O amigo está offline')}"`
+          const lobbyFull = isLobbyFull(kind);
+          const disabledAttr = (!isOnline || lobbyFull || state.queued)
+            ? `disabled title="${state.queued ? 'A busca está em andamento' : (lobbyFull ? `O lobby já está completo (${config.maxMembers}/${config.maxMembers})` : 'O amigo está offline')}"`
             : '';
           const row = document.createElement('div');
           row.className = 'flex items-center justify-between gap-2 p-2 bg-slate-900 border border-slate-700';
@@ -6359,7 +6615,7 @@
             </div>
             ${alreadyMember
               ? '<span class="text-xs text-emerald-400 font-bold shrink-0">No lobby</span>'
-              : `<button type="button" onclick="arenaInviteFriend('${escapeHtmlText(f.id)}')" ${disabledAttr} class="w-7 h-7 shrink-0 flex items-center justify-center bg-slate-600 hover:bg-slate-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-bold text-base leading-none" title="Convidar para a arena">+</button>`}
+              : `<button type="button" onclick="${config.prefix}InviteFriend('${escapeHtmlText(f.id)}')" ${disabledAttr} class="w-7 h-7 shrink-0 flex items-center justify-center bg-slate-600 hover:bg-slate-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-bold text-base leading-none" title="Convidar para o lobby">+</button>`}
           `;
           list.appendChild(row);
         });
@@ -6368,31 +6624,35 @@
       }
     }
 
-    function arenaInviteFriend(targetId) {
-      if (!targetId || arenaQueued) return;
-      if (isArenaLobbyFull()) {
-        setArenaStatus('O lobby já está completo (4/4).');
+    function lobbyInviteFriend(kind, targetId) {
+      const config = lobbyConfig(kind);
+      const state = lobbyState(kind);
+      if (!targetId || state.queued) return;
+      if (isLobbyFull(kind)) {
+        setLobbyStatus(kind, `O lobby já está completo (${config.maxMembers}/${config.maxMembers}).`);
         return;
       }
-      sendOnline({ type: 'arena_invite', targetId: targetId });
-      setArenaStatus('Convite enviado! Aguardando resposta...');
+      sendOnline({ type: 'lobby_invite', kind: kind, targetId: targetId });
+      setLobbyStatus(kind, 'Convite enviado! Aguardando resposta...');
     }
 
     // Atualiza a lista "LOBBY" com os jogadores presentes no lobby
-    function renderArenaMembers() {
-      const list = document.getElementById('arena-members');
+    function renderLobbyMembers(kind) {
+      const config = lobbyConfig(kind);
+      const state = lobbyState(kind);
+      const list = lobbyElement(kind, 'members');
       if (!list) return;
       const me = currentAccountProfile();
-      let roster = Array.isArray(arenaLobbyRoster) ? arenaLobbyRoster.slice() : [];
+      let roster = Array.isArray(state.roster) ? state.roster.slice() : [];
 
       // Enquanto o servidor não sincroniza o lobby, mostra o próprio jogador
       if (!roster.length && me) {
         roster = [{ id: me.id, name: me.name, picture: me.picture, isHost: true }];
       }
 
-      const isHost = isArenaLobbyHost();
+      const isHost = isLobbyHost(kind);
       // Durante a busca ninguém pode remover membros do lobby
-      const canRemove = isHost && !arenaQueued;
+      const canRemove = isHost && !state.queued;
       list.innerHTML = '';
       roster.forEach(m => {
         const isMe = Boolean(me && m.id === me.id);
@@ -6406,34 +6666,36 @@
               <span class="text-sm text-slate-100 truncate text-left">${memberIsHost ? '🚩 ' : ''}${escapeHtmlText(m.name || 'Jogador')}${isMe ? ' (você)' : ''}</span>
             </div>
           </div>
-          ${!memberIsHost && !isMe && canRemove ? `<button type="button" onclick="removeLobbyMember('arena', '${escapeHtmlText(m.id)}', '${escapeHtmlText(m.name || 'Jogador')}')" class="w-7 h-7 shrink-0 flex items-center justify-center bg-red-600 hover:bg-red-500 text-white font-bold text-sm leading-none" title="Remover da arena" aria-label="Remover da arena">X</button>` : ''}
+          ${!memberIsHost && !isMe && canRemove ? `<button type="button" onclick="removeLobbyMember('${kind}', '${escapeHtmlText(m.id)}', '${escapeHtmlText(m.name || 'Jogador')}')" class="w-7 h-7 shrink-0 flex items-center justify-center bg-red-600 hover:bg-red-500 text-white font-bold text-sm leading-none" title="Remover do lobby" aria-label="Remover do lobby">X</button>` : ''}
         `;
         list.appendChild(row);
       });
 
-      const sizeEl = document.getElementById('arena-team-size');
-      if (sizeEl) sizeEl.textContent = roster.length + '/4';
+      const sizeEl = lobbyElement(kind, 'team-size');
+      if (sizeEl) sizeEl.textContent = roster.length + '/' + config.maxMembers;
 
-      updateArenaLobbyControls();
+      updateLobbyControls(kind);
     }
 
     // Botões e permissões do lobby: só o criador convida e busca partida
-    function updateArenaLobbyControls() {
-      const isHost = isArenaLobbyHost();
+    function updateLobbyControls(kind) {
+      const config = lobbyConfig(kind);
+      const state = lobbyState(kind);
+      const isHost = isLobbyHost(kind);
       // Durante a busca a interface do lobby fica bloqueada para todos
-      const searching = Boolean(arenaQueued);
+      const searching = Boolean(state.queued);
 
       // Botão de convidar: desabilitado quando o lobby já está completo
-      const inviteBtn = document.getElementById('arena-invite-btn');
+      const inviteBtn = lobbyElement(kind, 'invite-btn');
       if (inviteBtn) {
-        inviteBtn.disabled = searching || isArenaLobbyFull();
+        inviteBtn.disabled = searching || isLobbyFull(kind);
         inviteBtn.title = searching
           ? 'A busca está em andamento'
-          : (isArenaLobbyFull() ? 'O lobby já está completo (4/4)' : 'Convidar amigo');
+          : (isLobbyFull(kind) ? `O lobby já está completo (${config.maxMembers}/${config.maxMembers})` : 'Convidar amigo');
       }
 
       // Na fila o botão é o único controle clicável: "CANCELAR BUSCA"
-      const searchBtn = document.getElementById('arena-search-btn');
+      const searchBtn = lobbyElement(kind, 'search-btn');
       if (searchBtn) {
         searchBtn.classList.toggle('hidden', !isHost && !searching);
         searchBtn.disabled = false;
@@ -6442,126 +6704,174 @@
 
       // Criador volta para o menu; convidado sai do lobby
       // (enquanto a busca está em andamento o lobby não pode ser fechado)
-      const backBtn = document.getElementById('arena-back-btn');
+      const backBtn = lobbyElement(kind, 'back-btn');
       if (backBtn) {
         backBtn.classList.toggle('hidden', searching);
         backBtn.textContent = isHost ? 'VOLTAR' : 'SAIR';
       }
     }
 
-    // O lobby está completo quando há quatro pessoas no lobby
-    function isArenaLobbyFull() {
-      return Array.isArray(arenaLobbyRoster) && arenaLobbyRoster.length >= ARENA_LOBBY_MAX;
+    // O lobby está completo quando atingiu o limite de jogadores
+    function isLobbyFull(kind) {
+      const config = lobbyConfig(kind);
+      const state = lobbyState(kind);
+      return Array.isArray(state.roster) && state.roster.length >= config.maxMembers;
     }
 
-    function isArenaLobbyHost() {
+    function isLobbyHost(kind) {
       const me = currentAccountProfile();
       if (!me) return false;
-      if (!arenaLobbyHostId) return true;
-      return arenaLobbyHostId === me.id;
+      const hostId = lobbyState(kind).hostId;
+      if (!hostId) return true;
+      return hostId === me.id;
     }
 
     // Recebe o lobby sincronizado pelo servidor
-    function applyArenaLobby(lobby) {
+    function applyLobby(kind, lobby) {
       if (!lobby) return;
       const me = currentAccountProfile();
-      arenaLobbyHostId = lobby.hostId || null;
+      const state = lobbyState(kind);
+      state.hostId = lobby.hostId || null;
       // O servidor avisa quando a busca de partida já está em andamento
-      if (typeof lobby.searching === 'boolean') arenaQueued = lobby.searching;
-      arenaLobbyRoster = Array.isArray(lobby.members) ? lobby.members.map(m => ({
+      if (typeof lobby.searching === 'boolean') state.queued = lobby.searching;
+      state.roster = Array.isArray(lobby.members) ? lobby.members.map(m => ({
         id: m.id,
         name: m.name || 'Jogador',
         picture: m.picture || '/assets/avatar.svg',
         isHost: Boolean(m.isHost),
         online: m.online !== false
       })) : [];
-      arenaMembers = arenaLobbyRoster.filter(m => !me || m.id !== me.id);
-      renderArenaMembers();
-      loadArenaFriends();
+      state.members = state.roster.filter(m => !me || m.id !== me.id);
+      renderLobbyMembers(kind);
+      loadLobbyFriends(kind);
       // A busca pode ter começado em outra aba do criador
-      if (arenaQueued) startArenaMatchmakingTimer();
+      if (state.queued) startLobbyTimer(kind);
+      else stopLobbyTimer(kind);
     }
 
     /* -------------------------------------------------------------
-       CRONÔMETRO DA FILA (ARENA ONLINE)
+       CRONÔMETRO DA FILA (LOBBY ONLINE)
        Mesmo estilo do cronômetro do lobby de DUPLA: aparece entre a
        área "LOBBY" e o botão de buscar partida.
     ------------------------------------------------------------- */
-    function startArenaMatchmakingTimer() {
-      const wrap = document.getElementById('arena-match-timer-wrap');
-      const timerEl = document.getElementById('arena-match-timer');
+    function startLobbyTimer(kind) {
+      const state = lobbyState(kind);
+      const wrap = lobbyElement(kind, 'match-timer-wrap');
+      const timerEl = lobbyElement(kind, 'match-timer');
       if (!wrap || !timerEl) return;
 
       // Se já está rodando, apenas garante que ele fique visível
-      if (arenaMatchmakingTimer) {
+      if (state.timer) {
         wrap.classList.remove('hidden');
         return;
       }
 
       const update = () => {
         // Formato M:SS (um algarismo para minutos, dois para segundos)
-        const m = String(Math.floor(arenaMatchmakingSeconds / 60));
-        const ss = String(arenaMatchmakingSeconds % 60).padStart(2, '0');
+        const m = String(Math.floor(state.seconds / 60));
+        const ss = String(state.seconds % 60).padStart(2, '0');
         timerEl.textContent = `${m}:${ss}`;
       };
 
       wrap.classList.remove('hidden');
       update();
-      arenaMatchmakingTimer = setInterval(() => {
-        arenaMatchmakingSeconds++;
+      state.timer = setInterval(() => {
+        state.seconds++;
         update();
       }, 1000);
     }
 
-    function stopArenaMatchmakingTimer() {
-      if (arenaMatchmakingTimer) {
-        clearInterval(arenaMatchmakingTimer);
-        arenaMatchmakingTimer = null;
+    function stopLobbyTimer(kind) {
+      const state = lobbyState(kind);
+      if (state.timer) {
+        clearInterval(state.timer);
+        state.timer = null;
       }
-      arenaMatchmakingSeconds = 0;
-      const wrap = document.getElementById('arena-match-timer-wrap');
+      state.seconds = 0;
+      const wrap = lobbyElement(kind, 'match-timer-wrap');
       if (wrap) wrap.classList.add('hidden');
-      const timerEl = document.getElementById('arena-match-timer');
+      const timerEl = lobbyElement(kind, 'match-timer');
       if (timerEl) timerEl.textContent = '00:00';
-      const btn = document.getElementById('arena-search-btn');
-      if (btn && isArenaLobbyHost()) {
+      const btn = lobbyElement(kind, 'search-btn');
+      if (btn && isLobbyHost(kind)) {
         btn.textContent = 'BUSCAR PARTIDA';
         btn.disabled = false;
       }
     }
 
-    function arenaSearchMatch() {
-      const btn = document.getElementById('arena-search-btn');
+    function lobbySearchMatch(kind) {
+      const btn = lobbyElement(kind, 'search-btn');
       if (!btn) return;
+      const state = lobbyState(kind);
 
-      if (arenaQueued) {
+      if (state.queued) {
         // Cancelar a busca: o lobby volta a ficar utilizável
-        sendOnline({ type: 'arena_leave_queue' });
-        arenaQueued = false;
-        stopArenaMatchmakingTimer();
-        updateArenaLobbyControls();
-        setArenaStatus('');
+        sendOnline({ type: 'lobby_leave_queue', kind: kind });
+        state.queued = false;
+        stopLobbyTimer(kind);
+        updateLobbyControls(kind);
+        setLobbyStatus(kind, '');
         return;
       }
 
       // Somente o criador do lobby pode iniciar o matchmaking
-      if (!isArenaLobbyHost()) {
-        setArenaStatus('Apenas o criador do lobby pode buscar partida.');
+      if (!isLobbyHost(kind)) {
+        setLobbyStatus(kind, 'Apenas o criador do lobby pode buscar partida.');
         return;
       }
 
       // O botão continua habilitado e passa a permitir cancelar a busca
       btn.disabled = false;
       btn.textContent = 'CANCELAR BUSCA';
-      startArenaMatchmakingTimer();
+      startLobbyTimer(kind);
 
-      // Coloca o lobby na fila da arena: cada jogador entra por si e a
-      // partida começa quando quatro jogadores estão na fila
-      sendOnline({ type: 'arena_queue' });
-      arenaQueued = true;
-      updateArenaLobbyControls();
-      setArenaStatus('');
+      // Coloca o lobby na fila: cada jogador entra por si e a partida
+      // começa quando a fila completa
+      sendOnline({ type: 'lobby_queue', kind: kind });
+      state.queued = true;
+      updateLobbyControls(kind);
+      setLobbyStatus(kind, '');
     }
+
+    // Limpa o estado local do lobby (usado quando o jogador sai do lobby)
+    function resetLobbyState(kind) {
+      const state = lobbyState(kind);
+      state.roster = [];
+      state.members = [];
+      state.hostId = null;
+      state.queued = false;
+      stopLobbyTimer(kind);
+    }
+
+    /* -------------------------------------------------------------
+       ATALHOS POR TIPO DE LOBBY
+       A arena e a partida normal usam as mesmas funções genéricas.
+    ------------------------------------------------------------- */
+    function setArenaStatus(message, tone) { setLobbyStatus('arena', message, tone); }
+    function arenaOpenFriendList() { lobbyOpenFriendList('arena'); }
+    function loadArenaFriends() { return loadLobbyFriends('arena'); }
+    function arenaInviteFriend(targetId) { return lobbyInviteFriend('arena', targetId); }
+    function renderArenaMembers() { return renderLobbyMembers('arena'); }
+    function updateArenaLobbyControls() { return updateLobbyControls('arena'); }
+    function isArenaLobbyFull() { return isLobbyFull('arena'); }
+    function isArenaLobbyHost() { return isLobbyHost('arena'); }
+    function applyArenaLobby(lobby) { return applyLobby('arena', lobby); }
+    function startArenaMatchmakingTimer() { return startLobbyTimer('arena'); }
+    function stopArenaMatchmakingTimer() { return stopLobbyTimer('arena'); }
+    function arenaSearchMatch() { return lobbySearchMatch('arena'); }
+
+    function setNormalStatus(message, tone) { setLobbyStatus('normal', message, tone); }
+    function normalOpenFriendList() { lobbyOpenFriendList('normal'); }
+    function loadNormalFriends() { return loadLobbyFriends('normal'); }
+    function normalInviteFriend(targetId) { return lobbyInviteFriend('normal', targetId); }
+    function renderNormalMembers() { return renderLobbyMembers('normal'); }
+    function updateNormalLobbyControls() { return updateLobbyControls('normal'); }
+    function isNormalLobbyFull() { return isLobbyFull('normal'); }
+    function isNormalLobbyHost() { return isLobbyHost('normal'); }
+    function applyNormalLobby(lobby) { return applyLobby('normal', lobby); }
+    function startNormalMatchmakingTimer() { return startLobbyTimer('normal'); }
+    function stopNormalMatchmakingTimer() { return stopLobbyTimer('normal'); }
+    function normalSearchMatch() { return lobbySearchMatch('normal'); }
 
     // Inicia a partida de dupla online (1 vs 1 com duplas de um jogador
     // ou 2 vs 2 com quatro jogadores)
@@ -6697,12 +7007,14 @@
       const soloView = document.getElementById('online-solo-view');
       const duplaView = document.getElementById('online-dupla-view');
       const arenaView = document.getElementById('online-arena-view');
+      const normalView = document.getElementById('online-normal-view');
       if (mainView) mainView.classList.remove('hidden');
       if (cpuView) cpuView.classList.add('hidden');
       if (onlineView) onlineView.classList.add('hidden');
       if (soloView) soloView.classList.add('hidden');
       if (duplaView) duplaView.classList.add('hidden');
       if (arenaView) arenaView.classList.add('hidden');
+      if (normalView) normalView.classList.add('hidden');
     }
 
     function showCpuModeSelection() {
@@ -6735,26 +7047,6 @@
       return accountUser.id || accountUser.googleSub || accountUser.email || accountUser.playerName || null;
     }
 
-    function startQuickMatch() {
-      gameAudio.playClick();
-
-      if (typeof accountUser === 'undefined' || !accountUser) return;
-
-      onlineQueued = true;
-      openOnlineModal('Jogo Rápido');
-      // Na fila de matchmaking não existe código para digitar: esconde a entrada
-      document.getElementById('online-join-section').classList.add('hidden');
-      document.getElementById('online-status').textContent = 'Procurando um oponente...';
-      // Cronômetro de espera na fila
-      startQuickMatchTimer();
-
-      sendOnline({
-        type: 'quick_match',
-        uid: getAccountUid(),
-        name: accountNickname(accountUser) || 'Jogador'
-      });
-    }
-
     // LIGA: mesma interface do Jogo Rápido, mas usando a fila da partida
     // classificatória (exclusiva para contas Premium)
     function startLigaMatch() {
@@ -6775,6 +7067,8 @@
       document.getElementById('online-status').textContent = 'Procurando um oponente...';
       // Cronômetro de espera na fila
       startQuickMatchTimer();
+      // Tier, pontos e melhor de 3 do jogador
+      if (typeof loadLeagueStanding === 'function') loadLeagueStanding();
 
       sendOnline({
         type: 'liga_match',
