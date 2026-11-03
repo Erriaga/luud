@@ -710,9 +710,10 @@
               <span class="font-bold text-sm text-slate-100">CONVITE</span>
               <span class="text-xs text-slate-400">Criar/Entrar com código</span>
             </button>
-            <button type="button" disabled class="p-3 border-2 border-transparent bg-amber-500 text-black transition flex flex-col items-center opacity-100 cursor-not-allowed">
-              <span class="font-bold text-sm text-black">LIGA</span>
-              <span class="text-xs text-slate-900">Em breve</span>
+            <!-- LIGA: liberada apenas para contas Premium (updateLigaModeState ajusta o estado) -->
+            <button type="button" id="liga-mode-btn" onclick="startLigaMatch()" disabled title="A Liga é exclusiva para contas Premium." class="p-3 border-2 border-transparent bg-slate-800 transition flex flex-col items-center cursor-not-allowed">
+              <span class="font-bold text-sm text-slate-500">LIGA</span>
+              <span class="text-xs text-slate-500">Partida classificatória</span>
             </button>
           </div>
           <button type="button" onclick="hideOnlineSoloView()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition text-sm">
@@ -2965,6 +2966,7 @@
     ------------------------------------------------------------- */
     const MATCH_MODE_LABELS = {
       quick: 'JOGO RÁPIDO',
+      liga: 'LIGA',
       invite: 'CONVITE',
       local: 'SINGLE PLAYER',
       multiplayer: 'MULTIPLAYER'
@@ -4761,9 +4763,9 @@
     let onlineSendQueue = [];
     let onlineConnecting = false;
     let onlineMatchEnded = false; // partida online encerrada (vitória normal ou W.O.)
-    let onlineQueued = false; // jogador aguardando na fila do Jogo Rápido
-    let onlineMatchType = 'local'; // 'quick' | 'invite' | 'local' (para o histórico)
-    let quickMatchTimerInterval = null; // cronômetro da fila do Jogo Rápido
+    let onlineQueued = false; // jogador aguardando na fila do Jogo Rápido ou da Liga
+    let onlineMatchType = 'local'; // 'quick' | 'liga' | 'invite' | 'dupla' | 'arena' | 'local' (para o histórico)
+    let quickMatchTimerInterval = null; // cronômetro da fila do Jogo Rápido (também usado na Liga)
     let matchFoundInterval = null; // contagem regressiva do aviso "PARTIDA ENCONTRADA"
     let pendingQuickStart = null; // jogadores da partida encontrada, aguardando o aviso terminar
     let pendingGameStarter = null; // função que inicia a partida ao fim do aviso
@@ -4888,9 +4890,10 @@
           document.getElementById('online-room-code-display').textContent = data.room;
           document.getElementById('online-room-created').classList.remove('hidden');
           if (data.quick) {
-            // Sala criada pelo matchmaking (Jogo Rápido): oponente já encontrado.
-            // Para o cronômetro da fila e mostra o aviso gigante com contagem
-            onlineMatchType = 'quick';
+            // Sala criada pelo matchmaking (Jogo Rápido ou Liga): oponente já
+            // encontrado. Para o cronômetro da fila e mostra o aviso gigante
+            // com contagem
+            onlineMatchType = data.mode === 'liga' ? 'liga' : 'quick';
             stopQuickMatchTimer();
             pendingQuickStart = null;
             showMatchFoundNotice();
@@ -5387,6 +5390,7 @@
       if (!onlineView || !soloView) return;
       onlineView.classList.add('hidden');
       soloView.classList.remove('hidden');
+      updateLigaModeState();
       gameAudio.playClick();
     }
 
@@ -5397,6 +5401,43 @@
       onlineView.classList.remove('hidden');
       soloView.classList.add('hidden');
       gameAudio.playClick();
+    }
+
+    /* -------------------------------------------------------------
+       LIGA (partida classificatória)
+       O botão só fica disponível para contas Premium: para contas
+       gratuitas ele continua desabilitado, com o aviso no title.
+    ------------------------------------------------------------- */
+    function updateLigaModeState() {
+      const btn = document.getElementById('liga-mode-btn');
+      if (!btn) return;
+      const premium = typeof isPremiumAccount === 'function'
+        && isPremiumAccount(typeof accountUser !== 'undefined' ? accountUser : null);
+
+      btn.disabled = !premium;
+      btn.title = premium
+        ? 'Partida classificatória da Liga'
+        : 'A Liga é exclusiva para contas Premium.';
+
+      // Premium: botão destacado (âmbar) e clicável
+      btn.classList.toggle('bg-amber-500', premium);
+      btn.classList.toggle('hover:bg-amber-400', premium);
+      btn.classList.toggle('cursor-pointer', premium);
+      // Conta gratuita: botão apagado e bloqueado
+      btn.classList.toggle('bg-slate-800', !premium);
+      btn.classList.toggle('cursor-not-allowed', !premium);
+
+      const labels = btn.querySelectorAll('span');
+      const title = labels[0];
+      const subtitle = labels[1];
+      if (title) {
+        title.classList.toggle('text-black', premium);
+        title.classList.toggle('text-slate-500', !premium);
+      }
+      if (subtitle) {
+        subtitle.classList.toggle('text-slate-900', premium);
+        subtitle.classList.toggle('text-slate-500', !premium);
+      }
     }
 
     function showOnlineDuplaView() {
@@ -6528,6 +6569,34 @@
       });
     }
 
+    // LIGA: mesma interface do Jogo Rápido, mas usando a fila da partida
+    // classificatória (exclusiva para contas Premium)
+    function startLigaMatch() {
+      gameAudio.playClick();
+
+      if (typeof accountUser === 'undefined' || !accountUser) return;
+
+      // Conta gratuita não entra na fila da Liga (o botão já fica desabilitado)
+      if (typeof isPremiumAccount === 'function' && !isPremiumAccount(accountUser)) {
+        updateLigaModeState();
+        return;
+      }
+
+      onlineQueued = true;
+      openOnlineModal('Liga');
+      // Na fila de matchmaking não existe código para digitar: esconde a entrada
+      document.getElementById('online-join-section').classList.add('hidden');
+      document.getElementById('online-status').textContent = 'Procurando um oponente...';
+      // Cronômetro de espera na fila
+      startQuickMatchTimer();
+
+      sendOnline({
+        type: 'liga_match',
+        uid: getAccountUid(),
+        name: accountNickname(accountUser) || 'Jogador'
+      });
+    }
+
     // CONVITE: abre o modal de sala com código para o amigo entrar
     function openInviteModal() {
       gameAudio.playClick();
@@ -6941,6 +7010,8 @@
 
       updateOnlineSingleButton();
       updateMultiplayerButton();
+      // O botão da Liga só é liberado para contas Premium
+      updateLigaModeState();
     }
 
     function initGoogleLoginSetup() {

@@ -213,27 +213,52 @@ function detachFromRoom(ws, notifyOpponent = true) {
   }
 }
 
-// Pareia os dois primeiros jogadores de contas diferentes da fila,
-// cria a sala e inicia a partida para ambos
+// Pareia dois jogadores de contas diferentes da MESMA fila (Jogo Rápido ou
+// Liga), cria a sala e inicia a partida para ambos
 async function tryMatchmaking() {
-  while (matchmakingQueue.length >= 2) {
-    const first = matchmakingQueue[0];
-    const firstKey = first.uid || first.ws; // sem login, a própria conexão é a chave
-    let matchIndex = -1;
-    for (let i = 1; i < matchmakingQueue.length; i++) {
-      const candidate = matchmakingQueue[i];
-      if ((candidate.uid || candidate.ws) !== firstKey) {
-        matchIndex = i;
+  let matched = true;
+  while (matched) {
+    matched = false;
+    for (let i = 0; i < matchmakingQueue.length && !matched; i++) {
+      const first = matchmakingQueue[i];
+      const firstKey = first.uid || first.ws; // sem login, a própria conexão é a chave
+      for (let j = i + 1; j < matchmakingQueue.length; j++) {
+        const candidate = matchmakingQueue[j];
+        // Cada fila só encontra oponente do mesmo modo: quem joga a Liga
+        // nunca entra na partida de Jogo Rápido (e vice-versa)
+        if (queueMode(candidate) !== queueMode(first)) continue;
+        if ((candidate.uid || candidate.ws) === firstKey) continue;
+        matchmakingQueue.splice(j, 1);
+        matchmakingQueue.splice(i, 1);
+        await startQuickMatchRoom(first, candidate);
+        matched = true;
         break;
       }
     }
-    if (matchIndex === -1) break;
-
-    const second = matchmakingQueue[matchIndex];
-    matchmakingQueue.splice(matchIndex, 1);
-    matchmakingQueue.shift();
-    await startQuickMatchRoom(first, second);
   }
+}
+
+// Modo da fila do jogador: 'quick' (Jogo Rápido) ou 'liga' (partida classificatória)
+function queueMode(entry) {
+  return entry && entry.mode === 'liga' ? 'liga' : 'quick';
+}
+
+// Verifica se a conta do jogador tem o plano Premium liberado.
+// O servidor é a fonte de verdade da permissão (usado pela fila da Liga).
+async function isPremiumPlayer(uid) {
+  if (!uid) return false;
+  try {
+    const profile = await db.getUserProfile(uid);
+    if (profile && profile.isPaid === true) return true;
+    // Fallback: o cliente pode enviar o e-mail em vez do id da conta
+    if (String(uid).includes('@')) {
+      const user = await db.getUserByEmail(uid);
+      return Boolean(user && user.isPaid === true);
+    }
+  } catch (error) {
+    console.error('[servidor] erro ao verificar o plano Premium:', error && error.message);
+  }
+  return false;
 }
 
 async function startQuickMatchRoom(a, b) {
@@ -242,11 +267,15 @@ async function startQuickMatchRoom(a, b) {
     code = generateRoomCode();
   } while (rooms.has(code));
 
+  // O modo da partida define a fila de origem: 'quick' ou 'liga'
+  const mode = queueMode(a) === 'liga' || queueMode(b) === 'liga' ? 'liga' : 'quick';
+
   const room = {
     players: [a.ws, b.ws],
     names: [a.name || 'Jogador 1', b.name || 'Jogador 2'],
     userIds: [a.uid || null, b.uid || null],
-    ready: [true, true]
+    ready: [true, true],
+    mode
   };
   rooms.set(code, room);
 
@@ -277,8 +306,8 @@ async function startQuickMatchRoom(a, b) {
   players[0].color = soloColors.starterColor;
   players[1].color = soloColors.opponentColor;
 
-  sendTo(a.ws, { type: 'room_created', room: code, player: 0, name: room.names[0], quick: true, opponentProfile: { ...profileB, color: soloColors.opponentColor } });
-  sendTo(b.ws, { type: 'room_created', room: code, player: 1, name: room.names[1], quick: true, opponentProfile: { ...profileA, color: soloColors.starterColor } });
+  sendTo(a.ws, { type: 'room_created', room: code, player: 0, name: room.names[0], quick: true, mode, opponentProfile: { ...profileB, color: soloColors.opponentColor } });
+  sendTo(b.ws, { type: 'room_created', room: code, player: 1, name: room.names[1], quick: true, mode, opponentProfile: { ...profileA, color: soloColors.starterColor } });
   sendTo(a.ws, { type: 'room_ready', players });
   sendTo(b.ws, { type: 'room_ready', players });
 }
@@ -1566,7 +1595,7 @@ async function handleAuthConfig(request, response) {
    HISTÓRICO DE PARTIDAS
 ------------------------------------------------------------- */
 const MATCH_RECORD_LIMIT = 100;
-const MATCH_MODES = new Set(['quick', 'invite', 'local', 'dupla', 'arena']);
+const MATCH_MODES = new Set(['quick', 'invite', 'local', 'dupla', 'arena', 'liga']);
 
 function sanitizeMatchRecord(body) {
   const mode = MATCH_MODES.has(body.mode) ? body.mode : 'local';
@@ -2038,8 +2067,8 @@ async function main() {
         conn.userId = uid;
         conn.name = name;
 
-        // A mesma conta não pode ficar na fila duas vezes
-        if (uid && matchmakingQueue.some(entry => entry.uid === uid)) {
+        // A mesma conta não pode ficar na fila do Jogo Rápido duas vezes
+        if (uid && matchmakingQueue.some(entry => entry.uid === uid && queueMode(entry) === 'quick')) {
           sendTo(ws, { type: 'error', error: 'Esta conta já está na fila de partida.' });
           return;
         }
@@ -2048,8 +2077,45 @@ async function main() {
         // Sai de qualquer sala anterior (o oponente que fica é notificado)
         detachFromRoom(ws);
 
-        matchmakingQueue.push({ ws, uid, name });
-        sendTo(ws, { type: 'queued' });
+        matchmakingQueue.push({ ws, uid, name, mode: 'quick' });
+        sendTo(ws, { type: 'queued', mode: 'quick' });
+        await tryMatchmaking();
+        return;
+      }
+
+      /* --- MATCHMAKING DA LIGA (partida classificatória) ---------------- */
+      if (data.type === 'liga_match') {
+        const uid = data.uid || null;
+        const name = String(data.name || 'Jogador').slice(0, 24);
+        conn.userId = uid;
+        conn.name = name;
+
+        if (!uid) {
+          sendTo(ws, { type: 'error', error: 'Entre na sua conta para jogar na Liga.' });
+          return;
+        }
+
+        // A Liga é exclusiva para contas Premium: o servidor é a fonte da
+        // verdade (o botão desabilitado no cliente é só a primeira camada)
+        const premium = await isPremiumPlayer(uid);
+        if (!premium) {
+          sendTo(ws, { type: 'error', error: 'A Liga é exclusiva para contas Premium.' });
+          return;
+        }
+
+        // A mesma conta não pode ficar na fila da Liga duas vezes
+        if (uid && matchmakingQueue.some(entry => entry.uid === uid && queueMode(entry) === 'liga')) {
+          sendTo(ws, { type: 'error', error: 'Esta conta já está na fila de partida.' });
+          return;
+        }
+
+        // Trocar de fila é permitido: sai da fila do Jogo Rápido (se estiver nela)
+        removeFromQueue(ws);
+        // Sai de qualquer sala anterior (o oponente que fica é notificado)
+        detachFromRoom(ws);
+
+        matchmakingQueue.push({ ws, uid, name, mode: 'liga' });
+        sendTo(ws, { type: 'queued', mode: 'liga' });
         await tryMatchmaking();
         return;
       }
