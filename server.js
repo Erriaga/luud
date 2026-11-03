@@ -8,6 +8,7 @@ const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
 const db = require('./db');
 const pix = require('./pix');
+const rules = require('./game-rules');
 
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
@@ -47,8 +48,12 @@ const PAYMENT_EXPIRY_MINUTES = Number(process.env.PAYMENT_EXPIRY_MINUTES || 30);
 
 /* -------------------------------------------------------------
    SALAS DE JOGO ONLINE (multiplayer entre computadores)
+   - O servidor guarda o estado autoritativo da partida (turno, dado,
+     posições das peças e placar) em room.game.
+   - O cliente só pede "rolar" e informa qual peça escolheu: qualquer
+     valor, posição ou turno enviado pelo cliente é ignorado.
 ------------------------------------------------------------- */
-// roomCode -> { players: [ws, ws], names: [str, str], userIds: [uid, uid], ready: [bool, bool] }
+// roomCode -> { players: [ws, ws], names: [str, str], userIds: [uid, uid], ready: [bool, bool], game: {...} }
 const rooms = new Map();
 // Conexões ativas: ws -> { roomCode, playerIdx, userId, name }
 const connections = new Map();
@@ -56,6 +61,23 @@ const connections = new Map();
 const userConnections = new Map();
 // Fila do Jogo Rápido: [{ ws, uid, name }]
 const matchmakingQueue = [];
+
+/* -------------------------------------------------------------
+   PROTEÇÃO CONTRA QUEBRA (anti-cheat)
+   - Limite de mensagens por conexão (evita spam e inundação do log)
+   - Tempo máximo de turno (o servidor passa a vez se o jogador sumir)
+   - Log de mensagens rejeitadas para detectar tentativas de manipulação
+------------------------------------------------------------- */
+const RATE_LIMIT_WINDOW_MS = 10 * 1000;
+const RATE_LIMIT_MAX_MESSAGES = 60;
+const ROOM_TURN_TIMEOUT_MS = 30 * 1000;
+// Mensagens que o cliente NÃO pode mais enviar: o dado, o movimento e a
+// passagem de turno são decididos pelo servidor.
+const FORBIDDEN_CLIENT_MESSAGES = new Set(['dice_roll', 'token_move', 'pass_turn']);
+// Único tipo de mensagem que ainda é repassada pela sala.
+const RELAYABLE_ROOM_MESSAGES = new Set(['color_info']);
+// Cores dos slots no 1 vs 1 (diagonais, como no tabuleiro)
+const SOLO_SLOT_COLORS = ['BLUE', 'GREEN'];
 
 /* -------------------------------------------------------------
    LOBBY DE DUPLA ONLINE (2 vs 2)
@@ -209,8 +231,237 @@ function detachFromRoom(ws, notifyOpponent = true) {
   }
 
   if (!room.players.some(player => player)) {
+    clearRoomTurnTimer(room);
     rooms.delete(roomCode);
   }
+}
+
+/* -------------------------------------------------------------
+   PARTIDA ONLINE AUTORITATIVA
+   O servidor guarda o estado real da partida (turno, dado, posições
+   das peças e placar) e decide tudo. O cliente só recebe o que
+   aconteceu: ele pede para rolar e informa qual peça escolheu.
+------------------------------------------------------------- */
+
+// Envia uma mensagem para todos os jogadores da sala
+function broadcastRoomGame(room, message) {
+  const payload = JSON.stringify(message);
+  room.players.forEach(player => {
+    if (player && player.readyState === 1) player.send(payload);
+  });
+}
+
+// Cria (ou recria) o estado autoritativo da sala
+function setupRoomGame(room, options = {}) {
+  const slots = options.slots || [];
+  room.game = rules.createGameState({
+    slots,
+    mode: options.mode || room.mode || 'solo',
+    target: options.target || (options.mode === 'dupla' ? 8 : 4)
+  });
+  room.slotColors = slots.map(entry => entry.color);
+  // O relógio do turno só começa a contar quando os clientes avisam que a
+  // partida começou (ver handleGameStart).
+  room.game.started = false;
+  return room.game;
+}
+
+// Relógio do turno: se o jogador não agir a tempo, o servidor passa a vez
+function clearRoomTurnTimer(room) {
+  if (room && room.turnTimer) {
+    clearTimeout(room.turnTimer);
+    room.turnTimer = null;
+  }
+}
+
+function startRoomTurnTimer(room) {
+  clearRoomTurnTimer(room);
+  if (!room || !room.game || room.game.over) return;
+  if (!room.game.started) return;
+
+  room.turnTimer = setTimeout(() => {
+    room.turnTimer = null;
+    const state = room.game;
+    if (!state || state.over) return;
+
+    const slot = state.turn;
+    state.dice = null;
+    state.sixes = 0;
+    const next = rules.nextSlot(state, slot);
+    state.turn = next;
+
+    console.warn(`[anti-cheat] tempo do turno esgotado - sala ${room.code || ''} slot=${slot}`);
+    broadcastRoomGame(room, {
+      type: 'turn_passed',
+      slot,
+      reason: 'timeout',
+      turn: next,
+      scores: state.scores
+    });
+    startRoomTurnTimer(room);
+  }, ROOM_TURN_TIMEOUT_MS);
+}
+
+// Registro das mensagens rejeitadas (tentativas de manipulação)
+function logRejectedMessage(conn, type, reason) {
+  const userId = conn && conn.userId ? conn.userId : 'anônimo';
+  console.warn(`[anti-cheat] mensagem rejeitada: tipo=${type} jogador=${userId} motivo=${reason}`);
+}
+
+function rejectClientMessage(ws, conn, type, reason, room) {
+  logRejectedMessage(conn, type, reason);
+  const payload = { type: 'game_rejected', action: type, reason };
+  // Devolve o turno autoritativo para que o cliente se sincronize de novo
+  if (room && room.game && Number.isInteger(Number(room.game.turn))) {
+    payload.turn = room.game.turn;
+    payload.scores = room.game.scores;
+  }
+  sendTo(ws, payload);
+}
+
+// Limite de mensagens por conexão (anti-spam)
+function allowMessageByRate(conn) {
+  const now = Date.now();
+  if (!conn.rateWindow || now - conn.rateWindow.startedAt > RATE_LIMIT_WINDOW_MS) {
+    conn.rateWindow = { startedAt: now, count: 0 };
+  }
+  conn.rateWindow.count++;
+  return conn.rateWindow.count <= RATE_LIMIT_MAX_MESSAGES;
+}
+
+/**
+ * Aviso de que a partida começou no cliente. O relógio do turno do servidor
+ * só começa a contar a partir daqui (a contagem regressiva que antecede a
+ * partida não pode consumir o tempo do primeiro jogador).
+ * A mensagem é aceita apenas uma vez por sala.
+ */
+function handleGameStart(ws, conn, room) {
+  const state = room.game;
+  if (!state) return;
+  if (state.started) return;
+  state.started = true;
+  startRoomTurnTimer(room);
+}
+
+/**
+ * Pedido de rolar o dado. O valor é sorteado pelo servidor.
+ */
+function handleRollRequest(ws, conn, room) {
+  const state = room.game;
+  const slot = Number(conn.playerIdx);
+
+  if (!state) {
+    rejectClientMessage(ws, conn, 'roll_request', 'Partida não encontrada.', room);
+    return;
+  }
+  if (state.over) {
+    rejectClientMessage(ws, conn, 'roll_request', 'A partida já terminou.', room);
+    return;
+  }
+  if (state.turn !== slot) {
+    rejectClientMessage(ws, conn, 'roll_request', 'Não é a vez deste jogador.', room);
+    return;
+  }
+  if (state.dice !== null) {
+    rejectClientMessage(ws, conn, 'roll_request', 'O dado já foi sorteado neste turno.', room);
+    return;
+  }
+
+  // O sorteio e as regras de turno (3 seis, fim de turno sem movimento)
+  // ficam no módulo de regras: o servidor é a única fonte da verdade.
+  const result = rules.rollForTurn(state, slot);
+  if (!result) {
+    rejectClientMessage(ws, conn, 'roll_request', 'Não foi possível sortear o dado.', room);
+    return;
+  }
+
+  broadcastRoomGame(room, {
+    type: 'dice_rolled',
+    slot,
+    value: result.value,
+    sixes: result.sixes,
+    turn: slot,
+    legal: result.legal
+  });
+
+  if (result.turnPassed) {
+    // 3 seis seguidos ou nenhum movimento possível: o turno passa
+    broadcastRoomGame(room, {
+      type: 'turn_passed',
+      slot,
+      reason: result.reason,
+      turn: result.turn,
+      scores: state.scores
+    });
+  }
+
+  startRoomTurnTimer(room);
+}
+
+/**
+ * Pedido de movimento. O cliente informa apenas a peça escolhida:
+ * o servidor recalcula a jogada com o dado que ele mesmo sorteou.
+ */
+function handleMoveRequest(ws, conn, room, data) {
+  const state = room.game;
+  const slot = Number(conn.playerIdx);
+
+  if (!state) {
+    rejectClientMessage(ws, conn, 'move_request', 'Partida não encontrada.', room);
+    return;
+  }
+  if (state.over) {
+    rejectClientMessage(ws, conn, 'move_request', 'A partida já terminou.', room);
+    return;
+  }
+  if (state.turn !== slot) {
+    rejectClientMessage(ws, conn, 'move_request', 'Não é a vez deste jogador.', room);
+    return;
+  }
+  if (state.dice === null) {
+    rejectClientMessage(ws, conn, 'move_request', 'O dado ainda não foi sorteado.', room);
+    return;
+  }
+
+  const tokenIdx = Number(data.tokenIdx);
+  const result = rules.applyMove(state, slot, tokenIdx);
+  if (!result) {
+    rejectClientMessage(ws, conn, 'move_request', 'Jogada ilegal para o dado sorteado.', room);
+    return;
+  }
+
+  // Quem tirou 6 joga novamente
+  const extraTurn = state.dice === 6;
+  state.dice = null;
+  if (!extraTurn) {
+    state.turn = rules.nextSlot(state, slot);
+  }
+
+  const winner = rules.checkWinner(state);
+  if (winner) {
+    state.over = true;
+    state.winner = winner;
+    clearRoomTurnTimer(room);
+  }
+
+  broadcastRoomGame(room, {
+    type: 'token_moved',
+    slot,
+    color: result.color,
+    tokenIdx: result.tokenIdx,
+    from: result.from,
+    to: result.to,
+    roll: result.roll,
+    captured: result.captured,
+    points: result.points,
+    scores: state.scores,
+    turn: state.turn,
+    extraTurn,
+    over: state.over,
+    winner: state.winner
+  });
+
+  if (!state.over) startRoomTurnTimer(room);
 }
 
 // Pareia dois jogadores de contas diferentes da MESMA fila (Jogo Rápido ou
@@ -271,13 +522,25 @@ async function startQuickMatchRoom(a, b) {
   const mode = queueMode(a) === 'liga' || queueMode(b) === 'liga' ? 'liga' : 'quick';
 
   const room = {
+    code,
     players: [a.ws, b.ws],
     names: [a.name || 'Jogador 1', b.name || 'Jogador 2'],
     userIds: [a.uid || null, b.uid || null],
     ready: [true, true],
+    teams: [0, 1],
     mode
   };
   rooms.set(code, room);
+
+  // Estado autoritativo da partida: o servidor controla dado, turno e peças
+  setupRoomGame(room, {
+    slots: [
+      { slot: 0, color: SOLO_SLOT_COLORS[0], team: 0 },
+      { slot: 1, color: SOLO_SLOT_COLORS[1], team: 1 }
+    ],
+    mode: 'solo',
+    target: 4
+  });
 
   const connA = connections.get(a.ws);
   const connB = connections.get(b.ws);
@@ -306,10 +569,10 @@ async function startQuickMatchRoom(a, b) {
   players[0].color = soloColors.starterColor;
   players[1].color = soloColors.opponentColor;
 
-  sendTo(a.ws, { type: 'room_created', room: code, player: 0, name: room.names[0], quick: true, mode, opponentProfile: { ...profileB, color: soloColors.opponentColor } });
-  sendTo(b.ws, { type: 'room_created', room: code, player: 1, name: room.names[1], quick: true, mode, opponentProfile: { ...profileA, color: soloColors.starterColor } });
-  sendTo(a.ws, { type: 'room_ready', players });
-  sendTo(b.ws, { type: 'room_ready', players });
+  sendTo(a.ws, { type: 'room_created', room: code, player: 0, name: room.names[0], quick: true, mode, slotColors: room.slotColors, turn: room.game.turn, opponentProfile: { ...profileB, color: soloColors.opponentColor } });
+  sendTo(b.ws, { type: 'room_created', room: code, player: 1, name: room.names[1], quick: true, mode, slotColors: room.slotColors, turn: room.game.turn, opponentProfile: { ...profileA, color: soloColors.starterColor } });
+  sendTo(a.ws, { type: 'room_ready', players, slotColors: room.slotColors, turn: room.game.turn });
+  sendTo(b.ws, { type: 'room_ready', players, slotColors: room.slotColors, turn: room.game.turn });
 }
 
 /* -------------------------------------------------------------
@@ -590,6 +853,7 @@ async function startDuplaMatch(entryA, entryB) {
   }
 
   const room = {
+    code,
     players: [],
     names: [],
     userIds: [],
@@ -597,6 +861,9 @@ async function startDuplaMatch(entryA, entryB) {
     ready: [],
     mode: 'dupla'
   };
+
+  // Cores dos slots: no 1 vs 1 são diagonais, no 2 vs 2 seguem a ordem horária
+  const slotColors = soloMatch ? SOLO_SLOT_COLORS.slice() : rules.CLOCKWISE_COLORS.slice();
 
   seats.forEach(seat => {
     room.players[seat.slot] = seat.player.ws;
@@ -612,6 +879,17 @@ async function startDuplaMatch(entryA, entryB) {
   });
 
   rooms.set(code, room);
+
+  // Estado autoritativo da partida (o servidor controla dado, turno e peças)
+  setupRoomGame(room, {
+    slots: seats.map(seat => ({
+      slot: seat.slot,
+      color: slotColors[seat.slot] || rules.CLOCKWISE_COLORS[seat.slot],
+      team: seat.team
+    })),
+    mode: soloMatch ? 'solo' : 'dupla',
+    target: soloMatch ? 4 : 8
+  });
 
   const roster = seats.map(seat => {
     const source = seat.team === 0 ? entryA : entryB;
@@ -650,7 +928,9 @@ async function startDuplaMatch(entryA, entryB) {
       slot: seat.slot,
       team: seat.team,
       solo: soloMatch,
-      players: roster
+      players: roster,
+      slotColors: room.slotColors,
+      turn: room.game.turn
     };
     // A partida começa na aba do jogador; as outras abas só são avisadas
     sendTo(seat.player.ws, matchMessage);
@@ -874,6 +1154,7 @@ async function startArenaMatch(seats) {
   } while (rooms.has(code));
 
   const room = {
+    code,
     players: [],
     names: [],
     userIds: [],
@@ -897,6 +1178,17 @@ async function startArenaMatch(seats) {
 
   rooms.set(code, room);
 
+  // Estado autoritativo da partida (o servidor controla dado, turno e peças)
+  setupRoomGame(room, {
+    slots: seats.map(seat => ({
+      slot: seat.slot,
+      color: ARENA_SLOT_COLORS[seat.slot] || rules.CLOCKWISE_COLORS[seat.slot],
+      team: seat.slot
+    })),
+    mode: 'arena',
+    target: 4
+  });
+
   const roster = seats.map(seat => ({
     slot: seat.slot,
     id: seat.uid,
@@ -913,7 +1205,9 @@ async function startArenaMatch(seats) {
       type: 'arena_match_found',
       room: code,
       slot: seat.slot,
-      players: roster
+      players: roster,
+      slotColors: room.slotColors,
+      turn: room.game.turn
     });
     // A partida começa na aba do jogador; as outras abas só são avisadas
     getUserSockets(seat.uid).forEach(socket => {
@@ -2011,7 +2305,8 @@ async function main() {
       roomCode: null,
       playerIdx: null,
       userId: null,
-      name: null
+      name: null,
+      rateWindow: { startedAt: Date.now(), count: 0 }
     };
     connections.set(ws, conn);
 
@@ -2020,6 +2315,12 @@ async function main() {
       try {
         data = JSON.parse(raw.toString('utf8'));
       } catch (error) {
+        return;
+      }
+
+      // Limite de mensagens por conexão (anti-spam)
+      if (!allowMessageByRate(conn)) {
+        logRejectedMessage(conn, data && data.type ? data.type : 'desconhecida', 'limite de mensagens excedido');
         return;
       }
 
@@ -2146,10 +2447,13 @@ async function main() {
           code = newCode;
 
           const room = {
+            code,
             players: [ws, null],
             names: [cleanName || 'Jogador 1', null],
             userIds: [uid || null, null],
-            ready: [false, false]
+            teams: [0, 1],
+            ready: [false, false],
+            mode: 'solo'
           };
           rooms.set(code, room);
           conn.roomCode = code;
@@ -2224,12 +2528,25 @@ async function main() {
           // SOLO 1 vs 1: cores resolvidas pelo servidor (quem começa usa a
           // cor primária; o oponente só usa a primária se o nome diferir)
           const soloColors = await resolveSoloMatchColors([room.userIds[0], room.userIds[1]]);
+
+          // Estado autoritativo da partida (dado, turno e peças no servidor)
+          setupRoomGame(room, {
+            slots: [
+              { slot: 0, color: SOLO_SLOT_COLORS[0], team: 0 },
+              { slot: 1, color: SOLO_SLOT_COLORS[1], team: 1 }
+            ],
+            mode: 'solo',
+            target: 4
+          });
+
           broadcastRoom(code, {
             type: 'room_ready',
             players: [
               { id: 0, uid: profile0.uid, name: profile0.name, email: profile0.email, picture: profile0.picture, playerName: profile0.playerName, color: soloColors.starterColor },
               { id: 1, uid: profile1.uid, name: profile1.name, email: profile1.email, picture: profile1.picture, playerName: profile1.playerName, color: soloColors.opponentColor }
-            ]
+            ],
+            slotColors: room.slotColors,
+            turn: room.game.turn
           });
         }
         return;
@@ -2739,10 +3056,38 @@ async function main() {
 
       if (conn.roomCode === null || conn.playerIdx === null) return;
 
-      // Relay de mensagens de jogo para os outros jogadores da sala
-      // (1 vs 1 envia para o oponente; 2 vs 2 envia para todos os demais)
       const room = rooms.get(conn.roomCode);
       if (!room) return;
+
+      /* --- PARTIDA AUTORITATIVA: pedidas do cliente ------------------- */
+      if (data.type === 'game_start') {
+        handleGameStart(ws, conn, room);
+        return;
+      }
+
+      if (data.type === 'roll_request') {
+        handleRollRequest(ws, conn, room);
+        return;
+      }
+
+      if (data.type === 'move_request') {
+        handleMoveRequest(ws, conn, room, data);
+        return;
+      }
+
+      // O dado, o movimento e a passagem de vez não podem mais vir do
+      // cliente: qualquer tentativa é ignorada e registrada.
+      if (FORBIDDEN_CLIENT_MESSAGES.has(data.type)) {
+        rejectClientMessage(ws, conn, data.type, 'Mensagem controlada pelo cliente não é aceita.', room);
+        return;
+      }
+
+      // Relay apenas das mensagens permitidas (1 vs 1 envia para o oponente;
+      // 2 vs 2 envia para todos os demais)
+      if (!RELAYABLE_ROOM_MESSAGES.has(data.type)) {
+        rejectClientMessage(ws, conn, data.type, 'Mensagem não permitida dentro da partida.', room);
+        return;
+      }
 
       const forward = {
         type: data.type,
@@ -2844,3 +3189,4 @@ main().catch(error => {
   console.error('Erro ao iniciar o servidor:', error);
   process.exit(1);
 });
+

@@ -1524,6 +1524,7 @@
     let diceCurrentY = 0;
     let diceCurrentTransform = 'translateY(0px) rotateX(0deg) rotateY(0deg) scale(1)';
     let activeDiceAnimation = null;
+    let diceRollAnimating = false; // true enquanto o dado está girando na tela
 
     /* Mapeamento exato e inequívoco das faces 3D do dado (compartilhado
        entre a rolagem local e a rolagem espelhada do oponente) */
@@ -2804,9 +2805,49 @@
     // Nome do jogador que está no slot informado (2 vs 2 online).
     // Sem o roster, cai no nome do oponente do modo 1 vs 1.
     function getOnlinePlayerNameBySlot(slot) {
-      const entry = onlineRoster.find(item => Number(item.slot) === Number(slot));
+      const index = Number(slot);
+      if (index === Number(onlinePlayerIdx)) {
+        const account = typeof accountUser !== 'undefined' ? accountUser : null;
+        return accountNickname(account) || playerName || 'Você';
+      }
+      const entry = onlineRoster.find(item => Number(item.slot) === index);
       if (entry) return entry.name || entry.playerName || 'Jogador';
       return getFirstName(onlineOpponentName) || 'Oponente';
+    }
+
+    /* -------------------------------------------------------------
+       PARTIDA ONLINE AUTORITATIVA (cliente)
+       O servidor é a fonte da verdade: dado, turno, peças e placar.
+       O cliente só pede "rolar", escolhe qual peça mover e anima o
+       que o servidor devolve.
+    ------------------------------------------------------------- */
+
+    // Índice do tabuleiro (activePlayers) que corresponde ao slot do servidor
+    function serverSlotToTurnIndex(slot) {
+      const index = Number(slot);
+      if (!Number.isInteger(index) || index < 0) return -1;
+      if (!onlineSlotColors.length) return -1;
+      const color = onlineSlotColors[index];
+      if (!color) return -1;
+      return activePlayers.indexOf(color);
+    }
+
+    // Aplica o turno decidido pelo servidor
+    function applyServerTurn(slot) {
+      const index = serverSlotToTurnIndex(slot);
+      if (index < 0) return;
+      currentTurnIndex = index;
+      hasRolled = false;
+      onlineServerLegal = [];
+      clearHighlights();
+      updateTurnUI();
+    }
+
+    // Time (do servidor) do jogador local: usado para saber quem venceu
+    function onlineLocalTeam() {
+      if (isOnlineTeamMode()) return Number(onlineTeamIndex);
+      if (onlinePlayerIdx === null || onlinePlayerIdx === undefined) return null;
+      return Number(onlinePlayerIdx);
     }
 
     function getWinningScore() {
@@ -3647,6 +3688,8 @@
       onlineTeamIndex = 0;
       onlineTeamMode = false;
       onlineSlotColors = [];
+      onlineServerTurnSlot = 0;
+      onlineServerLegal = [];
 
       // Restaura a escolha de cor feita na tela inicial antes da partida
       // online (o slot usado na partida era definido pelo servidor)
@@ -3783,7 +3826,7 @@
       if (turnTimer.remaining <= 0) {
         if (turnTimer.mirrored) {
           // O tempo do oponente acabou neste cliente (espelho): apenas sinaliza
-          // visualmente e aguarda o pass_turn enviado pelo cliente dele.
+          // visualmente e aguarda o 'turn_passed' enviado pelo servidor.
           clearTurnTimerInterval();
           turnTimer.endsAt = null;
           turnTimer.expired = true;
@@ -3815,6 +3858,21 @@
       renderTurnTimer();
 
       gameAudio.playNoMove();
+
+      if (isOnlineGame) {
+        // No modo online o tempo é controlado pelo servidor: o cliente
+        // apenas avisa e espera a mensagem 'turn_passed' (nada é enviado).
+        logStatus('⏱️ Tempo esgotado! Aguardando o servidor passar a vez...');
+        const instruction = document.getElementById('dice-instruction');
+        if (instruction) instruction.textContent = 'Tempo esgotado!';
+
+        onlineRollPending = false;
+        hasRolled = false;
+        isAnimating = false;
+        clearHighlights();
+        return;
+      }
+
       logStatus('⏱️ Tempo esgotado! Você perdeu a vez.');
       const instruction = document.getElementById('dice-instruction');
       if (instruction) instruction.textContent = 'Tempo esgotado!';
@@ -3829,8 +3887,6 @@
           renderTurnTimer();
           return;
         }
-        // No modo online, avisa o oponente de que o tempo esgotou e a vez passou
-        if (isOnlineGame) sendOnlinePassTurn();
         nextTurn();
       }, 1200);
     }
@@ -3988,6 +4044,17 @@
       gameAudio.playPoint();
     }
 
+    function refreshTurnInstruction() {
+      const instruction = document.getElementById('dice-instruction');
+      if (!instruction) return;
+      const player = getCurrentPlayer();
+      if (isOnlineGame && player !== getHumanPlayerKey()) {
+        instruction.textContent = `Vez de ${getPlayerDisplayName(player)}...`;
+      } else if (!hasRolled && !isAnimating) {
+        instruction.textContent = 'Toque para rolar';
+      }
+    }
+
     function updateTurnUI() {
       const player = getCurrentPlayer();
       const color = getPlayerColor(player);
@@ -4001,12 +4068,7 @@
       text.innerText = `Turno: ${currentPlayerName}`;
       badge.className = `flex items-center justify-center gap-2 px-4 py-1.5 bg-slate-800 border max-w-full ${color.border}`;
 
-      const instruction = document.getElementById('dice-instruction');
-      if (isOnlineGame && player !== getHumanPlayerKey()) {
-        instruction.textContent = `Vez de ${getPlayerDisplayName(player)}...`;
-      } else if (!hasRolled && !isAnimating) {
-        instruction.textContent = 'Toque para rolar';
-      }
+      refreshTurnInstruction();
 
       syncTurnTimerWithTurn();
     }
@@ -4110,6 +4172,10 @@
     }
 
     function completeDiceRoll() {
+      // No modo online o dado é sorteado pelo servidor: este caminho é
+      // usado apenas nas partidas locais (contra a CPU).
+      if (isOnlineGame) return;
+
       isAnimating = false;
       hasRolled = true;
       document.getElementById('dice-instruction').textContent = 'Toque para rolar';
@@ -4121,8 +4187,6 @@
           gameAudio.playNoMove();
           logStatus(`3 Seis consecutivos! Perdeu a vez.`);
           consecutiveSixes = 0;
-          // No modo online, o turno também precisa avançar no oponente
-          if (isOnlineGame) sendOnlinePassTurn();
           schedule(nextTurn, 1200);
           return;
         }
@@ -4130,9 +4194,6 @@
         consecutiveSixes = 0;
       }
 
-      if (isOnlineGame) {
-        sendOnlineDiceRoll(diceValue);
-      }
       evaluateMoves();
     }
 
@@ -4155,14 +4216,42 @@
         { transform: finalTransform, offset: 1 }
       ];
 
-      // Sem suporte a Web Animations ou com a aba em segundo plano:
-      // aplica a face final do dado diretamente e segue o fluxo da partida
-      if (typeof dice.animate !== 'function' || document.hidden) {
+      // A conclusão da animação roda exatamente UMA vez. Isso é essencial:
+      // em janelas ocultas/minimizadas o navegador pode congelar a linha do
+      // tempo de animação (o evento 'finish' nunca chega) e a partida ficaria
+      // travada com isAnimating = true para sempre.
+      let finished = false;
+      let safetyTimer = null;
+
+      const complete = () => {
+        if (finished) return;
+        finished = true;
+        diceRollAnimating = false;
+        if (safetyTimer) {
+          clearTimeout(safetyTimer);
+          safetyTimer = null;
+        }
+        onDone();
+      };
+
+      const applyFinalFace = () => {
+        dice.style.transition = 'none';
         dice.style.transform = finalTransform;
         diceCurrentX = finalX;
         diceCurrentY = finalY;
         diceCurrentTransform = finalTransform;
-        schedule(onDone, document.hidden ? 250 : 1500);
+        void dice.offsetWidth;
+        dice.style.transition = '';
+      };
+
+      // Sem suporte a Web Animations ou com a aba em segundo plano:
+      // aplica a face final do dado diretamente e segue o fluxo da partida
+      if (typeof dice.animate !== 'function' || document.hidden) {
+        applyFinalFace();
+        diceRollAnimating = true;
+        // setTimeout puro (e não 'schedule'): a conclusão do dado não pode
+        // ser descartada pela invalidação de callbacks da partida.
+        setTimeout(complete, document.hidden ? 250 : 1500);
         return;
       }
 
@@ -4173,22 +4262,54 @@
       });
 
       activeDiceAnimation = animation;
+      diceRollAnimating = true;
+
       animation.addEventListener('finish', () => {
-        dice.style.transition = 'none';
-        dice.style.transform = finalTransform;
-        diceCurrentX = finalX;
-        diceCurrentY = finalY;
-        diceCurrentTransform = finalTransform;
-        void dice.offsetWidth;
-        dice.style.transition = '';
-        activeDiceAnimation = null;
-        animation.cancel();
-        onDone();
+        applyFinalFace();
+        if (activeDiceAnimation === animation) activeDiceAnimation = null;
+        complete();
+        try { animation.cancel(); } catch (error) { /* já concluída */ }
       }, { once: true });
+
+      // A animação pode ser cancelada (pausa, menu, nova partida): o fluxo
+      // do jogo precisa continuar de qualquer forma.
+      animation.addEventListener('cancel', () => complete(), { once: true });
+
+      // Rede de segurança: se a linha do tempo estiver congelada, o evento
+      // 'finish' não chega. O temporizador garante que o dado conclua.
+      safetyTimer = setTimeout(() => {
+        applyFinalFace();
+        if (activeDiceAnimation === animation) activeDiceAnimation = null;
+        complete();
+        try { animation.cancel(); } catch (error) { /* já concluída */ }
+      }, 1800);
     }
 
     function rollDice() {
       if (hasRolled || isAnimating || isPaused) return;
+
+      if (isOnlineGame) {
+        // Partida online: o cliente só pede a rolagem. O valor do dado é
+        // sorteado pelo servidor (fonte criptográfica) e chega depois na
+        // mensagem 'dice_rolled' - nada é calculado aqui.
+        isAnimating = true;
+        onlineRollPending = true;
+        document.getElementById('dice-instruction').textContent = 'Girando o dado...';
+        sendOnlineRollRequest();
+
+        // Rede de segurança: se o servidor não responder (conexão caída,
+        // por exemplo), libera o dado para o jogador poder tentar de novo.
+        // O servidor continua sendo a fonte da verdade: uma segunda
+        // rolagem fora de hora é recusada por ele.
+        setTimeout(() => {
+          if (!onlineRollPending || !isOnlineGame) return;
+          onlineRollPending = false;
+          isAnimating = false;
+          hasRolled = false;
+          refreshTurnInstruction();
+        }, 12000);
+        return;
+      }
 
       isAnimating = true;
       document.getElementById('dice-instruction').textContent = 'Girando o dado...';
@@ -4200,20 +4321,19 @@
     }
 
     function evaluateMoves() {
+      // No modo online quem decide as jogadas é o servidor (a lista de
+      // peças legais vem em 'dice_rolled').
+      if (isOnlineGame) return;
+
       const player = getCurrentPlayer();
       const validTokens = getValidTokenIndices(player, diceValue);
 
       if (validTokens.length === 0) {
         gameAudio.playNoMove();
         logStatus(`Nenhum movimento possível para ${getPlayerColor(player).name}.`);
-        // No modo online, avisa o oponente para também avançar o turno
-        if (isOnlineGame && player === getHumanPlayerKey()) sendOnlinePassTurn();
         schedule(nextTurn, 1200);
       } else if (isAutomatedPlayer(player)) {
         schedule(() => makeCPUMove(validTokens), 800);
-      } else if (isOnlineGame && player !== getHumanPlayerKey()) {
-        // Turno do oponente remoto: aguardar o movimento chegar via WebSocket
-        return;
       } else {
         highlightSelectableTokens(validTokens);
       }
@@ -4305,10 +4425,23 @@
       });
 
       activeTokenAnimation = animation;
+
+      // Rede de segurança: em janelas ocultas/minimizadas o navegador pode
+      // congelar a linha do tempo e a promessa 'finished' nunca resolve.
+      // O temporizador evita que a peça (e a partida) fiquem travadas.
+      let safetyTimer = null;
+      const safety = new Promise(resolve => {
+        safetyTimer = setTimeout(resolve, duration + 500);
+      });
+
       try {
-        await animation.finished;
+        await Promise.race([animation.finished, safety]);
       } catch (error) {
         // A animação pode ser cancelada ao reiniciar a partida.
+      }
+      if (safetyTimer) {
+        clearTimeout(safetyTimer);
+        safetyTimer = null;
       }
 
       if (activeTokenAnimation === animation) {
@@ -4323,9 +4456,12 @@
       const session = movementSession;
       const startingPosition = tokensState[player][tokenIdx];
 
-      // No modo remoto (movimento do oponente), não reenvia a mensagem
+      // No modo online o cliente informa apenas QUAL peça foi escolhida:
+      // o servidor recalcula a jogada com o dado que ele mesmo sorteou e
+      // devolve o resultado em 'token_moved'.
       if (isOnlineGame && !isRemote) {
-        sendOnlineTokenMove(player, tokenIdx, steps);
+        sendOnlineMoveRequest(tokenIdx);
+        return;
       }
 
       try {
@@ -4427,53 +4563,7 @@
       const winningTeam = getWinningTeam();
       if (winningTeam) {
         const humanWon = winningTeam === 'HUMAN' || winningTeam === getHumanPlayerKey();
-        const winTitle = document.getElementById('win-title');
-
-        // A partida online terminou normalmente: desconexões seguintes
-        // não contam como abandono
-        if (isOnlineGame) onlineMatchEnded = true;
-        clearAbandonCountdown();
-        document.getElementById('win-countdown').classList.add('hidden');
-
-        stopTurnTimer();
-
-        // Modo ARENA: cada jogador por si, mostrar placar de todos os 4
-        if (isOnlineArenaMode() || (!isTeamMode() && !isOnlineGame && activePlayers.length === 4)) {
-          winTitle.innerText = humanWon ? 'V I T Ó R I A' : 'D E R R O T A';
-          winTitle.className = `win-title font-display font-black ${humanWon ? 'text-amber-400' : 'text-red-500'}`;
-          document.getElementById('win-subtitle').classList.add('hidden');
-
-          // Montar placar final com todos os 4 jogadores
-          document.getElementById('win-score').innerHTML = buildArenaStandingsHtml();
-        } else {
-          // Modo SOLO ou DUPLA: placar tradicional
-          winTitle.innerText = humanWon ? 'V I T Ó R I A' : 'D E R R O T A';
-          winTitle.className = `win-title font-display font-black ${humanWon ? 'text-amber-400' : 'text-red-500'}`;
-          document.getElementById('win-subtitle').classList.add('hidden');
-          document.getElementById('win-score').innerText = `${getHumanTeamScore()} - ${getCpuScore()}`;
-        }
-        
-        document.getElementById('win-modal').classList.remove('hidden');
-
-        if (humanWon) {
-          gameAudio.playVictory();
-        } else {
-          gameAudio.playDefeat();
-        }
-
-        // Registra o resultado no histórico da conta
-        await postMatchRecord(
-          isOnlineGame ? onlineMatchType : (opponentsCount === 1 ? 'local' : 'multiplayer'),
-          humanWon ? 'win' : 'loss',
-          getHumanTeamScore(),
-          getCpuScore(),
-          isOnlineGame ? (onlineOpponentName || 'Oponente') : 'CPU'
-        );
-
-        // Fim da partida: encerra o relógio em segundo plano
-        stopBackgroundClock();
-        invalidateScheduledCallbacks();
-        setMenuButtonVisible(false);
+        await showGameOver(humanWon);
         return;
       }
 
@@ -4486,6 +4576,65 @@
       } else {
         nextTurn();
       }
+    }
+
+    // Tela de fim de partida (vitória/derrota) e registro no histórico
+    async function showGameOver(humanWon) {
+      const winTitle = document.getElementById('win-title');
+
+      // A partida online terminou normalmente: desconexões seguintes
+      // não contam como abandono
+      if (isOnlineGame) onlineMatchEnded = true;
+      clearAbandonCountdown();
+      document.getElementById('win-countdown').classList.add('hidden');
+
+      stopTurnTimer();
+
+      // Modo ARENA: cada jogador por si, mostrar placar de todos os 4
+      if (isOnlineArenaMode() || (!isTeamMode() && !isOnlineGame && activePlayers.length === 4)) {
+        winTitle.innerText = humanWon ? 'V I T Ó R I A' : 'D E R R O T A';
+        winTitle.className = `win-title font-display font-black ${humanWon ? 'text-amber-400' : 'text-red-500'}`;
+        document.getElementById('win-subtitle').classList.add('hidden');
+
+        // Montar placar final com todos os 4 jogadores
+        document.getElementById('win-score').innerHTML = buildArenaStandingsHtml();
+      } else {
+        // Modo SOLO ou DUPLA: placar tradicional
+        winTitle.innerText = humanWon ? 'V I T Ó R I A' : 'D E R R O T A';
+        winTitle.className = `win-title font-display font-black ${humanWon ? 'text-amber-400' : 'text-red-500'}`;
+        document.getElementById('win-subtitle').classList.add('hidden');
+        document.getElementById('win-score').innerText = `${getHumanTeamScore()} - ${getCpuScore()}`;
+      }
+
+      document.getElementById('win-modal').classList.remove('hidden');
+
+      if (humanWon) {
+        gameAudio.playVictory();
+      } else {
+        gameAudio.playDefeat();
+      }
+
+      // Registra o resultado no histórico da conta
+      await postMatchRecord(
+        isOnlineGame ? onlineMatchType : (opponentsCount === 1 ? 'local' : 'multiplayer'),
+        humanWon ? 'win' : 'loss',
+        getHumanTeamScore(),
+        getCpuScore(),
+        isOnlineGame ? (onlineOpponentName || 'Oponente') : 'CPU'
+      );
+
+      // Fim da partida: encerra o relógio em segundo plano
+      stopBackgroundClock();
+      invalidateScheduledCallbacks();
+      setMenuButtonVisible(false);
+    }
+
+    // Fim de partida online: o vencedor é decidido pelo servidor
+    async function showOnlineGameOver(data) {
+      const winner = data && data.winner ? data.winner : null;
+      const localTeam = onlineLocalTeam();
+      const humanWon = Boolean(winner && localTeam !== null && Number(winner.team) === localTeam);
+      await showGameOver(humanWon);
     }
 
     function getWinningTeam() {
@@ -4607,12 +4756,15 @@
         BLUE: 0
       };
 
-      // No modo local, o jogador humano começa. No modo online, ambos os
-      // clientes precisam concordar com o turno inicial: o player 0
-      // (criador da sala, cor AZUL) começa, garantindo turno sincronizado.
-      currentTurnIndex = isOnlineGame
-        ? 0
-        : activePlayers.indexOf(humanPlayerKey);
+      // No modo local, o jogador humano começa. No modo online, o turno
+      // inicial é definido pelo servidor (o slot 0 começa), garantindo
+      // que os dois clientes comecem na mesma casa.
+      if (isOnlineGame) {
+        const serverIndex = serverSlotToTurnIndex(onlineServerTurnSlot);
+        currentTurnIndex = serverIndex >= 0 ? serverIndex : 0;
+      } else {
+        currentTurnIndex = activePlayers.indexOf(humanPlayerKey);
+      }
       hasRolled = false;
       consecutiveSixes = 0;
       isAnimating = false;
@@ -4645,6 +4797,11 @@
       // O botão Menu volta a ficar disponível durante a partida
       setMenuButtonVisible(true);
       layoutAccountArea();
+
+      // No modo online avisa o servidor que a partida começou: é a partir
+      // desse momento que o relógio do turno (30s) do servidor começa a
+      // contar. A contagem regressiva antes do jogo não consome o tempo.
+      if (isOnlineGame) sendOnlineGameStart();
     }
 
     function checkCPUTurn() {
@@ -4775,6 +4932,9 @@
     let onlineTeamIndex = 0; // time do jogador local na partida de dupla
     let onlineTeamMode = false; // partida online 2 vs 2 (4 jogadores)
     let onlineSlotColors = []; // cor de cada slot da partida de dupla
+    let onlineServerTurnSlot = 0; // slot (do servidor) que está com a vez
+    let onlineServerLegal = []; // peças liberadas pelo servidor para o dado atual
+    let onlineRollPending = false; // existe um pedido de rolagem aguardando resposta
     let opponentMenuOpen = false; // menu do oponente aberto no placar
     let friendConfirmTarget = null; // { id, name } aguardando confirmação de remoção
     let pendingFriendRequestsCount = 0; // solicitações de amizade recebidas não lidas
@@ -4882,6 +5042,17 @@
       }
     }
 
+    // Guarda as cores dos slots e o turno inicial definidos pelo servidor
+    function applyServerRoomInfo(data) {
+      if (!data) return;
+      if (Array.isArray(data.slotColors) && data.slotColors.length) {
+        onlineSlotColors = data.slotColors.slice();
+      }
+      if (Number.isInteger(Number(data.turn))) {
+        onlineServerTurnSlot = Number(data.turn);
+      }
+    }
+
     function handleOnlineMessage(data) {
       switch (data.type) {
         case 'room_created':
@@ -4931,10 +5102,12 @@
           if (matchFoundInterval) {
             pendingQuickStart = data.players;
             pendingGameStarter = null;
+            applyServerRoomInfo(data);
             return;
           }
           onlineQueued = false;
           closeOnlineModal();
+          applyServerRoomInfo(data);
           startOnlineGame(data.players);
           break;
 
@@ -4971,23 +5144,27 @@
           }
           break;
 
-        case 'dice_roll':
+        case 'dice_rolled':
+          // Resultado do dado sorteado pelo servidor (valor oficial)
           if (!isOnlineGame) return;
-          handleRemoteDiceRoll(data.from, data.value);
+          handleServerDiceRolled(data);
           break;
 
-        case 'token_move':
+        case 'token_moved':
+          // Jogada validada pelo servidor (posição, captura e pontos oficiais)
           if (!isOnlineGame) return;
-          handleRemoteTokenMove(data.from, data.player, data.tokenIdx, data.steps);
+          handleServerTokenMove(data);
           break;
 
-        case 'pass_turn':
+        case 'turn_passed':
+          // O servidor passou a vez (sem movimento, 3 seis seguidos ou tempo esgotado)
           if (!isOnlineGame) return;
-          // O jogador passou a vez (sem movimentos, 3 seis ou tempo esgotado):
-          // avança o turno aqui também para manter os clientes sincronizados
-          logStatus(`${getOnlinePlayerNameBySlot(data.from)} passou a vez.`);
-          document.getElementById('dice-instruction').textContent = 'Toque para rolar';
-          nextTurn();
+          handleServerTurnPassed(data);
+          break;
+
+        case 'game_rejected':
+          // Ação recusada pelo servidor (turno errado, jogada ilegal, etc.)
+          handleGameRejected(data);
           break;
 
         case 'ack':
@@ -6408,8 +6585,13 @@
       opponentsCount = soloMatch ? 1 : 3;
 
       // Slot de cor: no 1 vs 1 os slots são diagonais (AZUL/VERDE);
-      // no 2 vs 2 são os quatro slots na ordem horária
-      onlineSlotColors = soloMatch ? ['BLUE', 'GREEN'] : CLOCKWISE_COLORS.slice();
+      // no 2 vs 2 são os quatro slots na ordem horária.
+      // As cores vêm do servidor (fonte da verdade).
+      const serverSlotColors = Array.isArray(data.slotColors) && data.slotColors.length
+        ? data.slotColors.slice()
+        : (soloMatch ? ['BLUE', 'GREEN'] : CLOCKWISE_COLORS.slice());
+      onlineSlotColors = serverSlotColors;
+      if (Number.isInteger(Number(data.turn))) onlineServerTurnSlot = Number(data.turn);
       const localColorKey = onlineSlotColors[mySlot] || 'BLUE';
 
       // Guarda a escolha de cor da tela inicial para restaurar ao sair da partida
@@ -6475,7 +6657,11 @@
       opponentsCount = ARENA_MATCH_SIZE; // 4 jogadores, cada um por si
 
       // Cada slot da arena tem uma cor própria (AZUL, VERMELHO, VERDE, AMARELO)
-      onlineSlotColors = CLOCKWISE_COLORS.slice();
+      // definida pelo servidor.
+      onlineSlotColors = (Array.isArray(data.slotColors) && data.slotColors.length)
+        ? data.slotColors.slice()
+        : CLOCKWISE_COLORS.slice();
+      if (Number.isInteger(Number(data.turn))) onlineServerTurnSlot = Number(data.turn);
       const localColorKey = onlineSlotColors[mySlot] || 'BLUE';
 
       // Guarda a escolha de cor da tela inicial para restaurar ao sair da partida
@@ -6802,10 +6988,15 @@
       isOnlineGame = true;
       opponentsCount = 1; // 1 vs 1 online
 
-      // Define a cor base (slot) do jogador local com base no índice do player.
-      // Os índices 0 e 1 recebem cores DIAGONAIS (AZUL e VERDE) para que
-      // ambos os clientes usem as mesmas chaves de cor nas mensagens WS.
-      const localColorKey = CLOCKWISE_COLORS[(onlinePlayerIdx * 2) % 4] || 'BLUE';
+      // Cores dos slots definidas pelo servidor (AZUL no slot 0, VERDE no 1).
+      // As duas pontas da partida usam a MESMA chave de cor, garantindo que
+      // tabuleiro, placar e turnos sejam idênticos nos dois clientes.
+      if (!onlineSlotColors.length) {
+        onlineSlotColors = ['BLUE', 'GREEN'];
+      }
+      const localColorKey = onlineSlotColors[Number(onlinePlayerIdx)] || 'BLUE';
+      onlineTeamIndex = Number(onlinePlayerIdx) || 0;
+      onlineServerLegal = [];
 
       // Guarda a escolha de cor feita na tela inicial para restaurá-la
       // quando o jogador voltar ao menu (o slot online é definido pelo servidor).
@@ -6840,9 +7031,10 @@
         }
       }
 
-      // O jogador ocupa o slot definido pelo servidor, mas mantém a cor
-      // definida para a partida. NÃO sobrescreve selectedHumanColor
-      // com a cor do slot - a cor visual vem da escolha do usuário.
+      // O jogador ocupa o slot definido pelo servidor: a chave de cor do
+      // tabuleiro é a cor do slot (evita dois jogadores com a mesma chave).
+      // A cor VISUAL continua sendo a escolhida pelo usuário no perfil.
+      selectedHumanColor = localColorKey;
       updateColorVariables();
       updateColorSelectionUI();
 
@@ -6878,35 +7070,39 @@
       });
     }
 
-    function sendOnlineDiceRoll(value) {
-      sendOnline({
-        type: 'dice_roll',
-        from: onlinePlayerIdx,
-        value
-      });
+    function sendOnlineGameStart() {
+      // Avisa o servidor que a partida começou (o relógio do turno dele
+      // só começa a contar a partir daqui).
+      sendOnline({ type: 'game_start' });
     }
 
-    function sendOnlineTokenMove(player, tokenIdx, steps) {
-      sendOnline({
-        type: 'token_move',
-        from: onlinePlayerIdx,
-        player,
-        tokenIdx,
-        steps
-      });
+    function sendOnlineRollRequest() {
+      // O cliente só pede "rolar": o valor do dado é sorteado pelo servidor.
+      sendOnline({ type: 'roll_request' });
     }
 
-    function sendOnlinePassTurn() {
-      // Avisa o oponente de que o turno passou sem movimento de peça
-      // (sem movimentos possíveis, 3 seis seguidos ou tempo esgotado),
-      // para que o turno avance nos dois clientes.
-      sendOnline({ type: 'pass_turn', from: onlinePlayerIdx });
+    function sendOnlineMoveRequest(tokenIdx) {
+      // O cliente informa apenas qual peça foi escolhida. O servidor
+      // recalcula a jogada com o dado que ele mesmo sorteou.
+      sendOnline({ type: 'move_request', tokenIdx });
     }
 
-    function handleRemoteDiceRoll(from, value) {
+    /* -------------------------------------------------------------
+       MENSAGENS DO SERVIDOR (partida autoritativa)
+    ------------------------------------------------------------- */
+
+    function handleServerDiceRolled(data) {
       if (!isOnlineGame) return;
 
-      // Vez do oponente: mesma animação e o mesmo som do dado local
+      const value = Number(data.value);
+      if (!Number.isInteger(value) || value < 1 || value > 6) return;
+
+      const slot = Number(data.slot);
+      const playerName = getOnlinePlayerNameBySlot(slot);
+
+      // O servidor respondeu: o pedido de rolagem foi atendido.
+      onlineRollPending = false;
+
       isAnimating = true;
       document.getElementById('dice-instruction').textContent = 'Girando o dado...';
       gameAudio.playDice();
@@ -6915,21 +7111,199 @@
       animateDiceRoll(document.getElementById('dice'), DICE_ROTATIONS, () => {
         isAnimating = false;
 
-        // Se a vez já voltou ao jogador local (pass_turn pode ter chegado
-        // durante a animação), não marca o dado como rolado
-        if (isOnlineGame && getCurrentPlayer() !== getHumanPlayerKey()) {
-          hasRolled = true;
-          const opponentName = getOnlinePlayerNameBySlot(from);
-          document.getElementById('dice-instruction').textContent = `${opponentName} tirou ${value}!`;
-          logStatus(`${opponentName} tirou ${value} no dado!`);
+        // O servidor pode ter passado o turno logo depois do sorteio
+        // (sem movimento possível ou 3 seis seguidos): nesse caso quem
+        // rolou já não está com a vez.
+        const stillTurn = serverSlotToTurnIndex(slot) === currentTurnIndex;
+        // Só quem rolou tem o dado "usado": o outro cliente continua
+        // aguardando a sua vez (hasRolled = false).
+        const isLocalRoller = serverSlotToTurnIndex(slot) === activePlayers.indexOf(getHumanPlayerKey());
+
+        logStatus(`${playerName} tirou ${value} no dado!`);
+
+        if (!stillTurn) {
+          hasRolled = false;
+          refreshTurnInstruction();
+          return;
+        }
+
+        // Peças liberadas pelo servidor para o dado atual
+        onlineServerLegal = Array.isArray(data.legal) ? data.legal.slice() : [];
+
+        if (!isLocalRoller) {
+          // Vez do oponente: este cliente apenas anima e espera a jogada
+          hasRolled = false;
+          document.getElementById('dice-instruction').textContent = `Vez de ${playerName}...`;
+          return;
+        }
+
+        hasRolled = true;
+        document.getElementById('dice-instruction').textContent = `${playerName} tirou ${value}!`;
+
+        if (onlineServerLegal.length) {
+          highlightSelectableTokens(onlineServerLegal);
         }
       });
     }
 
-    function handleRemoteTokenMove(from, player, tokenIdx, steps) {
-      // O oponente moveu uma peça: replica com as mesmas animações e sons
+    function handleServerTokenMove(data) {
       if (!isOnlineGame) return;
-      moveToken(player, tokenIdx, steps, true);
+
+      const player = data.color;
+      const tokenIdx = Number(data.tokenIdx);
+      const from = Number(data.from);
+      const to = Number(data.to);
+
+      if (!player || !tokensState[player] || !Number.isInteger(tokenIdx)) return;
+      if (!Number.isInteger(from) || !Number.isInteger(to)) return;
+
+      const session = movementSession;
+      isAnimating = true;
+      clearHighlights();
+
+      // Posiciona a peça exatamente onde o servidor decidiu a jogada
+      tokensState[player][tokenIdx] = from;
+      renderTokens();
+
+      (async () => {
+        try {
+          if (from === -1) {
+            gameAudio.playMove();
+            tokensState[player][tokenIdx] = 0;
+            renderTokens();
+            await animateTokenTransition(player, tokenIdx, -1, 0, 560);
+          } else {
+            const steps = Math.max(0, to - from);
+            for (let step = 0; step < steps; step++) {
+              if (session !== movementSession) { isAnimating = false; return; }
+              const current = tokensState[player][tokenIdx];
+              gameAudio.playMove();
+              tokensState[player][tokenIdx] = current + 1;
+              renderTokens();
+              await animateTokenTransition(player, tokenIdx, current, tokensState[player][tokenIdx], 320);
+            }
+          }
+        } catch (error) {
+          // animação interrompida: a posição final do servidor vale
+        }
+
+        if (session !== movementSession) { isAnimating = false; return; }
+
+        // Posição final exata (o servidor é a fonte da verdade)
+        tokensState[player][tokenIdx] = to;
+        renderTokens();
+
+        // Capturas decididas pelo servidor
+        if (Array.isArray(data.captured) && data.captured.length) {
+          data.captured.forEach(entry => {
+            const otherColor = entry && entry.color;
+            const otherIdx = Number(entry && entry.tokenIdx);
+            if (!otherColor || !tokensState[otherColor]) return;
+            if (!Number.isInteger(otherIdx)) return;
+            tokensState[otherColor][otherIdx] = -1;
+            logStatus(`💥 ${getPlayerDisplayName(player)} capturou a peça de ${getPlayerDisplayName(otherColor)}!`);
+          });
+          gameAudio.playCapture();
+          renderTokens();
+        }
+
+        // Placar completo enviado pelo servidor
+        if (data.scores && typeof data.scores === 'object') {
+          Object.keys(data.scores).forEach(color => {
+            if (!(color in playerScores)) return;
+            playerScores[color] = Number(data.scores[color]) || 0;
+          });
+        } else if (data.points && data.points.color) {
+          playerScores[data.points.color] = Number(data.points.score) || 0;
+        }
+        if (data.points) gameAudio.playPoint();
+        updateScoreboardUI();
+
+        isAnimating = false;
+
+        if (data.over) {
+          await showOnlineGameOver(data);
+          return;
+        }
+
+        // O próximo turno é decidido pelo servidor
+        applyServerTurn(Number(data.turn));
+        if (data.extraTurn) {
+          logStatus(`${getPlayerColor(player).name} tirou 6 e joga novamente! 🎲`);
+        }
+      })();
+    }
+
+    function handleServerTurnPassed(data) {
+      if (!isOnlineGame) return;
+
+      const slot = Number(data.slot);
+      const reason = data.reason;
+      const playerName = getOnlinePlayerNameBySlot(slot);
+
+      // O pedido de rolagem não está mais em curso: o servidor já decidiu
+      // a vez deste jogador.
+      onlineRollPending = false;
+
+      // O servidor passou a vez: nenhuma rolagem fica pendente no cliente.
+      // Se não houver animação em andamento, libera o bloqueio para o
+      // jogador poder rolar de novo.
+      if (!diceRollAnimating && !activeTokenAnimation) isAnimating = false;
+
+      if (reason === 'three_sixes') {
+        gameAudio.playNoMove();
+        logStatus('3 Seis consecutivos! Perdeu a vez.');
+      } else if (reason === 'no_move') {
+        gameAudio.playNoMove();
+        logStatus(`Nenhum movimento possível para ${playerName}.`);
+      } else if (reason === 'timeout') {
+        logStatus(`⏱️ Tempo de ${playerName} esgotado!`);
+      } else {
+        logStatus(`${playerName} passou a vez.`);
+      }
+
+      // Placar sincronizado com o servidor
+      if (data.scores && typeof data.scores === 'object') {
+        Object.keys(data.scores).forEach(color => {
+          if (!(color in playerScores)) return;
+          playerScores[color] = Number(data.scores[color]) || 0;
+        });
+        updateScoreboardUI();
+      }
+
+      applyServerTurn(Number(data.turn));
+    }
+
+    function handleGameRejected(data) {
+      if (!isOnlineGame) return;
+
+      const action = data.action;
+      const reason = data.reason || 'Ação não permitida.';
+      console.warn('[anti-cheat] ação recusada pelo servidor:', action, reason);
+
+      // O pedido não foi atendido: libera o estado para o jogador decidir de novo.
+      onlineRollPending = false;
+      isAnimating = false;
+
+      // O servidor devolve o turno autoritativo: o cliente se realinha
+      const serverTurn = Number.isInteger(Number(data.turn)) ? Number(data.turn) : null;
+      const legal = onlineServerLegal.slice();
+
+      if (action === 'move_request') {
+        // A jogada foi recusada: as opções válidas do servidor continuam valendo
+        if (serverTurn !== null) applyServerTurn(serverTurn);
+        hasRolled = true;
+        if (getCurrentPlayer() === getHumanPlayerKey() && legal.length) {
+          onlineServerLegal = legal;
+          highlightSelectableTokens(legal);
+        }
+      } else {
+        if (serverTurn !== null) applyServerTurn(serverTurn);
+        hasRolled = false;
+        refreshTurnInstruction();
+      }
+
+      logStatus(`Ação recusada pelo servidor: ${reason}`);
     }
 
     /* -------------------------------------------------------------
