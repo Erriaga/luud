@@ -48,7 +48,12 @@ const PREMIUM_PROMO_PRICE_BRL = Number(process.env.PREMIUM_PROMO_PRICE_BRL || 9.
 const PREMIUM_PROMO_UNTIL = process.env.PREMIUM_PROMO_UNTIL || PREMIUM_PROMO_UNTIL_DEFAULT;
 const PREMIUM_PROMO_LABEL = process.env.PREMIUM_PROMO_LABEL || 'Desconto temporário';
 
-// Gateway de pagamento: 'mercadopago' | 'stub'
+// Gateway de pagamento: 'mercadopago' | 'pixkey' | 'stub'
+// - mercadopago: QR Code oficial e confirmação automática (webhook)
+// - pixkey:      BR Code gerado com a chave Pix do próprio projeto.
+//                Não existe gateway para avisar o servidor, então a
+//                confirmação do pagamento é manual (PREMIUM_ADMIN_TOKEN).
+// - stub:        simulação de teste (nunca funciona em produção)
 const PIX_GATEWAY = (process.env.PIX_GATEWAY || (NODE_ENV === 'production' ? '' : 'stub')).trim().toLowerCase();
 const PIX_API_TOKEN = process.env.PIX_API_TOKEN || '';
 const PIX_WEBHOOK_SECRET = process.env.PIX_WEBHOOK_SECRET || '';
@@ -57,6 +62,9 @@ const PIX_MERCHANT_NAME = process.env.PIX_MERCHANT_NAME || 'LUUD';
 const PIX_MERCHANT_CITY = process.env.PIX_MERCHANT_CITY || 'SAO PAULO';
 const PUBLIC_URL = (process.env.PUBLIC_URL || '').replace(/\/+$/, '');
 const PAYMENT_EXPIRY_MINUTES = Number(process.env.PAYMENT_EXPIRY_MINUTES || 30);
+// Token do administrador: confirma manualmente o pagamento quando o gateway
+// não avisa o servidor (modo 'pixkey'). Sem esse token a rota fica desativada.
+const PREMIUM_ADMIN_TOKEN = String(process.env.PREMIUM_ADMIN_TOKEN || '').trim();
 
 /* -------------------------------------------------------------
    SALAS DE JOGO ONLINE (multiplayer entre computadores)
@@ -1429,24 +1437,40 @@ const MIME_TYPES = {
   '.ico': 'image/x-icon'
 };
 
+// Carrega a configuração dos arquivos .env
+// - .env:       configuração compartilhada do projeto
+// - .env.local: configuração local (segredos), sobrescreve o .env
+// As variáveis já existentes no ambiente (Render, CI, terminal) sempre
+// têm prioridade: nada aqui sobrescreve o que vem da plataforma.
 function loadEnvFile() {
-  const envPath = path.join(__dirname, '.env');
-  if (!fss.existsSync(envPath)) return;
+  const externalKeys = new Set(Object.keys(process.env));
+  const fileValues = {};
 
-  const content = fss.readFileSync(envPath, 'utf8');
-  for (const line of content.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
+  const readEnvFile = (fileName) => {
+    const envPath = path.join(__dirname, fileName);
+    if (!fss.existsSync(envPath)) return;
 
-    const match = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
-    if (!match) continue;
+    const content = fss.readFileSync(envPath, 'utf8');
+    for (const line of content.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
 
-    const key = match[1];
-    let value = match[2].trim();
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-      value = value.slice(1, -1);
+      const match = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+      if (!match) continue;
+
+      let value = match[2].trim();
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1);
+      }
+      fileValues[match[1]] = value;
     }
-    if (!(key in process.env)) process.env[key] = value;
+  };
+
+  readEnvFile('.env');
+  readEnvFile('.env.local');
+
+  for (const [key, value] of Object.entries(fileValues)) {
+    if (!externalKeys.has(key)) process.env[key] = value;
   }
 }
 
@@ -1657,7 +1681,15 @@ function premiumPublicInfo() {
     currency: PREMIUM_CURRENCY,
     note: PREMIUM_TRIAL_NOTE,
     benefits: PREMIUM_BENEFITS,
-    gatewayReady: Boolean(PIX_GATEWAY === 'mercadopago' && PIX_API_TOKEN) || (PIX_GATEWAY === 'stub' && NODE_ENV !== 'production')
+    gateway: PIX_GATEWAY,
+    // No modo 'pixkey' o servidor não recebe aviso do pagamento:
+    // a liberação do Premium é feita manualmente pelo administrador.
+    manualConfirmation: PIX_GATEWAY === 'pixkey',
+    gatewayReady: Boolean(
+      (PIX_GATEWAY === 'mercadopago' && PIX_API_TOKEN)
+      || (PIX_GATEWAY === 'pixkey' && PIX_KEY)
+      || (PIX_GATEWAY === 'stub' && NODE_ENV !== 'production')
+    )
   };
 }
 
@@ -1686,6 +1718,11 @@ async function refreshPaymentStatus(payment) {
       return db.updatePayment(payment.id, { status: data.status });
     }
   }
+
+  // Modo 'pixkey': não existe gateway para consultar e o BR Code gerado
+  // continua válido depois do prazo. A cobrança fica "pending" até o
+  // administrador confirmar o pagamento manualmente.
+  if (payment.gateway === 'pixkey') return payment;
 
   // Cobrança expirada
   if (payment.expiresAt && new Date(payment.expiresAt).getTime() < Date.now() && payment.status === 'pending') {
@@ -1721,13 +1758,19 @@ async function handlePremiumCheckout(request, response) {
     return;
   }
 
+  // Chave Pix do próprio projeto: sem a chave não há como gerar o BR Code
+  if (PIX_GATEWAY === 'pixkey' && !PIX_KEY) {
+    sendJson(response, 503, { error: 'A chave Pix não está configurada.' });
+    return;
+  }
+
   if (PIX_GATEWAY === 'stub' && NODE_ENV === 'production') {
     sendJson(response, 503, { error: 'O gateway Pix não está configurado.' });
     return;
   }
 
   // Qualquer gateway desconhecido (erro de digitação) é recusado
-  if (PIX_GATEWAY !== 'mercadopago' && PIX_GATEWAY !== 'stub') {
+  if (PIX_GATEWAY !== 'mercadopago' && PIX_GATEWAY !== 'pixkey' && PIX_GATEWAY !== 'stub') {
     sendJson(response, 503, { error: 'O gateway Pix não está configurado.' });
     return;
   }
@@ -1758,7 +1801,8 @@ async function handlePremiumCheckout(request, response) {
       copyPaste = created.copyPaste || '';
       gatewayRef = created.id || '';
     } else {
-      // Modo de desenvolvimento: gera um BR Code estático para testar a interface
+      // BR Code estático: chave Pix do próprio projeto (modo 'pixkey') ou
+      // chave fictícia do modo de teste ('stub')
       const key = PIX_KEY || 'luud.premium@pix.test';
       copyPaste = pix.buildPixPayload({
         key,
@@ -1882,6 +1926,137 @@ async function handlePremiumDevConfirm(request, response) {
 
     const updatedUser = await grantPremium(user.id, payment.id);
     sendJson(response, 200, { paid: true, plan: updatedUser.plan, user: updatedUser });
+  } catch (error) {
+    sendJson(response, 400, { error: error.message });
+  }
+}
+
+// -------------------------------------------------------------
+// ADMINISTRAÇÃO DO PREMIUM (confirmação manual de pagamento)
+// Usado quando o Pix é recebido numa chave do próprio projeto
+// (modo 'pixkey'): não existe gateway para avisar o servidor, então
+// o dono da conta confere o pagamento no banco e confirma aqui.
+//
+// O acesso exige o token definido em PREMIUM_ADMIN_TOKEN (header
+// "x-admin-token" ou o campo "token" do corpo). Sem o token
+// configurado as rotas nem existem.
+// -------------------------------------------------------------
+function safeTokenMatch(value) {
+  const provided = Buffer.from(String(value || ''), 'utf8');
+  const expected = Buffer.from(PREMIUM_ADMIN_TOKEN, 'utf8');
+  if (!expected.length || provided.length !== expected.length) return false;
+  return crypto.timingSafeEqual(provided, expected);
+}
+
+async function requirePremiumAdmin(request, response) {
+  if (!PREMIUM_ADMIN_TOKEN) {
+    sendJson(response, 404, { error: 'Rota não disponível.' });
+    return null;
+  }
+
+  let body = {};
+  try {
+    body = await readJsonBody(request);
+  } catch (error) {
+    sendJson(response, 400, { error: 'Corpo da requisição inválido.' });
+    return null;
+  }
+
+  const token = request.headers['x-admin-token'] || body.token || '';
+  if (!safeTokenMatch(token)) {
+    sendJson(response, 401, { error: 'Token de administrador inválido.' });
+    return null;
+  }
+
+  return body;
+}
+
+// Lista as cobranças de uma conta (para o administrador conferir o Pix pago)
+async function handlePremiumAdminPayments(request, response) {
+  const body = await requirePremiumAdmin(request, response);
+  if (!body) return;
+
+  const email = String(body.email || '').trim();
+  if (!email) {
+    sendJson(response, 400, { error: 'Informe o e-mail da conta.' });
+    return;
+  }
+
+  try {
+    const user = await db.getUserByEmail(email);
+    if (!user) {
+      sendJson(response, 404, { error: 'Conta não encontrada.' });
+      return;
+    }
+
+    const payments = await db.listPaymentsForUser(user.id);
+    sendJson(response, 200, {
+      user: { id: user.id, email: user.email, isPaid: Boolean(user.isPaid), plan: user.plan },
+      payments: payments.map(payment => ({
+        id: payment.id,
+        amount: payment.amount,
+        status: payment.status,
+        gateway: payment.gateway,
+        createdAt: payment.createdAt,
+        expiresAt: payment.expiresAt,
+        paidAt: payment.paidAt
+      }))
+    });
+  } catch (error) {
+    sendJson(response, 400, { error: error.message });
+  }
+}
+
+// Confirma o pagamento e libera o Premium da conta
+async function handlePremiumAdminConfirm(request, response) {
+  const body = await requirePremiumAdmin(request, response);
+  if (!body) return;
+
+  const email = String(body.email || '').trim();
+  const paymentId = String(body.paymentId || '').trim();
+
+  if (!email && !paymentId) {
+    sendJson(response, 400, { error: 'Informe o e-mail da conta ou o id da cobrança.' });
+    return;
+  }
+
+  try {
+    let user = email ? await db.getUserByEmail(email) : null;
+    if (!user && paymentId) {
+      const payment = await db.getPayment(paymentId);
+      if (payment) user = await db.getUserById(payment.userId);
+    }
+    if (!user) {
+      sendJson(response, 404, { error: 'Conta não encontrada.' });
+      return;
+    }
+
+    // Sem id informado, confirma a cobrança pendente mais recente
+    let payment = null;
+    if (paymentId) {
+      payment = await db.getPayment(paymentId);
+      if (!payment || payment.userId !== user.id) {
+        sendJson(response, 404, { error: 'Cobrança não encontrada para esta conta.' });
+        return;
+      }
+    } else {
+      const payments = await db.listPaymentsForUser(user.id);
+      payment = payments.find(item => item.status === 'pending') || payments[0] || null;
+      if (!payment) {
+        sendJson(response, 404, { error: 'Esta conta não tem nenhuma cobrança registrada.' });
+        return;
+      }
+    }
+
+    const updatedUser = await grantPremium(user.id, payment.id);
+    console.log(`[premium] confirmação manual: ${user.email} | cobrança ${payment.id} | R$ ${Number(payment.amount || 0).toFixed(2)}`);
+
+    sendJson(response, 200, {
+      paid: true,
+      plan: updatedUser.plan,
+      payment: { id: payment.id, amount: payment.amount, status: 'paid' },
+      user: updatedUser
+    });
   } catch (error) {
     sendJson(response, 400, { error: error.message });
   }
@@ -2457,6 +2632,17 @@ async function handleRequest(request, response) {
 
     if (request.method === 'POST' && urlPath === '/api/premium/dev/confirm') {
       await handlePremiumDevConfirm(request, response);
+      return;
+    }
+
+    // ADMINISTRAÇÃO DO PREMIUM (confirmação manual do pagamento)
+    if (request.method === 'POST' && urlPath === '/api/premium/admin/payments') {
+      await handlePremiumAdminPayments(request, response);
+      return;
+    }
+
+    if (request.method === 'POST' && urlPath === '/api/premium/admin/confirm') {
+      await handlePremiumAdminConfirm(request, response);
       return;
     }
 

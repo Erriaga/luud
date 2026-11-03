@@ -799,9 +799,10 @@ function normalizePayment(row) {
     gatewayRef: row.gateway_ref || row.gatewayRef || '',
     copyPaste: row.copy_paste || row.copyPaste || '',
     qrCode: row.qr_code || row.qrCode || '',
-    createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
-    expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
-    paidAt: row.paid_at ? new Date(row.paid_at).toISOString() : null
+    // Postgres usa snake_case e o fallback JSON usa camelCase
+    createdAt: row.created_at || row.createdAt ? new Date(row.created_at || row.createdAt).toISOString() : new Date().toISOString(),
+    expiresAt: row.expires_at || row.expiresAt ? new Date(row.expires_at || row.expiresAt).toISOString() : null,
+    paidAt: row.paid_at || row.paidAt ? new Date(row.paid_at || row.paidAt).toISOString() : null
   };
 }
 

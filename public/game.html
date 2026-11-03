@@ -2590,13 +2590,26 @@
           if (copyArea) copyArea.classList.remove('hidden');
         }
 
-        if (payment.testMode && testWarning) testWarning.classList.remove('hidden');
+        if (testWarning) {
+          if (payment.gateway === 'pixkey') {
+            // Pix direto na chave do projeto: o servidor não recebe aviso
+            // do pagamento, então a liberação é manual (poucos minutos).
+            testWarning.textContent = 'Este Pix paga direto na chave do LUUD. O pagamento é conferido no extrato e o Premium é liberado manualmente, em poucos minutos.';
+            testWarning.classList.remove('hidden');
+          } else if (payment.testMode) {
+            testWarning.textContent = 'Ambiente de teste: nenhuma cobrança real será feita.';
+            testWarning.classList.remove('hidden');
+          }
+        }
         if (payment.testMode) {
           const devBtn = document.getElementById('premium-dev-confirm-btn');
           if (devBtn) devBtn.classList.remove('hidden');
         }
 
-        setPremiumCheckoutStatus('Abra o app do seu banco, escolha Pix e escaneie o QR Code (ou copie o código). O Premium é liberado assim que o pagamento é confirmado.', 'text-slate-300');
+        const checkoutMessage = payment.gateway === 'pixkey'
+          ? 'Abra o app do seu banco, escolha Pix e use o código para pagar. Depois que o pagamento cair na chave do LUUD, o Premium é liberado manualmente (pode levar alguns minutos).'
+          : 'Abra o app do seu banco, escolha Pix e escaneie o QR Code (ou copie o código). O Premium é liberado assim que o pagamento é confirmado.';
+        setPremiumCheckoutStatus(checkoutMessage, 'text-slate-300');
         startPremiumPolling();
       } catch (error) {
         setPremiumCheckoutStatus(error.message, 'text-red-400');

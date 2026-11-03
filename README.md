@@ -19,6 +19,11 @@ Versão Node.js do jogo **LUUD**, com:
    NODE_ENV=development
    ```
 
+   Segredos (chave Pix, token do administrador, token do gateway) podem ficar
+   em um `.env.local` — ele é ignorado pelo git e sobrescreve o `.env`.
+   As variáveis do ambiente da plataforma (Render, CI) têm prioridade
+   sobre os dois arquivos.
+
 3. Inicie o servidor:
 
    ```bash
@@ -68,8 +73,67 @@ O Premium é um pagamento único (Pix) que libera acesso vitalício ao modo
 **LIGA**, cores extras no perfil, nickname editável e selo Premium.
 
 O servidor é a fonte da verdade: o navegador só pede a cobrança e consulta o
-status. O Premium só é liberado depois que o gateway confirma o pagamento
-(webhook ou consulta de status).
+status. O Premium só é liberado depois que o pagamento é confirmado.
+
+Três modos de gateway (`PIX_GATEWAY`):
+
+| Modo | Cobrança | Confirmação | Uso |
+|------|----------|-------------|-----|
+| `pixkey` | BR Code com a chave Pix do projeto | **manual** (token de admin) | chave própria, sem PSP |
+| `mercadopago` | QR Code oficial do Mercado Pago | automática (webhook) | produção com PSP |
+| `stub` | BR Code fictício | botão "Simular pagamento" | desenvolvimento |
+
+### Chave Pix do próprio projeto (modo `pixkey`)
+
+1. Tenha a chave Pix que vai receber (CPF/CNPJ, e-mail, telefone ou chave
+   aleatória) e cadastre no `.env.local` (local) ou nas variáveis de
+   ambiente do Render (produção):
+
+   ```env
+   PIX_GATEWAY=pixkey
+   PIX_KEY=sac.luudstudios@gmail.com
+   PIX_MERCHANT_NAME=LUUD
+   PIX_MERCHANT_CITY=SAO PAULO
+   ```
+
+2. Gere um token de administrador (é a senha que libera o Premium):
+
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"
+   ```
+
+   ```env
+   PREMIUM_ADMIN_TOKEN=valor-gerado
+   ```
+
+3. O site gera um BR Code "copia e cola" com o valor e um `txid` único. O
+   dinheiro cai direto na chave configurada.
+
+4. **A confirmação é manual**: não existe PSP avisando o servidor, então o
+   dono confere o pagamento no extrato e libera a conta:
+
+   ```bash
+   # lista as cobranças da conta
+   curl -X POST https://luud.com.br/api/premium/admin/payments \
+     -H "Content-Type: application/json" \
+     -H "x-admin-token: SEU_TOKEN" \
+     -d '{"email":"jogador@email.com"}'
+
+   # confirma o pagamento e ativa o Premium
+   curl -X POST https://luud.com.br/api/premium/admin/confirm \
+     -H "Content-Type: application/json" \
+     -H "x-admin-token: SEU_TOKEN" \
+     -d '{"email":"jogador@email.com"}'
+   ```
+
+   Sem `paymentId` a confirmação usa a cobrança pendente mais recente da
+   conta; com `paymentId` usa a cobrança informada. As rotas só existem
+   quando `PREMIUM_ADMIN_TOKEN` está configurado e exigem o token no header
+   `x-admin-token` (ou no campo `token` do corpo).
+
+5. O jogador vê a confirmação na hora: a interface consulta o status a cada
+   4 segundos e, assim que o Premium é liberado, mostra o selo, libera a
+   terceira cor, o nickname editável e o modo LIGA.
 
 ### Teste local (sem cobrança real)
 
@@ -78,7 +142,7 @@ PIX_GATEWAY=stub
 ```
 
 Nesse modo o servidor gera um BR Code fictício e mostra o botão
-**"Confirmar pagamento (teste)"** no modal de compra. O modo `stub` nunca
+**"Simular pagamento (teste)"** no modal de compra. O modo `stub` nunca
 funciona com `NODE_ENV=production`.
 
 ### Produção (Mercado Pago)
@@ -106,8 +170,9 @@ funciona com `NODE_ENV=production`.
    Sem o segredo o webhook é recusado, então ninguém libera o Premium sem
    pagar. A confirmação também é refeita direto no gateway antes de liberar.
 
-5. `PIX_KEY`, `PIX_MERCHANT_NAME` e `PIX_MERCHANT_CITY` só são usados no modo
-   de teste (`stub`); no Mercado Pago quem recebe é a conta cadastrada lá.
+5. `PIX_KEY`, `PIX_MERCHANT_NAME` e `PIX_MERCHANT_CITY` só são usados nos
+   modos `pixkey` e `stub`; no Mercado Pago quem recebe é a conta cadastrada
+   lá.
 
 ### Desconto temporário do plano
 
