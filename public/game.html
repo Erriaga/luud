@@ -1189,11 +1189,6 @@
         <button type="button" onclick="closeHistoryModal()" class="w-9 h-9 bg-slate-700 hover:bg-slate-600 text-slate-200 text-lg leading-none" aria-label="Fechar histórico">✕</button>
       </div>
 
-      <!-- Botão LIMPAR HISTÓRICO (somente para contas Premium) -->
-      <div id="history-clear-btn-wrap" class="px-4 mb-3 hidden">
-        <button type="button" onclick="clearAllMatchesHistory()" class="w-full py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold transition text-sm">LIMPAR HISTÓRICO</button>
-      </div>
-
       <div id="history-list" class="p-4 space-y-2">
         <p class="text-sm text-slate-400 text-center py-6">Carregando...</p>
       </div>
@@ -1203,6 +1198,12 @@
         <button onclick="closeHistoryModal()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold text-sm border border-slate-600">
           FECHAR
         </button>
+        <!-- Botão LIMPAR HISTÓRICO (somente para contas Premium) -->
+        <div id="history-clear-btn-wrap" class="px-4 mb-3 hidden">
+          <button type="button" onclick="openHistoryClearConfirm()" class="w-full py-2.5 bg-transparent hover:bg-slate-700 text-red-400 font-bold text-sm border border-transparent hover:border-red-500/30 transition mt-2">
+            LIMPAR HISTÓRICO
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -1443,6 +1444,17 @@
       <div class="flex gap-3 justify-center">
         <button type="button" onclick="confirmRemoveFriendYes()" class="px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-bold">SIM</button>
         <button type="button" onclick="confirmRemoveFriendNo()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold">NÃO</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONFIRMAÇÃO DE LIMPAR HISTÓRICO -->
+  <div id="history-clear-confirm-modal" class="hidden fixed inset-0 z-[110] bg-black/80 flex items-center justify-center p-4">
+    <div class="bg-slate-800 border border-slate-600 shadow-2xl p-6 max-w-md w-full text-center">
+      <p class="text-sm text-slate-100 mb-5">Deseja realmente apagar TODO o histórico de partidas? Esta ação não pode ser desfeita.</p>
+      <div class="flex gap-3 justify-center">
+        <button type="button" onclick="confirmHistoryClearYes()" class="px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-bold">SIM</button>
+        <button type="button" onclick="confirmHistoryClearNo()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold">NÃO</button>
       </div>
     </div>
   </div>
@@ -8457,11 +8469,15 @@
     };
   </script>
 
-  // Função global para limpar todo o histórico de partidas (disponível apenas para contas Premium)
-  async function clearAllMatchesHistory() {
-    if (!confirm('Tem certeza que deseja APAGAR TODO o histórico de partidas de todas as contas? Esta ação não pode ser desfeita.')) {
-      return;
-    }
+  // Abre o modal de confirmação para limpar o histórico
+  function openHistoryClearConfirm() {
+    closeHistoryModal();
+    document.getElementById('history-clear-confirm-modal').classList.remove('hidden');
+  }
+
+  // Confirma a limpeza do histórico e chama a API
+  async function confirmHistoryClearYes() {
+    document.getElementById('history-clear-confirm-modal').classList.add('hidden');
     try {
       const response = await fetch('/api/admin/clear-matches', {
         method: 'POST',
@@ -8470,11 +8486,20 @@
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Não foi possível limpar o histórico.');
-      alert('Histórico de partidas limpo com sucesso para todos os usuários.');
-      closeHistoryModal();
+      alert('Histórico de partidas limpo com sucesso.');
     } catch (error) {
       alert(error.message || 'Erro ao limpar o histórico.');
     }
+  }
+
+  // Cancela a confirmação de limpeza do histórico
+  function confirmHistoryClearNo() {
+    document.getElementById('history-clear-confirm-modal').classList.add('hidden');
+  }
+
+  // Função global para limpar todo o histórico de partidas (disponível apenas para contas Premium)
+  async function clearAllMatchesHistory() {
+    openHistoryClearConfirm();
   }
 
   </script>
