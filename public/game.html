@@ -609,8 +609,8 @@
       <div id="setup-account-slot" class="flex justify-center hidden"></div>
 
       <div id="setup-main-view" class="space-y-5 sm:space-y-6 w-full">
-      <!-- Login Google na tela inicial -->
-      <div class="space-y-1 w-full mb-0">
+      <!-- Login Google na tela inicial (escondido completamente quando logado) -->
+      <div id="setup-login-container" class="space-y-1 w-full mb-0">
         <div id="google-button-setup" class="google-button"></div>
         <div id="login-status-setup" class="status" role="status"></div>
       </div>
@@ -688,7 +688,7 @@
               <span class="text-xs text-slate-400">1 vs 1</span>
             </button>
             <button type="button" onclick="selectOpponentsMode(3); startGame()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
-              <span class="font-bold text-sm text-slate-100">DUPLA</span>
+              <span class="font-bold text-sm text-slate-100">DUO</span>
               <span class="text-xs text-slate-400">2 vs 2</span>
             </button>
             <button type="button" onclick="startArenaGame(4)" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
@@ -712,7 +712,7 @@
               <span class="text-xs text-slate-400">1 vs 1</span>
             </button>
             <button type="button" onclick="showOnlineDuplaView()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
-              <span class="font-bold text-sm text-slate-100">DUPLA</span>
+              <span class="font-bold text-sm text-slate-100">DUO</span>
               <span class="text-xs text-slate-400">2 vs 2</span>
             </button>
             <button type="button" onclick="showOnlineArenaView()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
@@ -729,10 +729,10 @@
       <!-- VISÃO SOLO ONLINE (Partida Normal / Liga) -->
       <div id="online-solo-view" class="hidden space-y-5 sm:space-y-6 w-full">
         <div class="space-y-2 text-center">
-          <label class="text-xs font-bold uppercase tracking-wider text-slate-300">SOLO ONLINE</label>
+          <label class="text-xs font-bold uppercase tracking-wider text-slate-300">SOLO</label>
           <div class="grid grid-cols-2 gap-2">
             <button type="button" onclick="showOnlineNormalView()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
-              <span class="font-bold text-sm text-slate-100">PARTIDA NORMAL</span>
+              <span class="font-bold text-sm text-slate-100">NORMAL</span>
               <span class="text-xs text-slate-400">Sem classificação</span>
             </button>
             <!-- LIGA: liberada apenas para contas Premium (updateLigaModeState ajusta o estado) -->
@@ -751,7 +751,7 @@
       <div id="online-dupla-view" class="hidden space-y-5 sm:space-y-6 w-full">
         <div class="space-y-4 w-full">
           <div class="space-y-2 text-center">
-            <label class="text-xs font-bold uppercase tracking-wider text-slate-300">DUPLA</label>
+            <label class="text-xs font-bold uppercase tracking-wider text-slate-300">DUO</label>
             <p class="text-xs text-slate-400">2 vs 2</p>
           </div>
 
@@ -889,7 +889,7 @@
       <div id="online-normal-view" class="hidden space-y-5 sm:space-y-6 w-full">
         <div class="space-y-4 w-full">
           <div class="space-y-2 text-center">
-            <label class="text-xs font-bold uppercase tracking-wider text-slate-300">PARTIDA NORMAL</label>
+            <label class="text-xs font-bold uppercase tracking-wider text-slate-300">NORMAL</label>
             <p class="text-xs text-slate-400">1 vs 1</p>
           </div>
 
@@ -3157,7 +3157,7 @@
       liga: 'LIGA',
       invite: 'CONVITE',
       local: 'SINGLE PLAYER',
-      dupla: 'DUPLA',
+      dupla: 'DUO',
       arena: 'ARENA',
       multiplayer: 'MULTIPLAYER'
     };
@@ -6275,7 +6275,7 @@
       if (!modal) return;
       document.getElementById('match-invite-from-picture').src = data.fromPicture || '/assets/avatar.svg';
       document.getElementById('match-invite-from-name').textContent = data.fromName || 'Jogador';
-      document.getElementById('match-invite-match-type').textContent = data.matchTypeLabel || 'DUPLA • 2 vs 2';
+      document.getElementById('match-invite-match-type').textContent = data.matchTypeLabel || 'DUO • 2 vs 2';
       document.getElementById('match-invite-from-id').value = data.fromId || '';
       document.getElementById('match-invite-invite-id').value = data.inviteId || '';
       modal.classList.remove('hidden');
@@ -6852,7 +6852,7 @@
         prefix: 'normal',
         maxMembers: 2,
         matchSize: 2,
-        label: 'PARTIDA NORMAL',
+        label: 'NORMAL',
         lobbyName: 'da partida normal',
         viewId: 'online-normal-view'
       }
@@ -7976,6 +7976,11 @@
       const loggedIn = typeof accountUser !== 'undefined' && Boolean(accountUser);
       const slot = document.getElementById('setup-account-slot');
       if (slot) slot.classList.toggle('hidden', !loggedIn);
+
+      // Esconde completamente o container de login quando houver conta,
+      // removendo o espaco acima de "MODO DE JOGO" na tela inicial.
+      const loginContainer = document.getElementById('setup-login-container');
+      if (loginContainer) loginContainer.classList.toggle('hidden', loggedIn);
 
       if (loggedIn) {
         const googleBtnSetup = document.getElementById('google-button-setup');

@@ -145,8 +145,8 @@ const LOBBY_KINDS = {
   normal: {
     maxMembers: 2,
     matchSize: 2,
-    label: 'PARTIDA NORMAL',
-    matchTypeLabel: 'PARTIDA NORMAL • 1 vs 1'
+    label: 'NORMAL',
+    matchTypeLabel: 'NORMAL • 1 vs 1'
   }
 };
 // Cores dos slots da arena (mesma ordem horária do tabuleiro)
@@ -3152,7 +3152,7 @@ async function main() {
           teamColor,
           teamColorName,
           matchType: 'dupla',
-          matchTypeLabel: 'DUPLA • 2 vs 2'
+          matchTypeLabel: 'DUO • 2 vs 2'
         });
 
         sendTo(ws, {
