@@ -148,8 +148,12 @@ funciona com `NODE_ENV=production`.
 ### Produção (Mercado Pago)
 
 1. Crie a conta em <https://www.mercadopago.com.br/>.
-2. Em **Desenvolvedores > Credenciais**, copie o **Access Token**
-   (Produção ou Teste).
+2. Em **Desenvolvedores > Credenciais**, copie o **Access Token** da
+   **conta que vai receber o dinheiro** (credenciais de produção, começam
+   com `APP_USR-`). Não use o token de um usuário de teste (`TESTUSER...`):
+   a API recusa cobranças com "Unauthorized use of live credentials".
+   Para testar sem dinheiro real, use as credenciais de teste (`TEST-...`)
+   do aplicativo e um usuário de teste como comprador.
 3. No `.env` (ou nas variáveis de ambiente do Render):
 
    ```env
@@ -167,8 +171,9 @@ funciona com `NODE_ENV=production`.
    PIX_WEBHOOK_SECRET=seu-segredo
    ```
 
-   Sem o segredo o webhook é recusado, então ninguém libera o Premium sem
-   pagar. A confirmação também é refeita direto no gateway antes de liberar.
+   Com o segredo, notificações sem assinatura válida são recusadas. Sem ele,
+   o servidor aceita o webhook, mas sempre confere o pagamento direto no
+   gateway antes de liberar o Premium (o segredo é recomendado).
 
 5. `PIX_KEY`, `PIX_MERCHANT_NAME` e `PIX_MERCHANT_CITY` só são usados nos
    modos `pixkey` e `stub`; no Mercado Pago quem recebe é a conta cadastrada

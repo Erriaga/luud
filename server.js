@@ -66,6 +66,16 @@ const PAYMENT_EXPIRY_MINUTES = Number(process.env.PAYMENT_EXPIRY_MINUTES || 30);
 // não avisa o servidor (modo 'pixkey'). Sem esse token a rota fica desativada.
 const PREMIUM_ADMIN_TOKEN = String(process.env.PREMIUM_ADMIN_TOKEN || '').trim();
 
+// Avisos de configuração do Mercado Pago (não derrubam o servidor)
+if (PIX_GATEWAY === 'mercadopago') {
+  if (!PIX_API_TOKEN) {
+    console.warn('[premium] PIX_API_TOKEN não configurado: o checkout do Premium ficará indisponível.');
+  }
+  if (!PIX_WEBHOOK_SECRET) {
+    console.warn('[premium] PIX_WEBHOOK_SECRET não configurado: webhooks sem assinatura serão aceitos (o pagamento ainda é conferido no gateway).');
+  }
+}
+
 /* -------------------------------------------------------------
    SALAS DE JOGO ONLINE (multiplayer entre computadores)
    - O servidor guarda o estado autoritativo da partida (turno, dado,

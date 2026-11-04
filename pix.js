@@ -103,11 +103,17 @@ async function createMercadoPagoPayment({ token, amount, description, email, ext
   }
 
   const transaction = (data.point_of_interaction && data.point_of_interaction.transaction_data) || {};
+  // A API do Mercado Pago devolve:
+  // - qr_code:        payload Pix "copia e cola"
+  // - qr_code_base64: imagem PNG do QR Code em base64 (sem o prefixo data:)
+  const qrCodeBase64 = String(transaction.qr_code_base64 || '').trim();
   return {
     id: data.id,
     status: data.status || 'pending',
-    qrCode: transaction.qr_code || '',      // imagem PNG em base64 (data URI)
-    copyPaste: transaction.qr_code_base64 || '', // payload "copia e cola"
+    qrCode: qrCodeBase64
+      ? (qrCodeBase64.startsWith('data:') ? qrCodeBase64 : `data:image/png;base64,${qrCodeBase64}`)
+      : '',
+    copyPaste: transaction.qr_code || '',
     raw: data
   };
 }

@@ -2584,8 +2584,9 @@
         if (payment.qrCode) {
           if (qrImage) qrImage.src = payment.qrCode;
           if (qrWrap) qrWrap.classList.remove('hidden');
-        } else if (payment.copyPaste) {
-          // Sem imagem do gateway (modo de teste): mostra o código para copiar
+        }
+        if (payment.copyPaste) {
+          // O Mercado Pago devolve a imagem e o "copia e cola": mostra os dois
           if (pixCode) pixCode.value = payment.copyPaste;
           if (copyArea) copyArea.classList.remove('hidden');
         }
