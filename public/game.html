@@ -1613,6 +1613,8 @@
     let isAnimating = false;
     // ARENA: ordem em que os jogadores terminam (salvam todas as peças)
     let arenaFinishedOrder = []; // array de chaves de cor na ordem de conclusão
+    // ARENA: ordem de abandono (para atribuição de colocações por desistência)
+    let arenaAbandonOrder = []; // array de chaves de cor na ordem de abandono
     let isPaused = false;
     let diceCurrentX = 0;
     let diceCurrentY = 0;
@@ -7554,6 +7556,25 @@
       const opponentName = onlineOpponentName;
       isOnlineGame = false;
 
+      // ARENA: rastreia abandono para atribuição de colocações
+      let placement = null;
+      if (isOnlineArenaMode() || (!isTeamMode() && !isOnlineGame && activePlayers.length === 4)) {
+        const leaverKey = getCurrentPlayer(); // cor do jogador que está saindo
+        if (!arenaAbandonOrder.includes(leaverKey)) {
+          arenaAbandonOrder.push(leaverKey);
+        }
+        const abandonedCount = arenaAbandonOrder.length;
+        const remainingPlayers = activePlayers.length - abandonedCount;
+
+        if (localAbandoned) {
+          // Colocação do jogador que abandona:
+          // 1º a abandonar = 4º lugar, 2º = 3º, 3º = 2º, último = 1º
+          if (remainingPlayers <= 0) placement = 1;
+          else if (remainingPlayers === 1) placement = abandonedCount === activePlayers.length - 1 ? 2 : 1;
+          else placement = 5 - abandonedCount;
+        }
+      }
+
       if (localAbandoned && onlineWs) {
         // Fecha a conexão: o servidor avisará o oponente (vitória por desistência para ele)
         const ws = onlineWs;
@@ -7563,7 +7584,7 @@
       }
 
       // Quem desiste perde; quem recebe a desistência vence
-      showResignationScreen(!localAbandoned, matchMode, opponentName);
+      showResignationScreen(!localAbandoned, matchMode, opponentName, placement);
     }
 
     // Botão DESISTIR do menu: encerra a partida atual por desistência
@@ -7580,7 +7601,7 @@
       showResignationScreen(false, 'local', 'CPU');
     }
 
-    async function showResignationScreen(humanWon, matchMode, opponentName) {
+    async function showResignationScreen(humanWon, matchMode, opponentName, placement) {
       // Limpa o flag de abandono pendente: a tela de desistência está
       // sendo exibida, não há mais abandono a ser reportado ao recarregar.
       clearPendingAbandon();
@@ -7604,24 +7625,44 @@
 
       const winTitle = document.getElementById('win-title');
       const winSubtitle = document.getElementById('win-subtitle');
-      winTitle.innerText = humanWon ? 'VITÓRIA POR' : 'DERROTA POR';
-      winTitle.className = `win-title font-display font-black ${humanWon ? 'text-amber-400' : 'text-red-500'}`;
-      winSubtitle.innerText = 'DESISTÊNCIA';
-      winSubtitle.className = `win-subtitle font-display font-black ${humanWon ? 'text-amber-400' : 'text-red-500'}`;
+
+      // ARENA: mostra "FIM DA PARTIDA" com colocação por abandono
       if (matchMode === 'arena') {
-        // Arena: mostra o placar final dos quatro jogadores
+        let placementText = '4º LUGAR';
+        let placementColor = 'text-slate-300'; // branco
+        if (placement === 1) { placementText = '1º LUGAR'; placementColor = 'text-amber-400'; }
+        else if (placement === 2) { placementText = '2º LUGAR'; placementColor = 'text-slate-400'; }
+        else if (placement === 3) { placementText = '3º LUGAR'; placementColor = 'text-amber-600'; }
+
+        winTitle.innerText = 'F I M   D A   P A R T I D A';
+        winTitle.className = `win-title font-display font-black text-slate-100`;
+        document.getElementById('win-subtitle').classList.remove('hidden');
+        document.getElementById('win-subtitle').innerText = placementText;
+        document.getElementById('win-subtitle').className = `win-subtitle font-display font-black ${placementColor}`;
         document.getElementById('win-score').innerHTML = buildArenaStandingsHtml();
+
+        // Registra o abandono no histórico com a colocação
+        const arenaResult = placement ? `${placementText}` : 'loss';
+        await postMatchRecord(matchMode, arenaResult, 0, 0, opponentName);
       } else {
-        // Placar por desistência: o vencedor recebe "4 - 0" e quem desiste recebe "0 - 4"
+        winTitle.innerText = humanWon ? 'VITÓRIA POR' : 'DERROTA POR';
+        winTitle.className = `win-title font-display font-black ${humanWon ? 'text-amber-400' : 'text-red-500'}`;
+        winSubtitle.innerText = 'DESISTÊNCIA';
+        winSubtitle.className = `win-subtitle font-display font-black ${humanWon ? 'text-amber-400' : 'text-red-500'}`;
         document.getElementById('win-score').innerText = humanWon ? '4 - 0' : '0 - 4';
+
+        // Registra o resultado por desistência no histórico da conta
+        await postMatchRecord(matchMode, humanWon ? 'win' : 'loss', humanWon ? 4 : 0, humanWon ? 0 : 4, opponentName);
       }
       document.getElementById('win-modal').classList.remove('hidden');
 
-      // Registra o resultado por desistência no histórico da conta
-      await postMatchRecord(matchMode, humanWon ? 'win' : 'loss', humanWon ? 4 : 0, humanWon ? 0 : 4, opponentName);
-
-      if (humanWon) gameAudio.playVictory();
-      else gameAudio.playDefeat();
+      if (matchMode === 'arena') {
+        gameAudio.playDefeat();
+      } else if (humanWon) {
+        gameAudio.playVictory();
+      } else {
+        gameAudio.playDefeat();
+      }
 
       startAbandonCountdown();
     }
