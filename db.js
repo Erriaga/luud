@@ -316,6 +316,18 @@ async function ensureDatabaseSchema() {
       console.warn('Não foi possível criar os índices do banco:', indexError.message);
     }
 
+    // Histórico: remove partidas contra a CPU e registros com mais de 180 dias
+    try {
+      await p.query(`
+        DELETE FROM matches
+        WHERE mode = 'local'
+           OR LOWER(TRIM(opponent_name)) = 'cpu'
+           OR finished_at < NOW() - INTERVAL '180 days'
+      `);
+    } catch (cleanupError) {
+      console.warn('Não foi possível limpar o histórico antigo de partidas:', cleanupError.message);
+    }
+
     dbAvailable = true;
     // Só limpa o último erro se nenhuma tabela deu problema
     if (!schemaProblems) dbLastError = null;
@@ -357,6 +369,28 @@ async function ensureDataFiles() {
   if (!fss.existsSync(MATCHES_FILE)) await fs.writeFile(MATCHES_FILE, JSON.stringify({}, null, 2), 'utf8');
   if (!fss.existsSync(PAYMENTS_FILE)) await fs.writeFile(PAYMENTS_FILE, JSON.stringify({}, null, 2), 'utf8');
   if (!fss.existsSync(LEAGUE_FILE)) await fs.writeFile(LEAGUE_FILE, JSON.stringify({}, null, 2), 'utf8');
+
+  // Histórico local: remove partidas contra a CPU e registros com mais de 180 dias
+  if (!process.env.DATABASE_URL) {
+    try {
+      const matches = await readJsonFile(MATCHES_FILE);
+      const cutoff = Date.now() - MATCH_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
+      let changed = false;
+      for (const userId of Object.keys(matches)) {
+        if (!Array.isArray(matches[userId])) continue;
+        const filtered = matches[userId].filter(
+          item => !isCpuMatchRecord(item) && isFreshMatchRecord(item, cutoff)
+        );
+        if (filtered.length !== matches[userId].length) {
+          matches[userId] = filtered;
+          changed = true;
+        }
+      }
+      if (changed) await writeJsonFile(MATCHES_FILE, matches);
+    } catch (error) {
+      console.warn('Não foi possível limpar o histórico antigo de partidas:', error.message);
+    }
+  }
 }
 
 /* ------------------------------------------------------------------
@@ -1030,13 +1064,39 @@ async function destroySession(token) {
 /* ------------------------------------------------------------------
    Partidas
 ------------------------------------------------------------------ */
+const MATCH_MAX_AGE_DAYS = 180;
+
+// Partidas contra a CPU (SINGLE PLAYER) não fazem parte do histórico
+function isCpuMatchRecord(record) {
+  if (!record) return true;
+  const mode = String(record.mode || '').trim().toLowerCase();
+  const opponent = String(record.opponentName || '').trim().toLowerCase();
+  return mode === 'local' || opponent === 'cpu';
+}
+
+function isFreshMatchRecord(record, cutoff) {
+  const when = new Date(record && record.finishedAt).getTime();
+  return !Number.isFinite(when) || when >= cutoff;
+}
+
 async function createMatchRecord(userId, record) {
+  if (isCpuMatchRecord(record)) return;
+
   if (useDatabase()) {
     try {
       const p = getPool();
       await p.query(
         `INSERT INTO matches (id, user_id, mode, result, player_score, opponent_score, opponent_name, finished_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [record.id, userId, record.mode, record.result, record.playerScore, record.opponentScore, record.opponentName, record.finishedAt]
+      );
+      // Limpa partidas contra a CPU, registros antigos e o excedente do limite
+      await p.query(
+        `DELETE FROM matches
+         WHERE user_id = $1
+           AND (mode = 'local'
+                OR LOWER(TRIM(opponent_name)) = 'cpu'
+                OR finished_at < NOW() - INTERVAL '180 days')`,
+        [userId]
       );
       await p.query(
         `DELETE FROM matches WHERE user_id = $1 AND id NOT IN (SELECT id FROM matches WHERE user_id = $1 ORDER BY finished_at DESC LIMIT 100)`,
@@ -1049,7 +1109,8 @@ async function createMatchRecord(userId, record) {
   }
 
   const matches = await readJsonFile(MATCHES_FILE);
-  const history = matches[userId] || [];
+  const cutoff = Date.now() - MATCH_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
+  const history = (matches[userId] || []).filter(item => !isCpuMatchRecord(item) && isFreshMatchRecord(item, cutoff));
   history.unshift(record);
   matches[userId] = history.slice(0, 100);
   await writeJsonFile(MATCHES_FILE, matches);
@@ -1060,7 +1121,14 @@ async function listMatchRecords(userId) {
     try {
       const p = getPool();
       const result = await p.query(
-        `SELECT id, finished_at AS "finishedAt", mode, result, player_score AS "playerScore", opponent_score AS "opponentScore", opponent_name AS "opponentName" FROM matches WHERE user_id = $1 ORDER BY finished_at DESC LIMIT 50`,
+        `SELECT id, finished_at AS "finishedAt", mode, result, player_score AS "playerScore", opponent_score AS "opponentScore", opponent_name AS "opponentName"
+         FROM matches
+         WHERE user_id = $1
+           AND mode <> 'local'
+           AND LOWER(TRIM(opponent_name)) <> 'cpu'
+           AND finished_at >= NOW() - INTERVAL '180 days'
+         ORDER BY finished_at DESC
+         LIMIT 50`,
         [userId]
       );
       return { matches: result.rows };
@@ -1068,8 +1136,11 @@ async function listMatchRecords(userId) {
       throw recordDbError(error, "listMatchRecords");
     }
   }
+
   const matches = await readJsonFile(MATCHES_FILE);
-  return { matches: (matches[userId] || []).slice(0, 50) };
+  const cutoff = Date.now() - MATCH_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
+  const history = (matches[userId] || []).filter(item => !isCpuMatchRecord(item) && isFreshMatchRecord(item, cutoff));
+  return { matches: history.slice(0, 50) };
 }
 
 async function listMatchRecordsForUser(targetUserId) {
@@ -1240,7 +1311,7 @@ async function getFriends(userId) {
     try {
       const p = getPool();
       const result = await p.query(
-        `SELECT u.id, u.email, u.display_name AS "displayName", u.player_name AS "playerName", u.picture, u.avatar_url AS "avatarUrl" 
+        `SELECT u.id, u.email, u.display_name AS "displayName", u.player_name AS "playerName", u.picture, u.avatar_url AS "avatarUrl", u.plan, u.is_paid, u.paid_at
          FROM friends f 
          JOIN users u ON u.id = f.friend_id 
          WHERE f.user_id = $1 

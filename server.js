@@ -2332,7 +2332,7 @@ async function handleAuthConfig(request, response) {
    HISTÓRICO DE PARTIDAS
 ------------------------------------------------------------- */
 const MATCH_RECORD_LIMIT = 100;
-const MATCH_MODES = new Set(['quick', 'invite', 'local', 'dupla', 'arena', 'liga']);
+const MATCH_MODES = new Set(['quick', 'invite', 'local', 'multiplayer', 'dupla', 'arena', 'liga']);
 
 function sanitizeMatchRecord(body) {
   const mode = MATCH_MODES.has(body.mode) ? body.mode : 'local';
@@ -2342,6 +2342,12 @@ function sanitizeMatchRecord(body) {
     return Number.isFinite(num) && num >= 0 ? num : 0;
   };
   const opponentName = String(body.opponentName || '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 40) || 'Oponente';
+
+  // Partidas contra a CPU (SINGLE PLAYER) não entram no histórico
+  if (mode === 'local' || opponentName.toLowerCase() === 'cpu') {
+    throw new Error('Partidas contra a CPU não são registradas no histórico.');
+  }
+
   return {
     id: require('crypto').randomUUID(),
     finishedAt: new Date().toISOString(),
@@ -2398,10 +2404,24 @@ async function listFriends(request, response) {
   const sent = await db.getSentRequests(user.id);
   const received = await db.getReceivedRequests(user.id);
 
-  // Adiciona status online baseado nas conexões WebSocket ativas
-  const friendsWithStatus = friends.map(f => ({
-    ...f,
-    online: userConnections.has(f.id) && userConnections.get(f.id).size > 0
+  // Adiciona status online e a classificação da Liga (contas Premium)
+  const friendsWithStatus = await Promise.all(friends.map(async (f) => {
+    const premium = f.plan === 'premium' || f.isPaid === true;
+    let standing = null;
+    if (premium) {
+      try {
+        const raw = await db.getLeagueStanding(f.id);
+        standing = league.describeStanding(raw || { tier: 'F', points: 0 });
+      } catch (error) {
+        console.error('[amigos] erro ao carregar a classificação:', error && error.message);
+      }
+    }
+    return {
+      ...f,
+      plan: premium ? 'premium' : 'free',
+      standing,
+      online: userConnections.has(f.id) && userConnections.get(f.id).size > 0
+    };
   }));
 
   sendJson(response, 200, { friends: friendsWithStatus, sent, received });
@@ -2536,8 +2556,25 @@ async function listUserMatches(request, response, targetId) {
     return;
   }
 
+  const target = await db.getUserById(targetId);
+  const premium = Boolean(target && (target.plan === 'premium' || target.isPaid === true));
+  let standing = null;
+  if (premium) {
+    try {
+      const raw = await db.getLeagueStanding(targetId);
+      standing = league.describeStanding(raw || { tier: 'F', points: 0 });
+    } catch (error) {
+      console.error('[amigos] erro ao carregar a classificação:', error && error.message);
+    }
+  }
+
   const data = await db.listMatchRecordsForUser(targetId);
-  sendJson(response, 200, { matches: data.matches, targetId });
+  sendJson(response, 200, {
+    matches: data.matches,
+    targetId,
+    profile: target ? { id: target.id, plan: premium ? 'premium' : 'free', isPaid: premium } : null,
+    standing
+  });
 }
 
 /* -------------------------------------------------------------

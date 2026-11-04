@@ -454,6 +454,12 @@
       -webkit-tap-highlight-color: transparent;
     }
 
+    /* No celular o relógio fica ao lado esquerdo do dado; no desktop ele
+       volta para cima do placar. O espaço do encaixe some quando vazio. */
+    #timer-dock:empty {
+      display: none;
+    }
+
     .dice {
       width: 100%;
       height: 100%;
@@ -1102,6 +1108,7 @@
       <div id="history-list" class="p-4 space-y-2">
         <p class="text-sm text-slate-400 text-center py-6">Carregando...</p>
       </div>
+      <div id="history-pagination" class="hidden items-center justify-between gap-2 px-4 pb-4"></div>
 
       <div class="px-5 pb-5">
         <button onclick="closeHistoryModal()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold text-sm border border-slate-600">
@@ -1156,7 +1163,7 @@
   </div>
 
   <!-- ÁREA DO TABULEIRO E CONTROLES -->
-  <main class="flex flex-col lg:flex-row items-center justify-center gap-4 sm:gap-6 w-full max-w-5xl my-auto">
+  <main class="flex flex-col lg:flex-row items-center justify-center gap-0 lg:gap-6 w-full max-w-5xl my-auto">
     
     <!-- Tabuleiro Ludo (Aumentado) -->
     <div id="ludo-board" class="ludo-board">
@@ -1164,7 +1171,7 @@
     </div>
 
     <!-- Coluna do Relógio, Placar e Controles -->
-    <div class="flex flex-col items-center gap-3 w-full max-w-md lg:w-56">
+    <div id="game-side-column" class="flex flex-col items-center gap-3 w-full max-w-md lg:w-56">
 
       <!-- Relógio do turno (30 segundos) -->
       <div id="turn-timer" class="turn-timer is-idle" role="timer" aria-label="Tempo restante para jogar">
@@ -1225,14 +1232,17 @@
             <span id="turn-text" class="font-bold text-sm text-red-400 truncate">Turno: Jogador</span>
           </div>
 
-          <div class="dice-container" onclick="handleDiceClick()">
-            <div id="dice" class="dice">
+          <div class="flex items-center justify-center gap-4 w-full">
+            <div id="timer-dock" class="flex items-center justify-center"></div>
+            <div class="dice-container" onclick="handleDiceClick()">
+              <div id="dice" class="dice">
               <div class="dice-face face-1"><div></div><div></div><div></div><div></div><div class="dot"></div><div></div><div></div><div></div><div></div></div>
               <div class="dice-face face-2"><div class="dot"></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div class="dot"></div></div>
               <div class="dice-face face-3"><div class="dot"></div><div></div><div></div><div></div><div class="dot"></div><div></div><div></div><div></div><div class="dot"></div></div>
               <div class="dice-face face-4"><div class="dot"></div><div></div><div class="dot"></div><div></div><div></div><div></div><div class="dot"></div><div></div><div class="dot"></div></div>
               <div class="dice-face face-5"><div class="dot"></div><div></div><div class="dot"></div><div></div><div class="dot"></div><div></div><div class="dot"></div><div></div><div class="dot"></div></div>
               <div class="dice-face face-6"><div class="dot"></div><div class="dot"></div><div class="dot"></div><div></div><div></div><div></div><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+              </div>
             </div>
           </div>
           <span id="dice-instruction" class="text-xs text-slate-400 font-medium text-center">Toque para rolar</span>
@@ -1315,9 +1325,17 @@
       <div class="flex items-center gap-4">
         <img id="friend-profile-avatar" src="/assets/avatar.svg" alt="Foto do perfil" class="w-20 h-20 rounded-full object-cover bg-slate-700 border-2 border-slate-500">
         <div class="min-w-0">
-          <p id="friend-profile-name" class="text-sm font-bold text-slate-100 truncate">Nome no jogo</p>
+          <div class="flex flex-wrap items-center gap-2">
+            <p id="friend-profile-name" class="text-sm font-bold text-slate-100 truncate">Nome no jogo</p>
+            <span id="friend-profile-plan-badge" class="plan-badge plan-badge-free">FREE</span>
+          </div>
           <p id="friend-profile-email" class="text-xs text-slate-400 truncate">conta@example.com</p>
           <p id="friend-profile-status" class="text-xs text-slate-400">Offline</p>
+          <div id="friend-profile-league" class="hidden flex-wrap items-center gap-2 mt-1">
+            <span class="font-tier text-xs font-bold uppercase tracking-wider text-slate-300">Tier</span>
+            <span id="friend-profile-tier-value" class="font-bangers text-xl leading-none">F</span>
+            <span id="friend-profile-tier-detail" class="text-xs font-bold text-slate-200">→ 0</span>
+          </div>
         </div>
       </div>
 
@@ -1325,6 +1343,7 @@
       <div id="friend-profile-matches" class="space-y-2">
         <p class="text-sm text-slate-400 text-center py-6">Carregando partidas...</p>
       </div>
+      <div id="friend-profile-pagination" class="hidden items-center justify-between gap-2"></div>
 
       <div class="px-5 pb-5">
         <button onclick="closeFriendProfileModal()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold text-sm border border-slate-600">
@@ -1381,9 +1400,10 @@
           <p id="profile-account-email" class="text-sm text-slate-300 truncate">conta@example.com</p>
           <p class="text-xs text-slate-500">Conta Google conectada</p>
           <!-- TIER DA LIGA (apenas para contas Premium) -->
-          <div id="profile-league-tier" class="hidden items-center gap-2 mt-1">
+          <div id="profile-league-tier" class="hidden flex-wrap items-center gap-2 mt-1">
             <span class="font-tier text-xs font-bold uppercase tracking-wider text-slate-300">Tier</span>
             <span id="profile-league-tier-value" class="font-bangers text-2xl leading-none">F</span>
+            <span id="profile-league-tier-detail" class="text-sm font-bold text-slate-200">→ 0</span>
           </div>
         </div>
       </div>
@@ -1431,7 +1451,6 @@
             <label class="text-xs font-bold uppercase tracking-wider text-slate-300 whitespace-nowrap">Cor terciária</label>
           </div>
 
-          <p class="text-[11px] text-slate-500 mt-2">As três cores precisam ser de categorias diferentes para serem salvas.</p>
         </div>
 
         <!-- CONTA PREMIUM: pagamento único via Pix, acesso vitalício -->
@@ -1453,9 +1472,10 @@
         </div>
 
         <p id="profile-status" class="text-xs text-slate-400 min-h-[18px]"></p>
-        <div class="flex flex-col gap-3 pt-2">
+        <div class="flex flex-col">
+          <p class="text-[11px] text-slate-500 text-center">As três cores precisam ser de categorias diferentes para serem salvas.</p>
           <button type="button" onclick="saveProfileColors()" id="profile-save-colors-btn" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition">Salvar</button>
-          <button type="button" onclick="closeProfileModal()" class="w-full py-3 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition">Fechar</button>
+          <button type="button" onclick="closeProfileModal()" class="w-full py-3 mt-3 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition">Fechar</button>
         </div>
       </div>
     </div>
@@ -3134,6 +3154,31 @@
       multiplayer: 'MULTIPLAYER'
     };
 
+    // Histórico: 5 partidas por página e nada mais antigo que 180 dias
+    const MATCHES_PER_PAGE = 5;
+    const MATCH_HISTORY_MAX_AGE_DAYS = 180;
+    let historyRecords = [];
+    let historyPage = 0;
+    let friendHistoryRecords = [];
+    let friendHistoryPage = 0;
+
+    // Partidas contra a CPU (SINGLE PLAYER) não entram no histórico
+    function isCpuMatchRecord(record) {
+      if (!record) return true;
+      const mode = String(record.mode || '').trim().toLowerCase();
+      const opponent = String(record.opponentName || '').trim().toLowerCase();
+      return mode === 'local' || opponent === 'cpu';
+    }
+
+    function filterMatchRecords(records) {
+      const cutoff = Date.now() - MATCH_HISTORY_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
+      return (Array.isArray(records) ? records : []).filter(record => {
+        if (isCpuMatchRecord(record)) return false;
+        const when = new Date(record.finishedAt).getTime();
+        return !Number.isFinite(when) || when >= cutoff;
+      });
+    }
+
     // Data da partida: dd/mm/aaaa às hh:mm (fuso do navegador); ignora datas inválidas
     function formatMatchDate(value) {
       const when = new Date(value);
@@ -3150,6 +3195,8 @@
 
     async function postMatchRecord(mode, result, playerScore, opponentScore, opponentName) {
       if (typeof accountUser === 'undefined' || !accountUser) return;
+      // Partidas contra a CPU não são registradas no histórico
+      if (isCpuMatchRecord({ mode, opponentName })) return;
 
       try {
         await fetch('/api/matches', {
@@ -3169,6 +3216,14 @@
       if (!modal || !list) return;
 
       modal.classList.remove('hidden');
+      historyRecords = [];
+      historyPage = 0;
+      const pagination = document.getElementById('history-pagination');
+      if (pagination) {
+        pagination.classList.add('hidden');
+        pagination.classList.remove('flex');
+        pagination.innerHTML = '';
+      }
       list.innerHTML = '<p class="text-sm text-slate-400 text-center py-6">Carregando...</p>';
 
       fetch('/api/matches')
@@ -3179,6 +3234,11 @@
         .then(data => renderHistoryList(Array.isArray(data.matches) ? data.matches : []))
         .catch(() => {
           list.innerHTML = '<p class="text-sm text-red-400 text-center py-6">Não foi possível carregar o histórico. Tente novamente.</p>';
+          const pagination = document.getElementById('history-pagination');
+          if (pagination) {
+            pagination.classList.add('hidden');
+            pagination.classList.remove('flex');
+          }
         });
     }
 
@@ -3188,32 +3248,74 @@
       if (modal) modal.classList.add('hidden');
     }
 
-    function renderHistoryList(records) {
-      const list = document.getElementById('history-list');
-      if (!list) return;
+    function matchRecordCard(record) {
+      const win = record.result === 'win';
+      const whenLabel = formatMatchDate(record.finishedAt);
+      const modeLabel = MATCH_MODE_LABELS[record.mode] || record.mode;
+      const resultColor = win ? 'text-emerald-400' : 'text-red-400';
+      const borderColor = win ? 'border-emerald-700' : 'border-red-700';
 
-      if (records.length === 0) {
-        list.innerHTML = '<p class="text-sm text-slate-400 text-center py-6">Nenhuma partida registrada ainda.</p>';
+      return `
+        <div class="bg-slate-800 border-2 ${borderColor} p-3 flex items-center justify-between gap-3">
+          <div class="min-w-0 text-left">
+            <p class="font-brand font-black text-sm ${resultColor}">${win ? 'VITÓRIA' : 'DERROTA'}</p>
+            <p class="text-xs text-slate-300 truncate"><strong>${escapeHtmlText(modeLabel)}</strong> · vs ${escapeHtmlText(record.opponentName)}</p>
+            <p class="text-[11px] text-slate-500">${whenLabel}</p>
+          </div>
+          <p class="font-mono text-lg text-slate-100 whitespace-nowrap">${record.playerScore} - ${record.opponentScore}</p>
+        </div>`;
+    }
+
+    // Paginação compartilhada pelo histórico da conta e dos amigos
+    function renderMatchPagination(containerId, page, totalRecords, changeFunctionName) {
+      const box = document.getElementById(containerId);
+      if (!box) return;
+      const totalPages = Math.max(1, Math.ceil(totalRecords / MATCHES_PER_PAGE));
+      if (totalRecords <= MATCHES_PER_PAGE) {
+        box.classList.add('hidden');
+        box.classList.remove('flex');
+        box.innerHTML = '';
         return;
       }
 
-      list.innerHTML = records.map(record => {
-        const win = record.result === 'win';
-        const whenLabel = formatMatchDate(record.finishedAt);
-        const modeLabel = MATCH_MODE_LABELS[record.mode] || record.mode;
-        const resultColor = win ? 'text-emerald-400' : 'text-red-400';
-        const borderColor = win ? 'border-emerald-700' : 'border-red-700';
+      const previousDisabled = page <= 0 ? 'disabled' : '';
+      const nextDisabled = page >= totalPages - 1 ? 'disabled' : '';
+      box.classList.remove('hidden');
+      box.classList.add('flex');
+      box.innerHTML = `
+        <button type="button" onclick="${changeFunctionName}(-1)" ${previousDisabled} class="px-3 py-1.5 text-xs font-bold bg-slate-700 hover:bg-slate-600 text-slate-200 transition disabled:opacity-40 disabled:cursor-not-allowed">‹ Anterior</button>
+        <span class="text-xs text-slate-400">Página ${page + 1} de ${totalPages}</span>
+        <button type="button" onclick="${changeFunctionName}(1)" ${nextDisabled} class="px-3 py-1.5 text-xs font-bold bg-slate-700 hover:bg-slate-600 text-slate-200 transition disabled:opacity-40 disabled:cursor-not-allowed">Próxima ›</button>`;
+    }
 
-        return `
-          <div class="bg-slate-800 border-2 ${borderColor} p-3 flex items-center justify-between gap-3">
-            <div class="min-w-0 text-left">
-              <p class="font-brand font-black text-sm ${resultColor}">${win ? 'VITÓRIA' : 'DERROTA'}</p>
-              <p class="text-xs text-slate-300 truncate"><strong>${escapeHtmlText(modeLabel)}</strong> · vs ${escapeHtmlText(record.opponentName)}</p>
-              <p class="text-[11px] text-slate-500">${whenLabel}</p>
-            </div>
-            <p class="font-mono text-lg text-slate-100 whitespace-nowrap">${record.playerScore} - ${record.opponentScore}</p>
-          </div>`;
-      }).join('');
+    function renderHistoryList(records) {
+      historyRecords = filterMatchRecords(records);
+      historyPage = 0;
+      renderHistoryPage();
+    }
+
+    function renderHistoryPage() {
+      const list = document.getElementById('history-list');
+      if (!list) return;
+
+      if (historyRecords.length === 0) {
+        list.innerHTML = '<p class="text-sm text-slate-400 text-center py-6">Nenhuma partida registrada ainda.</p>';
+        renderMatchPagination('history-pagination', 0, 0, 'changeHistoryPage');
+        return;
+      }
+
+      const start = historyPage * MATCHES_PER_PAGE;
+      list.innerHTML = historyRecords
+        .slice(start, start + MATCHES_PER_PAGE)
+        .map(matchRecordCard)
+        .join('');
+      renderMatchPagination('history-pagination', historyPage, historyRecords.length, 'changeHistoryPage');
+    }
+
+    function changeHistoryPage(delta) {
+      const totalPages = Math.max(1, Math.ceil(historyRecords.length / MATCHES_PER_PAGE));
+      historyPage = Math.max(0, Math.min(totalPages - 1, historyPage + delta));
+      renderHistoryPage();
     }
 
     /* -------------------------------------------------------------
@@ -3421,6 +3523,37 @@
        PERFIL DO AMIGO (foto, nome no jogo e histórico de partidas)
     ------------------------------------------------------------- */
 
+    function friendPlanOf(prof) {
+      return prof && (prof.plan === 'premium' || prof.isPaid === true) ? 'premium' : 'free';
+    }
+
+    function renderFriendPlanBadge(plan) {
+      const badge = document.getElementById('friend-profile-plan-badge');
+      if (!badge) return;
+      const premium = plan === 'premium';
+      badge.textContent = premium ? 'PREMIUM' : 'FREE';
+      badge.className = 'plan-badge ' + (premium ? 'plan-badge-premium' : 'plan-badge-free');
+    }
+
+    function renderFriendLeague(standing, plan) {
+      const box = document.getElementById('friend-profile-league');
+      const value = document.getElementById('friend-profile-tier-value');
+      const detail = document.getElementById('friend-profile-tier-detail');
+      if (!box || !value || !detail) return;
+
+      if (plan !== 'premium' || !standing || !standing.tier) {
+        box.classList.add('hidden');
+        box.classList.remove('flex');
+        return;
+      }
+
+      value.textContent = standing.tier;
+      value.style.color = leagueTierColor(standing.tier);
+      detail.textContent = leagueStandingDetail(standing);
+      box.classList.remove('hidden');
+      box.classList.add('flex');
+    }
+
     async function openFriendProfile(prof) {
       const modal = document.getElementById('friend-profile-modal');
       const list = document.getElementById('friend-profile-matches');
@@ -3428,12 +3561,17 @@
       const emailEl = document.getElementById('friend-profile-email');
       const statusEl = document.getElementById('friend-profile-status');
       const removeBtn = document.getElementById('friend-profile-remove-btn');
+      const profile = prof || {};
 
-      nameEl.textContent = prof.playerName || prof.name || 'Oponente';
-      emailEl.textContent = prof.email || '—';
+      nameEl.textContent = profile.playerName || profile.name || 'Oponente';
+      emailEl.textContent = profile.email || '—';
+
+      // Plano da conta (FREE/PREMIUM) ao lado do nickname
+      renderFriendPlanBadge(friendPlanOf(profile));
+      renderFriendLeague(profile.standing || null, friendPlanOf(profile));
 
       // Status online/offline
-      if (prof.online === true) {
+      if (profile.online === true) {
         statusEl.textContent = 'Online';
         statusEl.className = 'text-xs text-emerald-400';
       } else {
@@ -3441,17 +3579,28 @@
         statusEl.className = 'text-xs text-slate-400';
       }
 
-      setAvatarImage(document.getElementById('friend-profile-avatar'), prof.picture || '');
+      setAvatarImage(document.getElementById('friend-profile-avatar'), profile.picture || '');
+      friendHistoryRecords = [];
+      friendHistoryPage = 0;
+      const pagination = document.getElementById('friend-profile-pagination');
+      if (pagination) {
+        pagination.classList.add('hidden');
+        pagination.classList.remove('flex');
+        pagination.innerHTML = '';
+      }
       list.innerHTML = '<p class="text-sm text-slate-400 text-center py-6">Carregando partidas...</p>';
       modal.classList.remove('hidden');
 
       // Configura o botão de remover amigo
-      removeBtn.onclick = () => confirmRemoveFriendFromProfile(prof.id, prof.playerName || prof.name || 'Oponente');
+      removeBtn.onclick = () => confirmRemoveFriendFromProfile(profile.id, profile.playerName || profile.name || 'Oponente');
 
       try {
-        const response = await fetch('/api/users/' + encodeURIComponent(prof.id) + '/matches');
+        const response = await fetch('/api/users/' + encodeURIComponent(profile.id) + '/matches');
         if (!response.ok) throw new Error(response.status === 403 ? 'Você só pode ver o histórico de amigos.' : 'Não foi possível carregar as partidas.');
         const data = await response.json();
+        const resolvedPlan = data.profile ? friendPlanOf(data.profile) : friendPlanOf(profile);
+        renderFriendPlanBadge(resolvedPlan);
+        renderFriendLeague(data.standing || profile.standing || null, resolvedPlan);
         renderFriendMatches(list, data.matches || []);
       } catch (error) {
         list.innerHTML = `<p class="text-sm text-red-400 text-center py-6">${escapeHtmlText(error.message)}</p>`;
@@ -3463,27 +3612,33 @@
     }
 
     function renderFriendMatches(list, records) {
+      friendHistoryRecords = filterMatchRecords(records);
+      friendHistoryPage = 0;
+      renderFriendMatchesPage();
+    }
+
+    function renderFriendMatchesPage() {
+      const list = document.getElementById('friend-profile-matches');
       if (!list) return;
-      if (records.length === 0) {
+
+      if (friendHistoryRecords.length === 0) {
         list.innerHTML = '<p class="text-sm text-slate-400 text-center py-6">Nenhuma partida registrada ainda.</p>';
+        renderMatchPagination('friend-profile-pagination', 0, 0, 'changeFriendHistoryPage');
         return;
       }
-      list.innerHTML = records.map(record => {
-        const win = record.result === 'win';
-        const whenLabel = formatMatchDate(record.finishedAt);
-        const modeLabel = MATCH_MODE_LABELS[record.mode] || record.mode;
-        const resultColor = win ? 'text-emerald-400' : 'text-red-400';
-        const borderColor = win ? 'border-emerald-700' : 'border-red-700';
-        return `
-          <div class="bg-slate-800 border-2 ${borderColor} p-3 flex items-center justify-between gap-3">
-            <div class="min-w-0 text-left">
-              <p class="font-brand font-black text-sm ${resultColor}">${win ? 'VITÓRIA' : 'DERROTA'}</p>
-              <p class="text-xs text-slate-300 truncate"><strong>${escapeHtmlText(modeLabel)}</strong> · vs ${escapeHtmlText(record.opponentName)}</p>
-              <p class="text-[11px] text-slate-500">${whenLabel}</p>
-            </div>
-            <p class="font-mono text-lg text-slate-100 whitespace-nowrap">${record.playerScore} - ${record.opponentScore}</p>
-          </div>`;
-      }).join('');
+
+      const start = friendHistoryPage * MATCHES_PER_PAGE;
+      list.innerHTML = friendHistoryRecords
+        .slice(start, start + MATCHES_PER_PAGE)
+        .map(matchRecordCard)
+        .join('');
+      renderMatchPagination('friend-profile-pagination', friendHistoryPage, friendHistoryRecords.length, 'changeFriendHistoryPage');
+    }
+
+    function changeFriendHistoryPage(delta) {
+      const totalPages = Math.max(1, Math.ceil(friendHistoryRecords.length / MATCHES_PER_PAGE));
+      friendHistoryPage = Math.max(0, Math.min(totalPages - 1, friendHistoryPage + delta));
+      renderFriendMatchesPage();
     }
 
     /* -------------------------------------------------------------
@@ -3636,7 +3791,7 @@
       const statusColor = isOnline ? 'text-emerald-400' : 'text-slate-400';
       const statusText = isOnline ? 'Online' : 'Offline';
       return `
-        <div class="bg-slate-800 border border-slate-700 p-2.5 flex items-center gap-3 cursor-pointer" onclick="openFriendProfile({ id: '${escapeHtmlText(f.id)}', playerName: '${safeName}', email: '${escapeHtmlText(f.email || '—')}', picture: '${safePicture}' })">
+        <div class="bg-slate-800 border border-slate-700 p-2.5 flex items-center gap-3 cursor-pointer" onclick="openFriendProfile({ id: '${escapeHtmlText(f.id)}', playerName: '${safeName}', email: '${escapeHtmlText(f.email || '—')}', picture: '${safePicture}', plan: '${f.plan === 'premium' || f.isPaid === true ? 'premium' : 'free'}' })">
           <img src="${safePicture}" alt="Foto" class="w-8 h-8 rounded-full object-cover bg-slate-700 border border-slate-600" onerror="this.onerror=null;this.src='/assets/avatar.svg'">
           <div class="min-w-0 flex-1">
             <p class="text-sm font-bold text-slate-100 truncate">${escapeHtmlText(name)}</p>
@@ -4025,6 +4180,23 @@
         startTurnTimer(isOnlineGame && !isLocalSide);
       } else {
         stopTurnTimer();
+      }
+    }
+
+    // No celular o relógio fica ao lado esquerdo do dado; no desktop ele
+    // permanece acima do placar. O elemento é o mesmo, apenas muda de lugar.
+    function syncTurnTimerPlacement() {
+      const timer = document.getElementById('turn-timer');
+      const dock = document.getElementById('timer-dock');
+      const column = document.getElementById('game-side-column');
+      const scoreboard = document.getElementById('scoreboard');
+      if (!timer || !dock || !column || !scoreboard) return;
+
+      const stacked = window.matchMedia('(max-width: 1023px)').matches;
+      if (stacked) {
+        if (timer.parentElement !== dock) dock.appendChild(timer);
+      } else if (timer.parentElement !== column) {
+        column.insertBefore(timer, scoreboard);
       }
     }
 
@@ -5732,11 +5904,24 @@
     // Classificação atual do jogador na Liga (vinda do servidor)
     let leagueStanding = null;
 
-    // Mostra o tier no perfil (abaixo de "Conta Google conectada")
+    // Pontos do tier ou, durante a melhor de 3, o placar da série:
+    // ✅ vitórias, ❌ derrotas e ➖ partidas ainda não jogadas.
+    function leagueStandingDetail(standing) {
+      if (standing && standing.seriesInProgress) {
+        const wins = Math.max(0, Math.min(3, Number(standing.seriesWins) || 0));
+        const losses = Math.max(0, Math.min(3 - wins, Number(standing.seriesLosses) || 0));
+        const remaining = Math.max(0, 3 - wins - losses);
+        return `→ ${'✅'.repeat(wins)}${'❌'.repeat(losses)}${'➖'.repeat(remaining)}`;
+      }
+      return `→ ${Number(standing && standing.points) || 0}`;
+    }
+
+    // Mostra o tier e os pontos no perfil (abaixo de "Conta Google conectada")
     function renderProfileLeagueTier(standing) {
       const box = document.getElementById('profile-league-tier');
       const value = document.getElementById('profile-league-tier-value');
-      if (!box || !value) return;
+      const detail = document.getElementById('profile-league-tier-detail');
+      if (!box || !value || !detail) return;
       const premium = typeof isPremiumAccount === 'function'
         && isPremiumAccount(typeof accountUser !== 'undefined' ? accountUser : null);
       if (!premium || !standing || !standing.tier) {
@@ -5746,6 +5931,7 @@
       }
       value.textContent = standing.tier;
       value.style.color = leagueTierColor(standing.tier);
+      detail.textContent = leagueStandingDetail(standing);
       box.classList.remove('hidden');
       box.classList.add('flex');
     }
@@ -7857,6 +8043,8 @@
       initBoard();
       initWebSocket();
       initGoogleLoginSetup();
+      syncTurnTimerPlacement();
+      window.addEventListener('resize', syncTurnTimerPlacement);
       // Tela inicial: sem partida em andamento, o Menu fica oculto
       setMenuButtonVisible(false);
       // Botão de conta centralizado abaixo da logo na tela inicial
