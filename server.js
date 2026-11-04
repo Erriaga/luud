@@ -802,7 +802,7 @@ async function startQuickMatchRoom(a, b, forcedMode) {
       { slot: 0, color: SOLO_SLOT_COLORS[0], team: 0 },
       { slot: 1, color: SOLO_SLOT_COLORS[1], team: 1 }
     ],
-    mode: 'solo',
+    mode,
     target: 4
   });
 
