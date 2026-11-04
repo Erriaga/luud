@@ -613,8 +613,8 @@ function handleMoveRequest(ws, conn, room, data) {
     return;
   }
 
-  // Quem tirou 6 joga novamente
-  const extraTurn = state.dice === 6;
+  // Quem tirou 6 no dado, ou salvou uma peça, ou capturou uma peça adversária, joga novamente
+  const extraTurn = state.dice === 6 || Boolean(result.points) || result.captured.length > 0;
   state.dice = null;
   if (!extraTurn) {
     state.turn = rules.nextSlot(state, slot);

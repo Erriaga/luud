@@ -1608,7 +1608,11 @@
     let diceValue = 0;
     let hasRolled = false;
     let consecutiveSixes = 0;
+    let lastMoveScored = false; // jogador salvou uma peça na jogada atual
+    let lastMoveCaptured = false; // jogador capturou uma peça adversária na jogada atual
     let isAnimating = false;
+    // ARENA: ordem em que os jogadores terminam (salvam todas as peças)
+    let arenaFinishedOrder = []; // array de chaves de cor na ordem de conclusão
     let isPaused = false;
     let diceCurrentX = 0;
     let diceCurrentY = 0;
@@ -3254,10 +3258,30 @@
       const resultColor = win ? 'text-emerald-400' : 'text-red-400';
       const borderColor = win ? 'border-emerald-700' : 'border-red-700';
 
+      // ARENA: mostra a colocação em vez de VITÓRIA/DERROTA
+      let resultText = win ? 'VITÓRIA' : 'DERROTA';
+      let resultCssColor = resultColor;
+      if (record.mode === 'arena') {
+        const r = String(record.result || '');
+        if (r.includes('1º LUGAR')) {
+          resultText = '1º LUGAR';
+          resultCssColor = 'text-amber-400';
+        } else if (r.includes('2º LUGAR')) {
+          resultText = '2º LUGAR';
+          resultCssColor = 'text-slate-400';
+        } else if (r.includes('3º LUGAR')) {
+          resultText = '3º LUGAR';
+          resultCssColor = 'text-amber-600';
+        } else if (r.includes('4º LUGAR')) {
+          resultText = '4º LUGAR';
+          resultCssColor = 'text-slate-300';
+        }
+      }
+
       return `
         <div class="bg-slate-800 border-2 ${borderColor} p-3 flex items-center justify-between gap-3">
           <div class="min-w-0 text-left">
-            <p class="font-brand font-black text-sm ${resultColor}">${win ? 'VITÓRIA' : 'DERROTA'}</p>
+            <p class="font-brand font-black text-sm ${resultCssColor}">${resultText}</p>
             <p class="text-xs text-slate-300 truncate"><strong>${escapeHtmlText(modeLabel)}</strong> · vs ${escapeHtmlText(record.opponentName)}</p>
             <p class="text-[11px] text-slate-500">${whenLabel}</p>
           </div>
@@ -3782,8 +3806,8 @@
 
       // Texto vazio para cada tipo
       const emptyFriends = '<p class="text-xs text-slate-500 text-center py-4">Nenhum amigo ainda.</p>';
-      const emptySent = '<p class="text-xs text-slate-500 text-center py-4">Nenhuma solicitacao enviada aguardando resposta.</p>';
-      const emptyReceived = '<p class="text-xs text-slate-500 text-center py-4">Nenhuma solicitacao recebida pendente.</p>';
+      const emptySent = '<p class="text-xs text-slate-500 text-center py-4">Nenhuma solicitação enviada aguardando resposta.</p>';
+      const emptyReceived = '<p class="text-xs text-slate-500 text-center py-4">Nenhuma solicitação recebida pendente.</p>';
 
       // Area unica de conteudo (sem titulos de coluna, sem triplicacao)
       const content = document.getElementById('friends-content');
@@ -4348,6 +4372,14 @@
       playerScores[player] = (playerScores[player] || 0) + 1;
       updateScoreboardUI();
       gameAudio.playPoint();
+      lastMoveScored = true; // turno extra por salvar uma peça
+
+      // ARENA: rastreia a ordem em que os jogadores terminam (salvam todas as peças)
+      const target = getWinningScore();
+      const isArena = isOnlineArenaMode() || (!isTeamMode() && !isOnlineGame && activePlayers.length === 4);
+      if (isArena && playerScores[player] >= target && !arenaFinishedOrder.includes(player)) {
+        arenaFinishedOrder.push(player);
+      }
     }
 
     function refreshTurnInstruction() {
@@ -4485,7 +4517,7 @@
       isAnimating = false;
       hasRolled = true;
       document.getElementById('dice-instruction').textContent = 'Toque para rolar';
-      logStatus(`${getPlayerColor(getCurrentPlayer()).name} tirou ${diceValue} no dado!`);
+      logStatus(`${getPlayerColor(getCurrentPlayer()).name} tirou ${diceValue} no dado`);
 
       if (diceValue === 6) {
         consecutiveSixes++;
@@ -4830,7 +4862,10 @@
         });
       });
 
-      if (captured) gameAudio.playCapture();
+      if (captured) {
+        gameAudio.playCapture();
+        lastMoveCaptured = true; // turno extra por capturar uma peça
+      }
     }
 
     // Placar final da arena: uma linha por jogador (4 jogadores, cada um por si)
@@ -4851,10 +4886,25 @@
           ? (getPlayerDisplayName(colorKey) || 'Jogador')
           : (colorKey === getHumanPlayerKey() ? 'Você' : `CPU (${color.name})`);
         const points = playerScores[colorKey] || 0;
+        // Colocação do jogador na arena (baseada na ordem de conclusão)
+        const finishedIndex = arenaFinishedOrder.indexOf(colorKey);
+        let placementHtml = '';
+        if (finishedIndex === 0) {
+          placementHtml = '<span class="font-bold text-xs text-amber-400">1º</span>';
+        } else if (finishedIndex === 1) {
+          placementHtml = '<span class="font-bold text-xs text-slate-400">2º</span>';
+        } else if (finishedIndex === 2) {
+          placementHtml = '<span class="font-bold text-xs text-amber-600">3º</span>';
+        } else if (finishedIndex >= 0) {
+          placementHtml = '<span class="font-bold text-xs text-slate-300">4º</span>';
+        } else {
+          placementHtml = '<span class="font-bold text-xs text-slate-500">—</span>';
+        }
         return `<div class="flex items-center justify-between gap-4 mb-1">
           <div class="flex items-center gap-3">
             <span class="w-2 h-2 rounded-full shrink-0" style="background-color:${color.hex}"></span>
             <span class="font-bold text-sm">${name}</span>
+            ${placementHtml}
           </div>
           <span class="font-black text-sm">${points}</span>
         </div>`;
@@ -4873,13 +4923,25 @@
         return;
       }
 
-      // Se tirou 6 no dado, ganha outro turno!
-      if (diceValue === 6) {
+      // Se tirou 6 no dado, ou salvou uma peça, ou capturou uma peça adversária, ganha outro turno!
+      if (diceValue === 6 || lastMoveScored || lastMoveCaptured) {
         hasRolled = false;
-        logStatus(`${getPlayerColor(player).name} tirou 6 e joga novamente! 🎲`);
+        // Reseta as flags para a próxima jogada
+        lastMoveScored = false;
+        lastMoveCaptured = false;
+        if (diceValue === 6) {
+          logStatus(`${getPlayerColor(player).name} tirou 6 e joga novamente! 🎲`);
+        } else if (lastMoveScored) {
+          logStatus(`${getPlayerColor(player).name} salvou uma peça e joga novamente!`);
+        } else if (lastMoveCaptured) {
+          logStatus(`${getPlayerColor(player).name} capturou uma peça e joga novamente!`);
+        }
         updateTurnUI();
         checkCPUTurn();
       } else {
+        // Reseta as flags para a próxima jogada
+        lastMoveScored = false;
+        lastMoveCaptured = false;
         nextTurn();
       }
     }
@@ -4897,13 +4959,34 @@
 
       stopTurnTimer();
 
-      // Modo ARENA: cada jogador por si, mostrar placar de todos os 4
+      // Modo ARENA: cada jogador por si, mostrar colocação final de todos os 4
       if (isOnlineArenaMode() || (!isTeamMode() && !isOnlineGame && activePlayers.length === 4)) {
-        winTitle.innerText = humanWon ? 'V I T Ó R I A' : 'D E R R O T A';
-        winTitle.className = `win-title font-display font-black ${humanWon ? 'text-amber-400' : 'text-red-500'}`;
-        document.getElementById('win-subtitle').classList.add('hidden');
+        // Determina a colocação do jogador humano na arena
+        const humanKey = getHumanPlayerKey();
+        const humanFinishedIndex = arenaFinishedOrder.indexOf(humanKey);
+        let placementText;
+        let placementColor;
+        if (humanFinishedIndex === 0) {
+          placementText = '1º LUGAR';
+          placementColor = 'text-amber-400'; // ouro
+        } else if (humanFinishedIndex === 1) {
+          placementText = '2º LUGAR';
+          placementColor = 'text-slate-400'; // prata
+        } else if (humanFinishedIndex === 2) {
+          placementText = '3º LUGAR';
+          placementColor = 'text-amber-600'; // bronze
+        } else {
+          placementText = '4º LUGAR';
+          placementColor = 'text-slate-300'; // branco
+        }
 
-        // Montar placar final com todos os 4 jogadores
+        winTitle.innerText = 'F I M   D A   P A R T I D A';
+        winTitle.className = `win-title font-display font-black text-slate-100`;
+        document.getElementById('win-subtitle').classList.remove('hidden');
+        document.getElementById('win-subtitle').innerText = placementText;
+        document.getElementById('win-subtitle').className = `win-subtitle font-display font-black ${placementColor}`;
+
+        // Montar placar final com todos os 4 jogadores e suas colocações
         document.getElementById('win-score').innerHTML = buildArenaStandingsHtml();
       } else {
         // Modo SOLO ou DUPLA: placar tradicional
@@ -4922,9 +5005,12 @@
       }
 
       // Registra o resultado no histórico da conta
+      // ARENA: registra a colocação (1º LUGAR, 2º LUGAR, etc.) em vez de win/loss
+      const isArenaFinished = isOnlineArenaMode() || (!isTeamMode() && !isOnlineGame && activePlayers.length === 4);
+      const arenaResult = isArenaFinished ? placementText : (humanWon ? 'win' : 'loss');
       await postMatchRecord(
         isOnlineGame ? onlineMatchType : (opponentsCount === 1 ? 'local' : 'multiplayer'),
-        humanWon ? 'win' : 'loss',
+        arenaResult,
         getHumanTeamScore(),
         getCpuScore(),
         isOnlineGame ? (onlineOpponentName || 'Oponente') : 'CPU'
@@ -4947,12 +5033,13 @@
     function getWinningTeam() {
       const target = getWinningScore();
 
-      // Modo ARENA: cada jogador por si, primeiro a atingir o target vence
+      // Modo ARENA: cada jogador por si, partida encerra quando 3 jogadores
+      // salvam todas as peças. A colocação é definida pela ordem de conclusão.
       if (isOnlineArenaMode() || (!isTeamMode() && !isOnlineGame && activePlayers.length === 4)) {
-        for (const colorKey of activePlayers) {
-          if (playerScores[colorKey] >= target) {
-            return colorKey; // Retorna a chave da cor do vencedor
-          }
+        const finished = activePlayers.filter(colorKey => playerScores[colorKey] >= target);
+        if (finished.length >= 3) {
+          // Partida encerrada: retorna o último a terminar (não há vencedor único)
+          return 'ARENA_FINISHED';
         }
         return null;
       }
@@ -4968,6 +5055,8 @@
 
     function nextTurn() {
       hasRolled = false;
+      lastMoveScored = false;
+      lastMoveCaptured = false;
       currentTurnIndex = (currentTurnIndex + 1) % activePlayers.length;
       updateTurnUI();
       checkCPUTurn();
@@ -7308,7 +7397,10 @@
       customColorHex = PLAYER_COLORS[localColorKey].hex;
       customColorName = PLAYER_COLORS[localColorKey].name;
 
-      onlineOpponentName = 'Arena (4 jogadores)';
+      // Na arena constrói o nome dos 3 oponentes para o histórico
+      const opponentEntries = roster.filter(player => Number(player.slot) !== mySlot);
+      const opponentNames = opponentEntries.map(p => p.name || 'Jogador');
+      onlineOpponentName = opponentNames.join(', ');
       // Na arena não existe um "oponente" único: cada um joga por si
       onlineOpponentColor = null;
       onlineOpponentProfile = null;
@@ -7755,7 +7847,7 @@
         }
 
         hasRolled = true;
-        document.getElementById('dice-instruction').textContent = `${playerName} tirou ${value}!`;
+        document.getElementById('dice-instruction').textContent = `${playerName} tirou ${value}`;
 
         if (onlineServerLegal.length) {
           highlightSelectableTokens(onlineServerLegal);
