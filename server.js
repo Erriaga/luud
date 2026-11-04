@@ -341,6 +341,8 @@ function startRoomTurnTimer(room) {
   // Partidas da Liga usam um tempo de turno mais curto (10 segundos)
   const turnTimeout = room.mode === 'liga' ? LEAGUE_TURN_TIMEOUT_MS : ROOM_TURN_TIMEOUT_MS;
 
+  console.log(`[timer] sala ${room.code || ''} mode=${room.mode} turnTimeout=${turnTimeout / 1000}s`);
+
   room.turnTimer = setTimeout(() => {
     room.turnTimer = null;
     const state = room.game;
