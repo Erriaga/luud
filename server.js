@@ -10,6 +10,7 @@ const db = require('./db');
 const pix = require('./pix');
 const rules = require('./game-rules');
 const league = require('./league');
+const namePolicy = require('./name-policy');
 
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
@@ -2291,6 +2292,12 @@ async function handleProfileUpdate(request, response) {
         sendJson(response, 400, { error: 'Informe um nickname.' });
         return;
       }
+      // Bloqueia nomes ofensivos segundo a política de nomes do jogo.
+      const nameCheck = namePolicy.checkName(playerName);
+      if (!nameCheck.allowed) {
+        sendJson(response, 400, { error: nameCheck.reason || 'Esse nickname não é permitido. Escolha outro.' });
+        return;
+      }
       fields.playerName = playerName;
       // Marca o nickname como escolhido pelo jogador: assim ele é
       // preservado mesmo quando coincide com o nome da conta Google.
@@ -3113,6 +3120,17 @@ async function main() {
         const teamColor = sanitizeTeamColor(data.teamColor);
         const teamColorName = sanitizeColorName(data.teamColorName);
 
+        // Bloqueia nomes de dupla ofensivos segundo a política de nomes.
+        if (teamName && !namePolicy.isNameAllowed(teamName)) {
+          sendTo(ws, {
+            type: 'dupla_invite_result',
+            status: 'error',
+            targetId,
+            message: 'Esse nome de dupla não é permitido. Escolha outro.'
+          });
+          return;
+        }
+
         duplaPendingInvites.set(inviteId, {
           id: inviteId,
           fromUid: hostUid,
@@ -3239,7 +3257,17 @@ async function main() {
         const lobby = duplaLobbies.get(conn.userId);
         if (!lobby) return;
         // O nome da dupla pode ser apagado (fica vazio até o criador definir)
-        if (typeof data.teamName === 'string') lobby.teamName = sanitizeTeamName(data.teamName);
+        if (typeof data.teamName === 'string') {
+          const nextTeamName = sanitizeTeamName(data.teamName);
+          if (nextTeamName && !namePolicy.isNameAllowed(nextTeamName)) {
+            sendTo(ws, {
+              type: 'error',
+              message: 'Esse nome de dupla não é permitido. Escolha outro.'
+            });
+            return;
+          }
+          lobby.teamName = nextTeamName;
+        }
         if (data.teamColor) lobby.teamColor = sanitizeTeamColor(data.teamColor);
         if (data.teamColorName) lobby.teamColorName = sanitizeColorName(data.teamColorName);
         await broadcastDuplaLobby(lobby);
@@ -3267,6 +3295,12 @@ async function main() {
         // O nome enviado pelo criador tem prioridade (evita corrida com a
         // atualização do lobby que acontece enquanto o jogador digita)
         if (typeof data.teamName === 'string') lobby.teamName = sanitizeTeamName(data.teamName);
+
+        // Bloqueia nomes de dupla ofensivos segundo a política de nomes.
+        if (lobby.teamName && !namePolicy.isNameAllowed(lobby.teamName)) {
+          sendTo(ws, { type: 'dupla_queue_error', error: 'Esse nome de dupla não é permitido. Escolha outro.' });
+          return;
+        }
 
         // É obrigatório ter um nome registrado para a dupla
         if (!lobby.teamName) {
