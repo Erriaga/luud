@@ -1286,7 +1286,7 @@
   <div id="friends-modal" class="hidden fixed inset-0 z-[100] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6">
     <div class="bg-slate-800 border border-slate-600 shadow-2xl w-full max-w-2xl p-6 space-y-5 max-h-[90vh] overflow-y-auto">
       <div class="flex items-center justify-between gap-3">
-        <h2 class="font-display text-xl font-black text-slate-100">AMIGOS</h2>
+        <h2 class="font-oswald text-xl sm:text-2xl font-black text-slate-100">AMIGOS</h2>
         <button type="button" onclick="closeFriendsModal()" class="w-9 h-9 bg-slate-700 hover:bg-slate-600 text-slate-200 text-lg leading-none">✕</button>
       </div>
 
@@ -1384,7 +1384,7 @@
     <div class="bg-slate-800 border border-slate-600 shadow-2xl w-full max-w-lg p-6 space-y-5">
       <div class="flex items-center justify-between gap-3">
         <div class="flex items-center gap-2">
-          <h2 class="font-display text-2xl font-black text-slate-100">PERFIL</h2>
+          <h2 class="font-oswald text-xl sm:text-2xl font-black text-slate-100">PERFIL</h2>
           <span id="profile-premium-badge" class="plan-badge plan-badge-premium hidden flex items-center">PREMIUM</span>
           <span id="profile-free-badge" class="plan-badge plan-badge-free hidden flex items-center">FREE</span>
         </div>
@@ -3774,6 +3774,11 @@
       const friendsContent = data.friends.slice().sort(compareFriends).map(friendRow).join('');
       const sentContent = data.sent.slice().sort(compareFriends).map(sentRow).join('');
       const receivedContent = data.received.slice().sort(compareFriends).map(receivedRow).join('');
+
+      // Contadores
+      const friendsCount = data.friends.length;
+      const sentCount = data.sent.length;
+      const receivedCount = data.received.length;
 
       // Texto vazio para cada tipo
       const emptyFriends = '<p class="text-xs text-slate-500 text-center py-4">Nenhum amigo ainda.</p>';
