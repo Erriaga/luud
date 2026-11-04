@@ -15,6 +15,9 @@
     (function () {
       'use strict';
 
+      // Detecta se é um dispositivo móvel
+      var isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
       // Desabilita menu de contexto (clique direito)
       document.addEventListener('contextmenu', function (event) {
         event.preventDefault();
@@ -40,27 +43,31 @@
       }, true);
 
       // Detecta abertura do DevTools via redimensionamento da janela
-      var devtools = { open: false, orientation: null };
-      var threshold = 160;
+      // (desativado em dispositivos móveis para evitar recarregamento
+      //  infinito causado por teclado virtual, barra de endereço e rotação)
+      if (!isMobile) {
+        var devtools = { open: false, orientation: null };
+        var threshold = 160;
 
-      function checkDevtools() {
-        var widthThreshold = window.outerWidth - window.innerWidth > threshold;
-        var heightThreshold = window.outerHeight - window.innerHeight > threshold;
-        var orientation = widthThreshold ? 'vertical' : heightThreshold ? 'horizontal' : null;
+        function checkDevtools() {
+          var widthThreshold = window.outerWidth - window.innerWidth > threshold;
+          var heightThreshold = window.outerHeight - window.innerHeight > threshold;
+          var orientation = widthThreshold ? 'vertical' : heightThreshold ? 'horizontal' : null;
 
-        if (orientation && !devtools.open) {
-          devtools.open = true;
-          devtools.orientation = orientation;
-          // Ao detectar DevTools, recarrega a página para invalidar qualquer
-          // manipulação feita pelo usuário no cliente
-          window.location.reload();
-        } else if (!orientation && devtools.open) {
-          devtools.open = false;
-          devtools.orientation = null;
+          if (orientation && !devtools.open) {
+            devtools.open = true;
+            devtools.orientation = orientation;
+            // Ao detectar DevTools, recarrega a página para invalidar qualquer
+            // manipulação feita pelo usuário no cliente
+            window.location.reload();
+          } else if (!orientation && devtools.open) {
+            devtools.open = false;
+            devtools.orientation = null;
+          }
         }
-      }
 
-      setInterval(checkDevtools, 500);
+        setInterval(checkDevtools, 500);
+      }
 
       // Desabilita arrastar e soltar imagens e links
       document.addEventListener('dragstart', function (event) {
