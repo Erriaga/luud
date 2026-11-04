@@ -260,6 +260,10 @@ function detachFromRoom(ws, notifyOpponent = true) {
   const room = rooms.get(roomCode);
   if (!room || room.players[playerIdx] !== ws) return;
 
+  // Partida da Liga em andamento: quem sai perde por desistência (0-4)
+  // e quem ficou vence por 4-0, recebendo os pontos do placar.
+  applyLeagueAbandonResult(room, playerIdx);
+
   room.players[playerIdx] = null;
   room.names[playerIdx] = null;
   room.userIds[playerIdx] = null;
@@ -543,6 +547,32 @@ async function applyLeagueMatchResult(room, state) {
   } catch (error) {
     console.error('[liga] erro ao aplicar o resultado da partida:', error && error.message);
   }
+}
+
+// Desistência/abandono em partida da Liga: quem ficou vence por 4-0.
+// Precisa ser chamado antes de limpar room.userIds em detachFromRoom.
+function applyLeagueAbandonResult(room, leaverIdx) {
+  if (!room || room.mode !== 'liga') return;
+  if (leaverIdx !== 0 && leaverIdx !== 1) return;
+
+  const state = room.game;
+  if (!state || !state.started || state.over) return;
+
+  const uids = Array.isArray(room.userIds) ? room.userIds : [];
+  const colors = Array.isArray(room.slotColors) ? room.slotColors : [];
+  if (!uids[0] || !uids[1] || !colors[0] || !colors[1]) return;
+
+  const winnerIdx = leaverIdx === 0 ? 1 : 0;
+
+  // Encerra a partida para não aplicar os pontos duas vezes
+  state.over = true;
+  state.winner = winnerIdx;
+
+  // Placar de desistência: 4 - 0 para quem ficou
+  state.scores[colors[winnerIdx]] = 4;
+  state.scores[colors[leaverIdx]] = 0;
+
+  applyLeagueMatchResult(room, state);
 }
 
 /**

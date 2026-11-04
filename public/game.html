@@ -158,6 +158,12 @@
       cursor: text;
     }
 
+    /* Mensagem do perfil: quando vazia não ocupa espaço, para o texto de
+       ajuda ficar logo abaixo das cores sem um vão grande até "Salvar". */
+    #profile-status:empty {
+      display: none;
+    }
+
     /* Relógio do turno (30 segundos) */
     .turn-timer {
       position: relative;
@@ -720,14 +726,14 @@
         </div>
       </div>
 
-      <!-- VISÃO SOLO ONLINE (Jogo Rápido / Liga) -->
+      <!-- VISÃO SOLO ONLINE (Partida Normal / Liga) -->
       <div id="online-solo-view" class="hidden space-y-5 sm:space-y-6 w-full">
         <div class="space-y-2 text-center">
           <label class="text-xs font-bold uppercase tracking-wider text-slate-300">SOLO ONLINE</label>
           <div class="grid grid-cols-2 gap-2">
             <button type="button" onclick="showOnlineNormalView()" class="p-3 border-2 border-transparent bg-slate-700 hover:bg-slate-600 transition flex flex-col items-center">
-              <span class="font-bold text-sm text-slate-100">JOGO RÁPIDO</span>
-              <span class="text-xs text-slate-400">Partida normal</span>
+              <span class="font-bold text-sm text-slate-100">PARTIDA NORMAL</span>
+              <span class="text-xs text-slate-400">Sem classificação</span>
             </button>
             <!-- LIGA: liberada apenas para contas Premium (updateLigaModeState ajusta o estado) -->
             <button type="button" id="liga-mode-btn" onclick="startLigaMatch()" disabled title="A Liga é exclusiva para contas Premium." class="p-3 border-2 border-transparent bg-slate-800 transition flex flex-col items-center cursor-not-allowed">
@@ -973,9 +979,9 @@
         </div>
       </div>
 
-      <!-- VISÃO DE MODOS ONLINE (Jogo Rápido / Convite) -->
+      <!-- VISÃO DE MODOS ONLINE (Partida Normal / Convite) -->
       <!-- REMOVIDA: a seleção de modos online acontece em MULTIPLAYER ->
-           SOLO (JOGO RÁPIDO / LIGA). -->
+           SOLO (PARTIDA NORMAL / LIGA). -->
     </div>
   </div>
 
@@ -1334,7 +1340,7 @@
           <div id="friend-profile-league" class="hidden flex-wrap items-center gap-2 mt-1">
             <span class="font-tier text-xs font-bold uppercase tracking-wider text-slate-300">Tier</span>
             <span id="friend-profile-tier-value" class="font-bangers text-xl leading-none">F</span>
-            <span id="friend-profile-tier-detail" class="text-xs font-bold text-slate-200">→ 0</span>
+            <span id="friend-profile-tier-detail" class="text-xs font-bold text-slate-200">0 / 100 pontos</span>
           </div>
         </div>
       </div>
@@ -1403,7 +1409,7 @@
           <div id="profile-league-tier" class="hidden flex-wrap items-center gap-2 mt-1">
             <span class="font-tier text-xs font-bold uppercase tracking-wider text-slate-300">Tier</span>
             <span id="profile-league-tier-value" class="font-bangers text-2xl leading-none">F</span>
-            <span id="profile-league-tier-detail" class="text-sm font-bold text-slate-200">→ 0</span>
+            <span id="profile-league-tier-detail" class="text-sm font-bold text-slate-200">0 / 100 pontos</span>
           </div>
         </div>
       </div>
@@ -1451,6 +1457,7 @@
             <label class="text-xs font-bold uppercase tracking-wider text-slate-300 whitespace-nowrap">Cor terciária</label>
           </div>
 
+          <p class="text-[11px] text-slate-500 mt-2">As três cores precisam ser de categorias diferentes para serem salvas.</p>
         </div>
 
         <!-- CONTA PREMIUM: pagamento único via Pix, acesso vitalício -->
@@ -1471,9 +1478,8 @@
           <button type="button" onclick="openPremiumCheckout()" id="profile-premium-buy-btn" class="w-full py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-900 font-medium transition text-sm">Assinar <span class="premium-wordmark">PREMIUM</span></button>
         </div>
 
-        <p id="profile-status" class="text-xs text-slate-400 min-h-[18px]"></p>
+        <p id="profile-status" class="text-xs text-slate-400 min-h-[12px]"></p>
         <div class="flex flex-col">
-          <p class="text-[11px] text-slate-500 text-center">As três cores precisam ser de categorias diferentes para serem salvas.</p>
           <button type="button" onclick="saveProfileColors()" id="profile-save-colors-btn" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition">Salvar</button>
           <button type="button" onclick="closeProfileModal()" class="w-full py-3 mt-3 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition">Fechar</button>
         </div>
@@ -2258,7 +2264,7 @@
       const el = document.getElementById('profile-status');
       if (!el) return;
       el.textContent = message || '';
-      el.className = `text-xs min-h-[18px] ${tone || 'text-slate-400'}`;
+      el.className = `text-xs min-h-[12px] ${tone || 'text-slate-400'}`;
     }
 
     // Carrega as cores da conta ao abrir a interface de perfil
@@ -3147,10 +3153,12 @@
        ser consultada no menu da conta ou pelo botão Histórico.
     ------------------------------------------------------------- */
     const MATCH_MODE_LABELS = {
-      quick: 'JOGO RÁPIDO',
+      quick: 'NORMAL',
       liga: 'LIGA',
       invite: 'CONVITE',
       local: 'SINGLE PLAYER',
+      dupla: 'DUPLA',
+      arena: 'ARENA',
       multiplayer: 'MULTIPLAYER'
     };
 
@@ -5831,8 +5839,8 @@
 
     /* -------------------------------------------------------------
        MODOS ONLINE (tela inicial): MULTIPLAYER -> SOLO
-       A seleção acontece em MULTIPLAYER -> SOLO, com JOGO RÁPIDO
-       (partida normal), LIGA (partida classificatória) e VOLTAR.
+       A seleção acontece em MULTIPLAYER -> SOLO, com PARTIDA NORMAL
+       (sem classificação), LIGA (partida classificatória) e VOLTAR.
     ------------------------------------------------------------- */
     function showOnlineModeSelection() {
       // Sem login com o Google o MULTIPLAYER fica desabilitado
@@ -5913,7 +5921,7 @@
         const remaining = Math.max(0, 3 - wins - losses);
         return `→ ${'✅'.repeat(wins)}${'❌'.repeat(losses)}${'➖'.repeat(remaining)}`;
       }
-      return `→ ${Number(standing && standing.points) || 0}`;
+      return `${Number(standing && standing.points) || 0} / 100 pontos`;
     }
 
     // Mostra o tier e os pontos no perfil (abaixo de "Conta Google conectada")
@@ -7296,7 +7304,7 @@
       return accountUser.id || accountUser.googleSub || accountUser.email || accountUser.playerName || null;
     }
 
-    // LIGA: mesma interface do Jogo Rápido, mas usando a fila da partida
+    // LIGA: mesma interface da Partida Normal, mas usando a fila da partida
     // classificatória (exclusiva para contas Premium)
     function startLigaMatch() {
       gameAudio.playClick();
