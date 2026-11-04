@@ -102,6 +102,8 @@ const matchmakingQueue = [];
 const RATE_LIMIT_WINDOW_MS = 10 * 1000;
 const RATE_LIMIT_MAX_MESSAGES = 60;
 const ROOM_TURN_TIMEOUT_MS = 30 * 1000;
+// Tempo máximo de turno para partidas classificatorias da Liga (mais curto)
+const LEAGUE_TURN_TIMEOUT_MS = 10 * 1000;
 // Mensagens que o cliente NÃO pode mais enviar: o dado, o movimento e a
 // passagem de turno são decididos pelo servidor.
 const FORBIDDEN_CLIENT_MESSAGES = new Set(['dice_roll', 'token_move', 'pass_turn']);
@@ -328,6 +330,9 @@ function startRoomTurnTimer(room) {
   if (!room || !room.game || room.game.over) return;
   if (!room.game.started) return;
 
+  // Partidas da Liga usam um tempo de turno mais curto (10 segundos)
+  const turnTimeout = room.mode === 'liga' ? LEAGUE_TURN_TIMEOUT_MS : ROOM_TURN_TIMEOUT_MS;
+
   room.turnTimer = setTimeout(() => {
     room.turnTimer = null;
     const state = room.game;
@@ -348,7 +353,7 @@ function startRoomTurnTimer(room) {
       scores: state.scores
     });
     startRoomTurnTimer(room);
-  }, ROOM_TURN_TIMEOUT_MS);
+  }, turnTimeout);
 }
 
 // Registro das mensagens rejeitadas (tentativas de manipulação)
