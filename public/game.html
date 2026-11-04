@@ -1304,25 +1304,9 @@
         <button type="button" id="tab-solicitacoes" onclick="selectFriendsTab('solicitacoes')" class="flex-1 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-500 hover:text-slate-300 border-b-2 border-transparent">SOLICITAÇÕES</button>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
-        <div>
-          <h3 id="friends-col1-title" class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-3">Lista de amigos (0)</h3>
-          <div id="friends-col1" class="space-y-2">
-            <p class="text-xs text-slate-500 text-center py-4">Nenhum amigo ainda.</p>
-          </div>
-        </div>
-        <div>
-          <h3 id="friends-col2-title" class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-3">Convites (0)</h3>
-          <div id="friends-col2" class="space-y-2">
-            <p class="text-xs text-slate-500 text-center py-4">Nenhum convite enviado aguardando resposta.</p>
-          </div>
-        </div>
-        <div>
-          <h3 id="friends-col3-title" class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-3">Solicitações (0)</h3>
-          <div id="friends-col3" class="space-y-2">
-            <p class="text-xs text-slate-500 text-center py-4">Nenhum convite pendente.</p>
-          </div>
-        </div>
+      <!-- Area unica de conteudo da aba selecionada (sem triplicacao) -->
+      <div id="friends-content" class="space-y-2 mt-4">
+        <p class="text-xs text-slate-500 text-center py-4">Nenhum amigo ainda.</p>
       </div>
     </div>
   </div>
@@ -3778,9 +3762,7 @@
         .then(r => r.ok ? r.json() : null)
         .catch(() => null);
       if (!data) {
-        document.getElementById('friends-col1').innerHTML = '<p class="text-xs text-red-400 text-center py-4">Não foi possível carregar.</p>';
-        document.getElementById('friends-col2').innerHTML = '<p class="text-xs text-red-400 text-center py-4">Não foi possível carregar.</p>';
-        document.getElementById('friends-col3').innerHTML = '<p class="text-xs text-red-400 text-center py-4">Não foi possível carregar.</p>';
+        document.getElementById('friends-content').innerHTML = '<p class="text-xs text-red-400 text-center py-4">Não foi possível carregar.</p>';
         return;
       }
 
@@ -3793,37 +3775,19 @@
       const sentContent = data.sent.slice().sort(compareFriends).map(sentRow).join('');
       const receivedContent = data.received.slice().sort(compareFriends).map(receivedRow).join('');
 
-      // Contadores
-      const friendsCount = data.friends.length;
-      const sentCount = data.sent.length;
-      const receivedCount = data.received.length;
-
       // Texto vazio para cada tipo
       const emptyFriends = '<p class="text-xs text-slate-500 text-center py-4">Nenhum amigo ainda.</p>';
       const emptySent = '<p class="text-xs text-slate-500 text-center py-4">Nenhuma solicitacao enviada aguardando resposta.</p>';
       const emptyReceived = '<p class="text-xs text-slate-500 text-center py-4">Nenhuma solicitacao recebida pendente.</p>';
 
-      // Funcao para montar uma coluna com titulo e conteudo
-      function mountCol(colId, titleId, titleLabel, count, content, emptyHtml) {
-        const col = document.getElementById(colId);
-        const title = document.getElementById(titleId);
-        if (title) title.textContent = `${titleLabel} (${count})`;
-        col.innerHTML = count > 0 ? content : emptyHtml;
-      }
-
-      // Preenche as tres colunas com o conteudo da aba selecionada
+      // Area unica de conteudo (sem titulos de coluna, sem triplicacao)
+      const content = document.getElementById('friends-content');
       if (friendsActiveTab === 'amigos') {
-        mountCol('friends-col1', 'friends-col1-title', 'Lista de amigos', friendsCount, friendsContent, emptyFriends);
-        mountCol('friends-col2', 'friends-col2-title', 'Lista de amigos', friendsCount, friendsContent, emptyFriends);
-        mountCol('friends-col3', 'friends-col3-title', 'Lista de amigos', friendsCount, friendsContent, emptyFriends);
+        content.innerHTML = friendsCount > 0 ? friendsContent : emptyFriends;
       } else if (friendsActiveTab === 'convites') {
-        mountCol('friends-col1', 'friends-col1-title', 'Convites', sentCount, sentContent, emptySent);
-        mountCol('friends-col2', 'friends-col2-title', 'Convites', sentCount, sentContent, emptySent);
-        mountCol('friends-col3', 'friends-col3-title', 'Convites', sentCount, sentContent, emptySent);
+        content.innerHTML = sentCount > 0 ? sentContent : emptySent;
       } else if (friendsActiveTab === 'solicitacoes') {
-        mountCol('friends-col1', 'friends-col1-title', 'Solicitacoes', receivedCount, receivedContent, emptyReceived);
-        mountCol('friends-col2', 'friends-col2-title', 'Solicitacoes', receivedCount, receivedContent, emptyReceived);
-        mountCol('friends-col3', 'friends-col3-title', 'Solicitacoes', receivedCount, receivedContent, emptyReceived);
+        content.innerHTML = receivedCount > 0 ? receivedContent : emptyReceived;
       }
     }
 
