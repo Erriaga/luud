@@ -1062,7 +1062,7 @@
         <button onclick="closePauseMenu()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold shadow transition text-sm">
           VOLTAR
         </button>
-        <button onclick="restartCurrentGame()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold shadow transition text-sm">
+        <button id="pause-restart-btn" onclick="restartCurrentGame()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold shadow transition text-sm">
           REINICIAR
         </button>
         <button onclick="resignCurrentGame()" class="w-full py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold shadow transition text-sm">
@@ -3082,6 +3082,10 @@
       }
 
       document.getElementById('pause-modal').classList.remove('hidden');
+
+      // Em partidas MULTIPLAYER (online) remove a opção REINICIAR do menu
+      const restartBtn = document.getElementById('pause-restart-btn');
+      if (restartBtn) restartBtn.classList.toggle('hidden', onlinePlaying);
     }
 
     function closePauseMenu() {
@@ -3174,7 +3178,8 @@
       if (!record) return true;
       const mode = String(record.mode || '').trim().toLowerCase();
       const opponent = String(record.opponentName || '').trim().toLowerCase();
-      return mode === 'local' || opponent === 'cpu';
+      // Bloqueia partidas contra a CPU em qualquer modo (local ou arena)
+      return mode === 'local' || opponent === 'cpu' || opponent.includes('cpu');
     }
 
     function filterMatchRecords(records) {
