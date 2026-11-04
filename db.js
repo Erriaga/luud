@@ -1148,6 +1148,26 @@ async function listMatchRecordsForUser(targetUserId) {
 }
 
 /* ------------------------------------------------------------------
+   Limpeza completa do histórico de partidas (todos os usuários)
+   Usado pelo administrador para apagar todo o histórico de uma vez.
+------------------------------------------------------------------ */
+async function clearAllMatchRecords() {
+  if (useDatabase()) {
+    try {
+      const p = getPool();
+      await p.query('DELETE FROM matches');
+      return { cleared: true };
+    } catch (error) {
+      throw recordDbError(error, "clearAllMatchRecords");
+    }
+  }
+
+  // Fallback JSON: zera o arquivo de partidas
+  await writeJsonFile(MATCHES_FILE, {});
+  return { cleared: true };
+}
+
+/* ------------------------------------------------------------------
    Classificação da Liga (tiers e pontos)
    ------------------------------------------------------------------ */
 function normalizeLeagueStanding(row) {
@@ -1655,5 +1675,6 @@ module.exports = {
   USERS_FILE,
   SESSIONS_FILE,
   MATCHES_FILE,
-  DATA_DIR
+  DATA_DIR,
+  clearAllMatchRecords
 };
