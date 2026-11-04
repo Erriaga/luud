@@ -1286,7 +1286,7 @@
   <div id="friends-modal" class="hidden fixed inset-0 z-[100] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6">
     <div class="bg-slate-800 border border-slate-600 shadow-2xl w-full max-w-2xl p-6 space-y-5 max-h-[90vh] overflow-y-auto">
       <div class="flex items-center justify-between gap-3">
-        <h2 class="font-display text-xl font-black text-slate-100">Amigos</h2>
+        <h2 class="font-display text-xl font-black text-slate-100">AMIGOS</h2>
         <button type="button" onclick="closeFriendsModal()" class="w-9 h-9 bg-slate-700 hover:bg-slate-600 text-slate-200 text-lg leading-none">✕</button>
       </div>
 
@@ -1297,22 +1297,29 @@
       <p id="friends-search-status" class="text-xs text-slate-400 min-h-[16px]"></p>
       <div id="friends-search-result" class="mt-3"></div>
 
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
+      <!-- Abas: LISTA DE AMIGOS, CONVITES, SOLICITAÇÕES -->
+      <div class="flex gap-1 mt-6 mb-2 border-b border-slate-700">
+        <button type="button" id="tab-amigos" onclick="selectFriendsTab('amigos')" class="flex-1 py-2.5 text-xs font-bold uppercase tracking-wider text-amber-400 border-b-2 border-amber-400 bg-slate-900/50">LISTA DE AMIGOS</button>
+        <button type="button" id="tab-convites" onclick="selectFriendsTab('convites')" class="flex-1 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-500 hover:text-slate-300 border-b-2 border-transparent">CONVITES</button>
+        <button type="button" id="tab-solicitacoes" onclick="selectFriendsTab('solicitacoes')" class="flex-1 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-500 hover:text-slate-300 border-b-2 border-transparent">SOLICITAÇÕES</button>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
         <div>
-          <h3 id="friends-list-title" class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-3">Lista de amigos (0)</h3>
-          <div id="friends-list" class="space-y-2">
+          <h3 id="friends-col1-title" class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-3">Lista de amigos (0)</h3>
+          <div id="friends-col1" class="space-y-2">
             <p class="text-xs text-slate-500 text-center py-4">Nenhum amigo ainda.</p>
           </div>
         </div>
         <div>
-          <h3 id="friends-sent-title" class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-3">CONVITES (0)</h3>
-          <div id="friends-sent" class="space-y-2">
+          <h3 id="friends-col2-title" class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-3">Convites (0)</h3>
+          <div id="friends-col2" class="space-y-2">
             <p class="text-xs text-slate-500 text-center py-4">Nenhum convite enviado aguardando resposta.</p>
           </div>
         </div>
         <div>
-          <h3 id="friends-received-title" class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-3">SOLICITAÇÕES (0)</h3>
-          <div id="friends-received" class="space-y-2">
+          <h3 id="friends-col3-title" class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-3">Solicitações (0)</h3>
+          <div id="friends-col3" class="space-y-2">
             <p class="text-xs text-slate-500 text-center py-4">Nenhum convite pendente.</p>
           </div>
         </div>
@@ -1393,7 +1400,7 @@
     <div class="bg-slate-800 border border-slate-600 shadow-2xl w-full max-w-lg p-6 space-y-5">
       <div class="flex items-center justify-between gap-3">
         <div class="flex items-center gap-2">
-          <h2 class="font-display text-2xl font-black text-slate-100">Perfil</h2>
+          <h2 class="font-display text-2xl font-black text-slate-100">PERFIL</h2>
           <span id="profile-premium-badge" class="plan-badge plan-badge-premium hidden flex items-center">PREMIUM</span>
           <span id="profile-free-badge" class="plan-badge plan-badge-free hidden flex items-center">FREE</span>
         </div>
@@ -3728,6 +3735,26 @@
       return nick || email.split('@')[0] || '';
     }
 
+    // Aba ativa da interface de amigos: 'amigos', 'convites' ou 'solicitacoes'
+    let friendsActiveTab = 'amigos';
+
+    // Seleciona uma aba da interface de amigos e re-renderiza as tres colunas
+    function selectFriendsTab(tab) {
+      friendsActiveTab = tab;
+      // Atualiza o estilo visual das abas
+      ['amigos', 'convites', 'solicitacoes'].forEach(t => {
+        const btn = document.getElementById(`tab-${t}`);
+        if (t === tab) {
+          btn.classList.remove('text-slate-500', 'hover:text-slate-300', 'border-transparent');
+          btn.classList.add('text-amber-400', 'border-amber-400', 'bg-slate-900/50');
+        } else {
+          btn.classList.add('text-slate-500', 'hover:text-slate-300', 'border-transparent');
+          btn.classList.remove('text-amber-400', 'border-amber-400', 'bg-slate-900/50');
+        }
+      });
+      renderFriends();
+    }
+
     function friendLabel(f) {
       return friendFullName(f) || 'Jogador';
     }
@@ -3751,9 +3778,9 @@
         .then(r => r.ok ? r.json() : null)
         .catch(() => null);
       if (!data) {
-        document.getElementById('friends-list').innerHTML = '<p class="text-xs text-red-400 text-center py-4">Não foi possível carregar a lista de amigos.</p>';
-        document.getElementById('friends-sent').innerHTML = '<p class="text-xs text-red-400 text-center py-4">Não foi possível carregar as solicitações enviadas.</p>';
-        document.getElementById('friends-received').innerHTML = '<p class="text-xs text-red-400 text-center py-4">Não foi possível carregar os convites pendentes.</p>';
+        document.getElementById('friends-col1').innerHTML = '<p class="text-xs text-red-400 text-center py-4">Não foi possível carregar.</p>';
+        document.getElementById('friends-col2').innerHTML = '<p class="text-xs text-red-400 text-center py-4">Não foi possível carregar.</p>';
+        document.getElementById('friends-col3').innerHTML = '<p class="text-xs text-red-400 text-center py-4">Não foi possível carregar.</p>';
         return;
       }
 
@@ -3761,32 +3788,42 @@
       pendingFriendRequestsCount = Array.isArray(data.received) ? data.received.length : 0;
       updateFriendsBadge();
 
-      document.getElementById('friends-list-title').textContent = `Lista de amigos (${data.friends.length})`;
-      document.getElementById('friends-sent-title').textContent = `CONVITES (${data.sent.length})`;
-      document.getElementById('friends-received-title').textContent = `SOLICITAÇÕES (${data.received.length})`;
+      // Conteudo por tipo (ordenado)
+      const friendsContent = data.friends.slice().sort(compareFriends).map(friendRow).join('');
+      const sentContent = data.sent.slice().sort(compareFriends).map(sentRow).join('');
+      const receivedContent = data.received.slice().sort(compareFriends).map(receivedRow).join('');
 
-      // Coluna 1: Lista de amigos (clicável para abrir perfil)
-      const list = document.getElementById('friends-list');
-      if (data.friends.length === 0) {
-        list.innerHTML = '<p class="text-xs text-slate-500 text-center py-4">Nenhum amigo ainda.</p>';
-      } else {
-        list.innerHTML = data.friends.slice().sort(compareFriends).map(friendRow).join('');
+      // Contadores
+      const friendsCount = data.friends.length;
+      const sentCount = data.sent.length;
+      const receivedCount = data.received.length;
+
+      // Texto vazio para cada tipo
+      const emptyFriends = '<p class="text-xs text-slate-500 text-center py-4">Nenhum amigo ainda.</p>';
+      const emptySent = '<p class="text-xs text-slate-500 text-center py-4">Nenhuma solicitacao enviada aguardando resposta.</p>';
+      const emptyReceived = '<p class="text-xs text-slate-500 text-center py-4">Nenhuma solicitacao recebida pendente.</p>';
+
+      // Funcao para montar uma coluna com titulo e conteudo
+      function mountCol(colId, titleId, titleLabel, count, content, emptyHtml) {
+        const col = document.getElementById(colId);
+        const title = document.getElementById(titleId);
+        if (title) title.textContent = `${titleLabel} (${count})`;
+        col.innerHTML = count > 0 ? content : emptyHtml;
       }
 
-      // Coluna 2: Solicitações enviadas (você enviou, aguardando resposta)
-      const sent = document.getElementById('friends-sent');
-      if (data.sent.length === 0) {
-        sent.innerHTML = '<p class="text-xs text-slate-500 text-center py-4">Nenhuma solicitação enviada aguardando resposta.</p>';
-      } else {
-        sent.innerHTML = data.sent.slice().sort(compareFriends).map(sentRow).join('');
-      }
-
-      // Coluna 3: Convites pendentes (você recebeu, aguardando sua resposta)
-      const received = document.getElementById('friends-received');
-      if (data.received.length === 0) {
-        received.innerHTML = '<p class="text-xs text-slate-500 text-center py-4">Nenhum convite pendente.</p>';
-      } else {
-        received.innerHTML = data.received.slice().sort(compareFriends).map(receivedRow).join('');
+      // Preenche as tres colunas com o conteudo da aba selecionada
+      if (friendsActiveTab === 'amigos') {
+        mountCol('friends-col1', 'friends-col1-title', 'Lista de amigos', friendsCount, friendsContent, emptyFriends);
+        mountCol('friends-col2', 'friends-col2-title', 'Lista de amigos', friendsCount, friendsContent, emptyFriends);
+        mountCol('friends-col3', 'friends-col3-title', 'Lista de amigos', friendsCount, friendsContent, emptyFriends);
+      } else if (friendsActiveTab === 'convites') {
+        mountCol('friends-col1', 'friends-col1-title', 'Convites', sentCount, sentContent, emptySent);
+        mountCol('friends-col2', 'friends-col2-title', 'Convites', sentCount, sentContent, emptySent);
+        mountCol('friends-col3', 'friends-col3-title', 'Convites', sentCount, sentContent, emptySent);
+      } else if (friendsActiveTab === 'solicitacoes') {
+        mountCol('friends-col1', 'friends-col1-title', 'Solicitacoes', receivedCount, receivedContent, emptyReceived);
+        mountCol('friends-col2', 'friends-col2-title', 'Solicitacoes', receivedCount, receivedContent, emptyReceived);
+        mountCol('friends-col3', 'friends-col3-title', 'Solicitacoes', receivedCount, receivedContent, emptyReceived);
       }
     }
 
