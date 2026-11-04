@@ -1148,8 +1148,34 @@ async function listMatchRecordsForUser(targetUserId) {
 }
 
 /* ------------------------------------------------------------------
+   Limpeza do histórico de partidas de um usuário específico
+   Usado quando o próprio usuário (Premium) quer apagar seu histórico.
+------------------------------------------------------------------ */
+async function clearMatchRecordsForUser(userId) {
+  if (!userId) return { cleared: false, error: 'userId não informado' };
+
+  if (useDatabase()) {
+    try {
+      const p = getPool();
+      await p.query('DELETE FROM matches WHERE user_id = $1', [userId]);
+      return { cleared: true };
+    } catch (error) {
+      throw recordDbError(error, "clearMatchRecordsForUser");
+    }
+  }
+
+  // Fallback JSON: remove as partidas do usuário específico
+  const matches = await readJsonFile(MATCHES_FILE);
+  if (matches[userId]) {
+    delete matches[userId];
+    await writeJsonFile(MATCHES_FILE, matches);
+  }
+  return { cleared: true };
+}
+
+/* ------------------------------------------------------------------
    Limpeza completa do histórico de partidas (todos os usuários)
-   Usado pelo administrador para apagar todo o histórico de uma vez.
+   Mantida para uso administrativo futuro, se necessário.
 ------------------------------------------------------------------ */
 async function clearAllMatchRecords() {
   if (useDatabase()) {
@@ -1676,5 +1702,6 @@ module.exports = {
   SESSIONS_FILE,
   MATCHES_FILE,
   DATA_DIR,
-  clearAllMatchRecords
+  clearAllMatchRecords,
+  clearMatchRecordsForUser
 };

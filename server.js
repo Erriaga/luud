@@ -2158,7 +2158,7 @@ async function handlePremiumAdminConfirm(request, response) {
   }
 }
 
-// Limpeza completa do histórico de partidas (somente para contas Premium)
+// Limpeza do histórico de partidas do próprio usuário (somente contas Premium)
 async function handleClearAllMatches(request, response) {
   try {
     const user = await getSessionUser(request);
@@ -2171,8 +2171,8 @@ async function handleClearAllMatches(request, response) {
       return;
     }
 
-    const result = await db.clearAllMatchRecords();
-    console.log('[admin] histórico de partidas limpo para todos os usuários');
+    const result = await db.clearMatchRecordsForUser(user.id);
+    console.log('[usuário] histórico de partidas limpo para o usuário', user.id);
     sendJson(response, 200, { ok: true, cleared: result.cleared });
   } catch (error) {
     sendJson(response, 400, { error: error.message });
