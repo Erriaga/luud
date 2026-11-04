@@ -1189,6 +1189,11 @@
         <button type="button" onclick="closeHistoryModal()" class="w-9 h-9 bg-slate-700 hover:bg-slate-600 text-slate-200 text-lg leading-none" aria-label="Fechar histórico">✕</button>
       </div>
 
+      <!-- Botão LIMPAR HISTÓRICO (somente para contas Premium) -->
+      <div id="history-clear-btn-wrap" class="px-4 mb-3 hidden">
+        <button type="button" onclick="clearAllMatchesHistory()" class="w-full py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold transition text-sm">LIMPAR HISTÓRICO</button>
+      </div>
+
       <div id="history-list" class="p-4 space-y-2">
         <p class="text-sm text-slate-400 text-center py-6">Carregando...</p>
       </div>
@@ -1247,7 +1252,7 @@
   </div>
 
   <!-- ÁREA DO TABULEIRO E CONTROLES -->
-  <main class="flex flex-col lg:flex-row items-center justify-center gap-4 lg:gap-6 w-full max-w-5xl my-auto">
+  <main class="flex flex-col lg:flex-row items-center justify-center gap-3 lg:gap-6 w-full max-w-5xl my-auto">
     
     <!-- Tabuleiro Ludo (Aumentado) -->
     <div id="ludo-board" class="ludo-board">
@@ -1551,8 +1556,6 @@
         <div class="flex flex-col">
           <button type="button" onclick="saveProfileColors()" id="profile-save-colors-btn" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition">Salvar</button>
           <button type="button" onclick="closeProfileModal()" class="w-full py-3 mt-3 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold transition">Fechar</button>
-          <!-- Botão de administrador: limpa todo o histórico de partidas -->
-          <button type="button" onclick="clearAllMatchesHistory()" class="w-full py-3 mt-2 bg-red-600 hover:bg-red-500 text-white font-bold transition text-sm">Limpar todo o histórico de partidas</button>
         </div>
       </div>
     </div>
@@ -3303,7 +3306,15 @@
 
       const modal = document.getElementById('history-modal');
       const list = document.getElementById('history-list');
+      const clearBtnWrap = document.getElementById('history-clear-btn-wrap');
       if (!modal || !list) return;
+
+      // Mostra o botão LIMPAR HISTÓRICO apenas para contas Premium
+      if (clearBtnWrap) {
+        const premium = typeof isPremiumAccount === 'function'
+          && isPremiumAccount(typeof accountUser !== 'undefined' ? accountUser : null);
+        clearBtnWrap.classList.toggle('hidden', !premium);
+      }
 
       modal.classList.remove('hidden');
       historyRecords = [];
@@ -8443,26 +8454,29 @@
         });
       }
 
-      // Administrador: limpa todo o histórico de partidas de todos os usuários
-      async function clearAllMatchesHistory() {
-        if (!confirm('Tem certeza que deseja APAGAR TODO o histórico de partidas de todas as contas? Esta ação não pode ser desfeita.')) {
-          return;
-        }
-        try {
-          const response = await fetch('/api/admin/clear-matches', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({})
-          });
-          const data = await response.json();
-          if (!response.ok) throw new Error(data.error || 'Não foi possível limpar o histórico.');
-          alert('Histórico de partidas limpo com sucesso para todos os usuários.');
-          closeProfileModal();
-        } catch (error) {
-          alert(error.message || 'Erro ao limpar o histórico.');
-        }
-      }
     };
+  </script>
+
+  // Função global para limpar todo o histórico de partidas (disponível apenas para contas Premium)
+  async function clearAllMatchesHistory() {
+    if (!confirm('Tem certeza que deseja APAGAR TODO o histórico de partidas de todas as contas? Esta ação não pode ser desfeita.')) {
+      return;
+    }
+    try {
+      const response = await fetch('/api/admin/clear-matches', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Não foi possível limpar o histórico.');
+      alert('Histórico de partidas limpo com sucesso para todos os usuários.');
+      closeHistoryModal();
+    } catch (error) {
+      alert(error.message || 'Erro ao limpar o histórico.');
+    }
+  }
+
   </script>
   <!-- A versão no link evita que o navegador use um auth.js antigo em cache -->
   <script src="/auth.js?v=20261102" defer></script>
