@@ -4,6 +4,77 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LUUD - O seu jogo de Ludo!</title>
+
+  <!-- PROTEÇÃO CONTRA INSPETOR DE ELEMENTOS / DEVTOOLS
+     Medidas dissuasórias para dificultar a inspeção e manipulação
+     do código pelo navegador. O servidor permanece como fonte da
+     verdade para o modo online (dado, turno e jogadas validadas
+     lá). No modo local, o cliente controla o jogo, então estas
+     barreiras dificultam tentativas casuais de trapaça. -->
+  <script>
+    (function () {
+      'use strict';
+
+      // Desabilita menu de contexto (clique direito)
+      document.addEventListener('contextmenu', function (event) {
+        event.preventDefault();
+        return false;
+      });
+
+      // Desabilita atalhos de teclado do DevTools e visualização de código-fonte
+      document.addEventListener('keydown', function (event) {
+        // F12
+        if (event.key === 'F12') {
+          event.preventDefault();
+          return false;
+        }
+        // Ctrl+Shift+I (DevTools), Ctrl+Shift+J (Console), Ctrl+Shift+C (Inspector), Ctrl+U (código-fonte)
+        if (event.ctrlKey && event.shiftKey && (event.key === 'I' || event.key === 'J' || event.key === 'C')) {
+          event.preventDefault();
+          return false;
+        }
+        if (event.ctrlKey && event.key === 'u') {
+          event.preventDefault();
+          return false;
+        }
+      }, true);
+
+      // Detecta abertura do DevTools via redimensionamento da janela
+      var devtools = { open: false, orientation: null };
+      var threshold = 160;
+
+      function checkDevtools() {
+        var widthThreshold = window.outerWidth - window.innerWidth > threshold;
+        var heightThreshold = window.outerHeight - window.innerHeight > threshold;
+        var orientation = widthThreshold ? 'vertical' : heightThreshold ? 'horizontal' : null;
+
+        if (orientation && !devtools.open) {
+          devtools.open = true;
+          devtools.orientation = orientation;
+          // Ao detectar DevTools, recarrega a página para invalidar qualquer
+          // manipulação feita pelo usuário no cliente
+          window.location.reload();
+        } else if (!orientation && devtools.open) {
+          devtools.open = false;
+          devtools.orientation = null;
+        }
+      }
+
+      setInterval(checkDevtools, 500);
+
+      // Desabilita arrastar e soltar imagens e links
+      document.addEventListener('dragstart', function (event) {
+        event.preventDefault();
+        return false;
+      });
+
+      // Desabilita seleção de texto (opcional, dificulta cópia de trechos de código)
+      document.addEventListener('selectstart', function (event) {
+        event.preventDefault();
+        return false;
+      });
+    })();
+  </script>
   <!-- Ícone da aba da página: o próprio logo da marca -->
   <link rel="icon" href="/assets/luud.svg" type="image/svg+xml">
   <link rel="icon" href="/assets/luud.png" type="image/png">
