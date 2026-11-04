@@ -606,7 +606,7 @@
 
       <!-- Botão de perfil: centralizado abaixo da logo LUUD e acima de "MODO DE JOGO".
            Fica neste ponto fixo da tela inicial (não se move na troca de modos). -->
-      <div id="setup-account-slot" class="flex justify-center"></div>
+      <div id="setup-account-slot" class="flex justify-center hidden"></div>
 
       <div id="setup-main-view" class="space-y-5 sm:space-y-6 w-full">
       <!-- Login Google na tela inicial -->
@@ -1107,7 +1107,7 @@
   <div id="history-modal" class="hidden fixed inset-0 z-[90] bg-slate-950/90 flex items-center justify-center p-4">
     <div class="bg-slate-900 border-2 border-slate-600 w-full max-w-xl shadow-2xl max-h-[85vh] overflow-y-auto">
       <div class="px-5 py-4 border-b-2 border-slate-700 flex items-center justify-between gap-3">
-        <h2 class="font-display text-xl sm:text-2xl font-black text-slate-100">HISTÓRICO</h2>
+        <h2 class="font-oswald text-xl sm:text-2xl font-black text-slate-100">HISTÓRICO</h2>
         <button type="button" onclick="closeHistoryModal()" class="w-9 h-9 bg-slate-700 hover:bg-slate-600 text-slate-200 text-lg leading-none" aria-label="Fechar histórico">✕</button>
       </div>
 
@@ -4886,6 +4886,7 @@
       // não contam como abandono
       if (isOnlineGame) onlineMatchEnded = true;
       clearAbandonCountdown();
+      clearPendingAbandon();
       document.getElementById('win-countdown').classList.add('hidden');
 
       stopTurnTimer();
@@ -5280,6 +5281,11 @@
           if (typeof accountUser !== 'undefined' && accountUser) {
             sendOnline({ type: 'identify', uid: accountUser.id });
           }
+
+          // Se o jogador recarregou a página durante uma partida online,
+          // exibe a tela de derrota por desistência (o servidor já aplicou
+          // a penalidade, inclusive a perda de pontos na Liga).
+          checkPendingAbandon();
         };
 
         onlineWs.onmessage = (event) => {
@@ -6442,10 +6448,61 @@
 
     window.addEventListener('beforeunload', (event) => {
       if (!isPageExitBlocked()) return undefined;
+
+      // Marca abandono pendente no sessionStorage para que, ao recarregar,
+      // a tela de derrota por desistência seja exibida (incluindo a
+      // penalização de pontos no modo LIGA, tratada pelo servidor).
+      if (isOnlineGame || onlineQueued || duplaQueued) {
+        const abandonData = {
+          mode: onlineMatchType || 'quick',
+          opponent: onlineOpponentName || 'Oponente',
+          at: Date.now()
+        };
+        try {
+          sessionStorage.setItem('luud_pending_abandon', JSON.stringify(abandonData));
+        } catch (error) { /* sessionStorage indisponível */ }
+      }
+
       event.preventDefault();
       event.returnValue = '';
       return '';
     });
+
+    /* -------------------------------------------------------------
+       ABANDONO PENDENTE (recarga de página)
+       Quando o jogador recarrega a página durante uma partida online,
+       o servidor já aplica a penalidade (perda de pontos na Liga via
+       applyLeagueAbandonResult). Aqui, ao recarregar, exibimos a tela
+       de derrota por desistência para o jogador que saiu.
+    ------------------------------------------------------------- */
+    function checkPendingAbandon() {
+      try {
+        const raw = sessionStorage.getItem('luud_pending_abandon');
+        if (!raw) return;
+        const data = JSON.parse(raw);
+        sessionStorage.removeItem('luud_pending_abandon');
+
+        // Só exibe a tela de desistência se a partida ainda não foi
+        // encerrada normalmente (o flag onlineMatchEnded controla isso).
+        if (onlineMatchEnded) return;
+
+        isOnlineGame = false;
+        onlineMatchEnded = true;
+        const matchMode = data.mode || 'quick';
+        const opponentName = data.opponent || 'Oponente';
+
+        // Quem recarregou é quem desiste: derrota por desistência
+        showResignationScreen(false, matchMode, opponentName);
+      } catch (error) {
+        // Ignora erros de leitura do sessionStorage
+      }
+    }
+
+    function clearPendingAbandon() {
+      try {
+        sessionStorage.removeItem('luud_pending_abandon');
+      } catch (error) { /* sessionStorage indisponível */ }
+    }
 
     function duplaOpenFriendList() {
       const list = document.getElementById('dupla-friends-list-view');
@@ -7426,6 +7483,9 @@
     }
 
     async function showResignationScreen(humanWon, matchMode, opponentName) {
+      // Limpa o flag de abandono pendente: a tela de desistência está
+      // sendo exibida, não há mais abandono a ser reportado ao recarregar.
+      clearPendingAbandon();
       matchMode = matchMode || 'local';
       opponentName = opponentName || 'Oponente';
       stopTurnTimer();
@@ -7914,6 +7974,8 @@
     // (também chamado pelo auth.js depois que a sessão da conta é carregada)
     function syncSetupLoginUI() {
       const loggedIn = typeof accountUser !== 'undefined' && Boolean(accountUser);
+      const slot = document.getElementById('setup-account-slot');
+      if (slot) slot.classList.toggle('hidden', !loggedIn);
 
       if (loggedIn) {
         const googleBtnSetup = document.getElementById('google-button-setup');

@@ -3586,6 +3586,19 @@ async function main() {
           return;
         }
 
+        // Bloqueia nomes indevidos (nicknames ofensivos) de qualquer jogador
+        // do lobby antes de entrar na fila de busca (arena ou partida normal).
+        for (const player of players) {
+          if (player.name && !namePolicy.isNameAllowed(player.name)) {
+            sendTo(ws, {
+              type: 'lobby_queue_error',
+              kind,
+              error: 'Um jogador do lobby utiliza um nome indevido. Altere o nickname antes de buscar partida.'
+            });
+            return;
+          }
+        }
+
         // Cada jogador do lobby entra na fila por si
         const queue = lobbyQueues[kind];
         removeLobbyQueueForUser(kind, uid);
