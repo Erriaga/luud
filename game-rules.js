@@ -289,9 +289,22 @@ function teamStandings(state) {
   return Array.from(teams.values()).sort((a, b) => a.team - b.team);
 }
 
-function checkWinner(state) {
-  for (const standing of teamStandings(state)) {
-    if (standing.score >= state.target) return standing;
+function checkWinner(state, isArena = false) {
+  const target = state.target;
+  const standings = teamStandings(state);
+
+  // Modo ARENA: partida encerra quando 3 jogadores salvam todas as peças
+  if (isArena) {
+    const finished = standings.filter(s => s.score >= target);
+    if (finished.length >= 3) {
+      // Retorna o último a terminar (não há vencedor único, a partida acabou)
+      return finished[finished.length - 1];
+    }
+    return null;
+  }
+
+  for (const standing of standings) {
+    if (standing.score >= target) return standing;
   }
   return null;
 }

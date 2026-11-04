@@ -265,7 +265,15 @@ function detachFromRoom(ws, notifyOpponent = true) {
 
   // Partida da Liga em andamento: quem sai perde por desistência (0-4)
   // e quem ficou vence por 4-0, recebendo os pontos do placar.
-  applyLeagueAbandonResult(room, playerIdx);
+  if (room.mode === 'liga') {
+    applyLeagueAbandonResult(room, playerIdx);
+  }
+
+  // Partida ARENA em andamento: quem abandona recebe a pior colocação
+  // disponível (4º, 3º, 2º ou 1º lugar na ordem de abandono).
+  if (room.mode === 'arena') {
+    applyArenaAbandonResult(room, playerIdx);
+  }
 
   room.players[playerIdx] = null;
   room.names[playerIdx] = null;
@@ -581,6 +589,48 @@ function applyLeagueAbandonResult(room, leaverIdx) {
   applyLeagueMatchResult(room, state);
 }
 
+// Desistência/abandono em partida ARENA: atribui colocações na ordem de abandono
+// 1º a abandonar = 4º lugar, 2º = 3º lugar, 3º = 2º lugar, último restante = 1º lugar
+function applyArenaAbandonResult(room, leaverIdx) {
+  if (!room || room.mode !== 'arena') return;
+
+  const state = room.game;
+  if (!state || !state.started || state.over) return;
+
+  // Inicializa a ordem de abandono da sala
+  if (!Array.isArray(room.arenaAbandonOrder)) {
+    room.arenaAbandonOrder = [];
+  }
+  // Evita processar abandono duplicado
+  if (room.arenaAbandonOrder.includes(leaverIdx)) return;
+  room.arenaAbandonOrder.push(leaverIdx);
+
+  const abandonedCount = room.arenaAbandonOrder.length;
+  const totalPlayers = room.players ? room.players.filter(p => p).length : 0;
+  const remainingPlayers = totalPlayers - abandonedCount;
+
+  // Colocação do jogador que abandona:
+  // 1º a abandonar = 4º lugar, 2º = 3º, 3º = 2º, último restante = 1º
+  let placement;
+  if (remainingPlayers === 0) {
+    // Todos abandonaram: o último é 1º lugar (padrão)
+    placement = 1;
+  } else if (remainingPlayers === 1) {
+    // Sobrou apenas 1 jogador: ele é 1º lugar, o que acabou de abandonar é 2º
+    placement = abandonedCount === totalPlayers - 1 ? 2 : 1;
+  } else {
+    placement = 5 - abandonedCount; // 1º abandona=4º, 2º=3º, 3º=2º
+  }
+
+  // Encerra a partida para o jogador que abandonou
+  state.over = true;
+  // Armazena a colocação do jogador que abandonou para o cliente ler
+  state.abandonedPlacement = placement;
+  state.winner = { team: leaverIdx, score: 0, placement };
+
+  clearRoomTurnTimer(room);
+}
+
 /**
  * Pedido de movimento. O cliente informa apenas a peça escolhida:
  * o servidor recalcula a jogada com o dado que ele mesmo sorteou.
@@ -620,7 +670,7 @@ function handleMoveRequest(ws, conn, room, data) {
     state.turn = rules.nextSlot(state, slot);
   }
 
-  const winner = rules.checkWinner(state);
+  const winner = rules.checkWinner(state, room.mode === 'arena');
   if (winner) {
     state.over = true;
     state.winner = winner;
