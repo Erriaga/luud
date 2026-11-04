@@ -2076,7 +2076,16 @@ async function handlePremiumAdminConfirm(request, response) {
 async function handlePremiumWebhook(request, response) {
   try {
     const body = await readJsonBody(request);
-    const gatewayPaymentId = (body && body.data && body.data.id) || (body && body.id) || '';
+    const requestUrl = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
+    // O Mercado Pago assina o "data.id" que vem na query string; o corpo
+    // também traz o id, mas usamos o da query como fonte principal.
+    const gatewayPaymentId = String(
+      requestUrl.searchParams.get('data.id')
+      || requestUrl.searchParams.get('id')
+      || (body && body.data && body.data.id)
+      || (body && body.id)
+      || ''
+    );
     const signature = request.headers['x-signature'];
     const requestId = request.headers['x-request-id'];
 
