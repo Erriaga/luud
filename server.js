@@ -2158,12 +2158,19 @@ async function handlePremiumAdminConfirm(request, response) {
   }
 }
 
-// Limpeza completa do histórico de partidas (somente administrador)
+// Limpeza completa do histórico de partidas (somente para contas Premium)
 async function handleClearAllMatches(request, response) {
-  const body = await requirePremiumAdmin(request, response);
-  if (!body) return;
-
   try {
+    const user = await getSessionUser(request);
+    if (!user) {
+      sendJson(response, 401, { error: 'Sessão expirada.' });
+      return;
+    }
+    if (!user.isPaid) {
+      sendJson(response, 403, { error: 'A limpeza de histórico está disponível apenas para contas Premium.' });
+      return;
+    }
+
     const result = await db.clearAllMatchRecords();
     console.log('[admin] histórico de partidas limpo para todos os usuários');
     sendJson(response, 200, { ok: true, cleared: result.cleared });
