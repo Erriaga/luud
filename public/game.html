@@ -8469,40 +8469,41 @@
     };
   </script>
 
-  // Abre o modal de confirmação para limpar o histórico
-  function openHistoryClearConfirm() {
-    closeHistoryModal();
-    document.getElementById('history-clear-confirm-modal').classList.remove('hidden');
-  }
-
-  // Confirma a limpeza do histórico e chama a API
-  async function confirmHistoryClearYes() {
-    document.getElementById('history-clear-confirm-modal').classList.add('hidden');
-    try {
-      const response = await fetch('/api/admin/clear-matches', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({})
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Não foi possível limpar o histórico.');
-      alert('Histórico de partidas limpo com sucesso.');
-    } catch (error) {
-      alert(error.message || 'Erro ao limpar o histórico.');
+  <script>
+    // Abre o modal de confirmação para limpar o histórico
+    function openHistoryClearConfirm() {
+      closeHistoryModal();
+      document.getElementById('history-clear-confirm-modal').classList.remove('hidden');
     }
-  }
 
-  // Cancela a confirmação de limpeza do histórico
-  function confirmHistoryClearNo() {
-    document.getElementById('history-clear-confirm-modal').classList.add('hidden');
-  }
+    // Confirma a limpeza do histórico e chama a API
+    async function confirmHistoryClearYes() {
+      document.getElementById('history-clear-confirm-modal').classList.add('hidden');
+      try {
+        const response = await fetch('/api/admin/clear-matches', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Não foi possível limpar o histórico.');
+        alert('Histórico de partidas limpo com sucesso.');
+      } catch (error) {
+        alert(error.message || 'Erro ao limpar o histórico.');
+      }
+    }
 
-  // Função global para limpar todo o histórico de partidas (disponível apenas para contas Premium)
-  async function clearAllMatchesHistory() {
-    openHistoryClearConfirm();
-  }
+    // Cancela a confirmação de limpeza do histórico
+    function confirmHistoryClearNo() {
+      document.getElementById('history-clear-confirm-modal').classList.add('hidden');
+    }
 
+    // Função global para limpar todo o histórico de partidas (disponível apenas para contas Premium)
+    async function clearAllMatchesHistory() {
+      openHistoryClearConfirm();
+    }
   </script>
+
   <!-- A versão no link evita que o navegador use um auth.js antigo em cache -->
   <script src="/auth.js?v=20261102" defer></script>
 </body>
