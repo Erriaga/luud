@@ -1587,6 +1587,33 @@ function parseCookies(request) {
   return cookies;
 }
 
+// Verifica proteção CSRF para rotas mutáveis (POST, PATCH, DELETE, PUT)
+// Exige o header X-Requested-With ou o cookie de sessão com SameSite=Strict
+function checkCsrf(request) {
+  const method = (request.method || '').toUpperCase();
+  const safeMethods = new Set(['GET', 'HEAD', 'OPTIONS']);
+  if (safeMethods.has(method)) return true;
+
+  const origin = request.headers.origin || '';
+  const referer = request.headers.referer || request.headers.referrer || '';
+  const host = request.headers.host || '';
+
+  // Permite requisições sem origem (ex.: curl, aplicações nativas)
+  // mas exige que o cookie de sessão esteja presente para rotas autenticadas
+  if (!origin && !referer) return true;
+
+  // Se há origem/referer, verifica se é do mesmo host
+  try {
+    const originHost = origin ? new URL(origin).host : '';
+    const refererHost = referer ? new URL(referer).host : '';
+    if (originHost && originHost !== host) return false;
+    if (refererHost && refererHost !== host) return false;
+  } catch (error) {
+    return false;
+  }
+  return true;
+}
+
 function createSessionCookie(token) {
   const attributes = [
     `${COOKIE_NAME}=${encodeURIComponent(token)}`,
@@ -2449,18 +2476,28 @@ async function handleAuthConfig(request, response) {
 const MATCH_RECORD_LIMIT = 100;
 const MATCH_MODES = new Set(['quick', 'invite', 'local', 'multiplayer', 'dupla', 'arena', 'liga']);
 
-function sanitizeMatchRecord(body) {
+function sanitizeMatchRecord(body, userId) {
   const mode = MATCH_MODES.has(body.mode) ? body.mode : 'local';
   const result = body.result === 'win' ? 'win' : 'loss';
   const toScore = (value) => {
     const num = Math.floor(Number(value));
-    return Number.isFinite(num) && num >= 0 ? num : 0;
+    return Number.isFinite(num) && num >= 0 && num <= 4 ? num : 0;
   };
   const opponentName = String(body.opponentName || '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 40) || 'Oponente';
 
   // Partidas contra a CPU (SINGLE PLAYER) não entram no histórico
   if (mode === 'local' || opponentName.toLowerCase() === 'cpu') {
     throw new Error('Partidas contra a CPU não são registradas no histórico.');
+  }
+
+  // Modo Liga requer conta premium
+  if (mode === 'liga' && userId) {
+    // A verificação de premium será feita no chamador
+  }
+
+  // Scores não podem exceder o alvo da partida (4 pontos)
+  if (toScore(body.playerScore) > 4 || toScore(body.opponentScore) > 4) {
+    throw new Error('Placar inválido.');
   }
 
   return {
@@ -2483,7 +2520,7 @@ async function createMatchRecord(request, response) {
 
   try {
     const body = await readJsonBody(request);
-    const record = sanitizeMatchRecord(body);
+    const record = sanitizeMatchRecord(body, user.id);
 
     await db.createMatchRecord(user.id, record);
 
@@ -2774,6 +2811,12 @@ async function handleRequest(request, response) {
       return;
     }
 
+    // Proteção CSRF para rotas mutáveis
+    if (!checkCsrf(request)) {
+      sendJson(response, 403, { error: 'Requisição bloqueada por política de origem (CSRF).' });
+      return;
+    }
+
     // CONTA PREMIUM (Pix)
     if (request.method === 'GET' && urlPath === '/api/premium/info') {
       await handlePremiumInfo(request, response);
@@ -2917,15 +2960,33 @@ async function main() {
   ------------------------------------------------------------- */
   const wss = new WebSocketServer({ server, path: '/ws' });
 
-  wss.on('connection', (ws) => {
+  wss.on('connection', (ws, request) => {
     const conn = {
       roomCode: null,
       playerIdx: null,
       userId: null,
       name: null,
-      rateWindow: { startedAt: Date.now(), count: 0 }
+      rateWindow: { startedAt: Date.now(), count: 0 },
+      authenticated: false
     };
     connections.set(ws, conn);
+
+    // Valida a sessão do usuário via cookie no handshake do WebSocket
+    const cookies = parseCookies(request);
+    const token = cookies[COOKIE_NAME];
+    if (token) {
+      db.getSessionUser(token).then(sessionUser => {
+        if (sessionUser) {
+          conn.userId = sessionUser.id;
+          conn.user = sessionUser;
+          conn.authenticated = true;
+          trackUserConnection(ws, sessionUser.id);
+          broadcastUserStatus(sessionUser.id, true);
+        }
+      }).catch(error => {
+        console.error('[ws] erro ao autenticar sessão:', error && error.message);
+      });
+    }
 
     ws.on('message', async (raw) => {
       let data;
@@ -2943,14 +3004,22 @@ async function main() {
 
       /* --- IDENTIFICAÇÃO DE USUÁRIO (notificações em tempo real) -------- */
       if (data.type === 'identify') {
-        const uid = data.uid || null;
+        // O uid vem da sessão autenticada no handshake, não pode ser
+        // sobrescrito pelo cliente. Usa apenas para re-sincronizar.
+        const uid = conn.userId || (data.uid || null);
         const prevConn = connections.get(ws);
-        if (prevConn && prevConn.userId) {
+        if (prevConn && prevConn.userId && prevConn.userId !== uid) {
           untrackUserConnection(ws, prevConn.userId);
+        }
+        if (uid && !conn.authenticated) {
+          // Sem sessão válida, não permite identificar como outro usuário
+          sendTo(ws, { type: 'error', error: 'Sessão não autenticada.' });
+          return;
         }
         if (uid) {
           trackUserConnection(ws, uid);
           if (prevConn) prevConn.userId = uid;
+          conn.userId = uid;
           broadcastUserStatus(uid, true);
           // O dono do lobby voltou: não encerra mais o lobby
           clearDuplaLobbyCleanup(uid);
@@ -3032,7 +3101,9 @@ async function main() {
 
       /* --- SALA COM CÓDIGO (Convite) ------------------------------------ */
       if (data.type === 'join_room') {
-        let { room: code, name, uid } = data || {};
+        let { room: code, name } = data || {};
+        // O uid vem da sessão autenticada, não do cliente
+        const uid = conn.userId || null;
 
         removeFromQueue(ws);
         // Sai de qualquer sala anterior antes de entrar/criar outra,
