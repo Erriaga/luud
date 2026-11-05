@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LUUD - O seu jogo de Ludo!</title>
 
+  <!-- PWA: Progressive Web App para instalação como aplicativo móvel -->
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="LUUD">
+  <link rel="apple-touch-icon" href="/assets/luud.png">
+
   <!-- PROTEÇÃO CONTRA INSPETOR DE ELEMENTOS / DEVTOOLS
      Medidas dissuasórias para dificultar a inspeção e manipulação
      do código pelo navegador. O servidor permanece como fonte da
@@ -148,6 +156,11 @@
     /* Rótulos da interface em Oswald (ex.: PREFERÊNCIAS) */
     .font-oswald {
       font-family: 'Oswald', 'Arial Narrow', sans-serif !important;
+    }
+
+    /* Fonte do texto do jogo: Fredoka */
+    .font-fredoka {
+      font-family: 'Fredoka', sans-serif !important;
     }
 
     .font-bangers {
@@ -1590,6 +1603,10 @@
       <p id="premium-checkout-promo-label" class="hidden text-[11px] text-amber-200 text-center -mt-2">Desconto temporário até o fim do ano</p>
 
       <ul id="premium-checkout-benefits" class="space-y-1 text-xs text-slate-300"></ul>
+
+      <p class="text-[11px] text-slate-400 text-center mt-3">
+        Ao adquirir o <span class="font-bold font-fredoka">PREMIUM</span>, você concorda com os <a href="/termos.html" target="_blank" class="text-amber-400 underline hover:text-amber-300">Termos de Uso</a>.
+      </p>
 
       <div class="flex flex-col items-center gap-3">
         <div id="premium-qr-image-wrap" class="hidden bg-white p-2">
