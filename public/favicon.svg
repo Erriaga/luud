@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 150" width="160" height="160" role="img" aria-label="LUUD">
+  <title>LUUD</title>
+  <g fill="none" stroke="#FFFFFF" stroke-width="7" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M 80 22 L 132 48 L 80 74 L 28 48 Z"/>
+    <path d="M 28 48 L 28 104 L 80 130 L 80 74 Z"/>
+    <path d="M 132 48 L 132 104 L 80 130 L 80 74 Z"/>
+  </g>
+  <circle cx="80" cy="48" r="8" fill="#E01B24"/>
+  <circle cx="46" cy="80" r="5.5" fill="#FFFFFF"/>
+  <circle cx="62" cy="100" r="5.5" fill="#FFFFFF"/>
+  <circle cx="114" cy="74" r="5.5" fill="#FFFFFF"/>
+  <circle cx="105" cy="90" r="5.5" fill="#FFFFFF"/>
+  <circle cx="96" cy="106" r="5.5" fill="#FFFFFF"/>
+</svg>
