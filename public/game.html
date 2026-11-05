@@ -6680,6 +6680,69 @@
       return false;
     }
 
+    /* -------------------------------------------------------------
+       PROTEÇÃO CONTRA RECARREGAMENTO DE PÁGINA
+       Impede que o jogador recarregue durante uma partida online,
+       evitando abandono acidental e penalizações indevidas.
+    ------------------------------------------------------------- */
+    const abandonBlocker = {
+      active: false,
+
+      // Ativa o bloqueio quando uma partida ou lobby está em andamento
+      activate() {
+        if (this.active) return;
+        this.active = true;
+        this.showWarning();
+        this.addStyles();
+      },
+
+      // Desativa o bloqueio quando a partida termina normalmente
+      deactivate() {
+        if (!this.active) return;
+        this.active = false;
+        this.hideWarning();
+      },
+
+      // Mostra um aviso visual na tela durante a partida
+      showWarning() {
+        if (document.getElementById('abandon-warning-banner')) return;
+        const banner = document.createElement('div');
+        banner.id = 'abandon-warning-banner';
+        banner.className = 'fixed top-4 left-1/2 -translate-x-1/2 z-[100] bg-red-600 text-white px-6 py-3 rounded-lg shadow-lg text-center font-bold text-sm sm:text-base';
+        banner.innerHTML = '⚠️ Não recarregue a página durante a partida';
+        document.body.appendChild(banner);
+      },
+
+      hideWarning() {
+        const banner = document.getElementById('abandon-warning-banner');
+        if (banner) banner.remove();
+      },
+
+      addStyles() {
+        const style = document.createElement('style');
+        style.id = 'abandon-warning-styles';
+        style.textContent = `
+          #abandon-warning-banner {
+            animation: pulse 2s infinite;
+          }
+          @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+          }
+        `;
+        document.head.appendChild(style);
+      }
+    };
+
+    // Modifica isPageExitBlocked para ativar/desativar o aviso visual
+    const originalIsPageExitBlocked = isPageExitBlocked;
+    isPageExitBlocked = function() {
+      const result = originalIsPageExitBlocked();
+      if (result && !abandonBlocker.active) abandonBlocker.activate();
+      if (!result && abandonBlocker.active) abandonBlocker.deactivate();
+      return result;
+    };
+
     window.addEventListener('beforeunload', (event) => {
       if (!isPageExitBlocked()) return undefined;
 
@@ -6736,6 +6799,46 @@
       try {
         sessionStorage.removeItem('luud_pending_abandon');
       } catch (error) { /* sessionStorage indisponível */ }
+    }
+
+    /* -------------------------------------------------------------
+       SERVICE WORKER - Registro para PWA e proteção contra
+       recarregamento em modo standalone (app instalado).
+    ------------------------------------------------------------- */
+    function registerServiceWorker() {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js', { scope: '/' })
+          .then((registration) => {
+            console.log('[SW] Service Worker registrado:', registration.scope);
+          })
+          .catch((error) => {
+            console.error('[SW] Falha ao registrar Service Worker:', error);
+          });
+      }
+    }
+
+    // Registra o Service Worker após o carregamento da página
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', registerServiceWorker);
+    } else {
+      registerServiceWorker();
+    }
+
+    // Detecta se o app está rodando em modo standalone (instalado)
+    function isStandalone() {
+      return window.matchMedia('(display-mode: standalone)').matches ||
+             window.navigator.standalone === true;
+    }
+
+    // Em modo standalone, adiciona um aviso adicional no cabeçalho
+    if (isStandalone()) {
+      const standaloneStyle = document.createElement('style');
+      standaloneStyle.textContent = `
+        #abandon-warning-banner {
+          top: env(safe-area-inset-top, 4px) !important;
+        }
+      `;
+      document.head.appendChild(standaloneStyle);
     }
 
     function duplaOpenFriendList() {
