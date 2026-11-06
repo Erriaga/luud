@@ -6,8 +6,8 @@
   <title>LUUD - O seu jogo de Ludo!</title>
 
   <!-- Favicon do site -->
-  <link rel="icon" href="/favicon.ico" sizes="any">
-  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/assets/favicon.ico" sizes="any">
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
 
   <!-- PWA: Progressive Web App para instalação como aplicativo móvel -->
   <link rel="manifest" href="/manifest.json">
@@ -18,7 +18,7 @@
 
   <meta name="google-site-verification" content="DfC0PJv4B9Bbs9mvq-fyx502Sg_IhqsecdJR5ftBuek" />
   
-  <link rel="apple-touch-icon" href="/favicon.svg">
+  <link rel="apple-touch-icon" href="/assets/favicon.svg">
 
   <!-- PROTEÇÃO CONTRA INSPETOR DE ELEMENTOS / DEVTOOLS
      Medidas dissuasórias para dificultar a inspeção e manipulação
@@ -567,7 +567,7 @@
     }
     #auto-play-toggle[aria-pressed="true"] #auto-play-knob {
       transform: translateX(4px);
-      background-color: var(--auto-play-active-color, #10b981);
+      background-color: var(--auto-play-knob-color, var(--auto-play-active-color, #10b981));
     }
     #auto-play-toggle:not([aria-pressed="true"]) #auto-play-knob {
       background-color: #ffffff;
@@ -4588,6 +4588,22 @@
     }
 
     /* -------------------------------------------------------------
+       UTILITÁRIO DE CONTRASTE DE COR
+       Devolve 'white' ou 'black' dependendo da luminosidade percebida
+       da cor hex informada, para garantir legibilidade do texto/ícone.
+    ------------------------------------------------------------- */
+    function getContrastColor(hex) {
+      if (!hex) return 'white';
+      const h = String(hex).replace('#', '');
+      const r = parseInt(h.slice(0, 2), 16);
+      const g = parseInt(h.slice(2, 4), 16);
+      const b = parseInt(h.slice(4, 6), 16);
+      // Fórmula de luminosidade percebida (ITU-R BT.601)
+      const luminance = (r * 299 + g * 587 + b * 114) / 1000;
+      return luminance > 128 ? 'black' : 'white';
+    }
+
+    /* -------------------------------------------------------------
        AUTOMÁTICO (Auto-play)
        Quando ativado, o computador joga no lugar do jogador humano:
        rola o dado e escolhe a peça automaticamente. Quando desativado,
@@ -4598,19 +4614,22 @@
       isAutoPlay = !isAutoPlay;
       const btn = document.getElementById('auto-play-toggle');
       const label = document.getElementById('auto-play-label');
-      const wrap = document.getElementById('auto-play-wrap'); // será criado abaixo
+      const wrap = document.getElementById('auto-play-wrap');
       if (!btn) return;
 
       // Cor do jogador humano para destacar o toggle quando ligado
       const humanKey = getHumanPlayerKey();
       const playerColor = humanKey ? getPlayerColor(humanKey) : null;
       const activeColor = playerColor ? playerColor.hex : '#10b981';
+      const contrastColor = getContrastColor(activeColor);
 
       if (isAutoPlay) {
         btn.setAttribute('aria-pressed', 'true');
         document.documentElement.style.setProperty('--auto-play-active-color', activeColor);
+        // O knob e o texto usam branco ou preto conforme a cor de fundo
+        btn.style.setProperty('--auto-play-knob-color', contrastColor);
+        label.style.color = contrastColor;
         label.textContent = 'AUTO';
-        label.style.color = activeColor;
         // Destaca o wrapper
         const wp = btn.parentElement;
         if (wp) wp.classList.add('active');
@@ -4618,6 +4637,7 @@
       } else {
         btn.setAttribute('aria-pressed', 'false');
         document.documentElement.style.removeProperty('--auto-play-active-color');
+        btn.style.removeProperty('--auto-play-knob-color');
         label.textContent = 'AUTO';
         label.style.color = '';
         // Remove destaque do wrapper

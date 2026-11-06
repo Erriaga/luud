@@ -2927,14 +2927,14 @@ async function handleRequest(request, response) {
       return;
     }
 
-    // Favicon (servido diretamente da pasta public)
+    // Favicon (servido diretamente da pasta public/assets)
     if (request.method === 'GET' && urlPath === '/favicon.ico') {
-      await serveStatic(request, response, '/favicon.ico');
+      await serveStatic(request, response, '/assets/favicon.ico');
       return;
     }
 
     if (request.method === 'GET' && urlPath === '/favicon.svg') {
-      await serveStatic(request, response, '/favicon.svg');
+      await serveStatic(request, response, '/assets/favicon.svg');
       return;
     }
 
