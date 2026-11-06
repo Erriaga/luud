@@ -4654,6 +4654,11 @@
       if (getCurrentPlayer() === humanKey && !hasRolled && !isAnimating && !isPaused) {
         scheduleAutoRoll();
       }
+      // No modo online, se o dado já foi rolado e há peças legais esperando,
+      // executa o movimento automático imediatamente
+      if (isOnlineGame && getCurrentPlayer() === humanKey && hasRolled && !isAnimating && !isPaused && onlineServerLegal.length) {
+        makeAutoOnlineMove(onlineServerLegal);
+      }
     }
 
     function disableAutoPlay() {
@@ -8324,12 +8329,12 @@
         if (onlineServerLegal.length) {
           highlightSelectableTokens(onlineServerLegal);
           // Modo automático: o computador joga no lugar do jogador humano
-          if (isAutoPlay && player === getHumanPlayerKey()) {
+          if (isAutoPlay && isLocalRoller) {
             makeAutoOnlineMove(onlineServerLegal);
           }
         } else {
           // Sem movimento possível: passa a vez automaticamente
-          if (isAutoPlay && player === getHumanPlayerKey()) {
+          if (isAutoPlay && isLocalRoller) {
             schedule(nextTurn, 1200);
           }
         }

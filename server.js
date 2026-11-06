@@ -2928,12 +2928,12 @@ async function handleRequest(request, response) {
     }
 
     // Favicon (servido diretamente da pasta public/assets)
-    if (request.method === 'GET' && urlPath === '/favicon.ico') {
+    if (request.method === 'GET' && (urlPath === '/favicon.ico' || urlPath === '/assets/favicon.ico')) {
       await serveStatic(request, response, '/assets/favicon.ico');
       return;
     }
 
-    if (request.method === 'GET' && urlPath === '/favicon.svg') {
+    if (request.method === 'GET' && (urlPath === '/favicon.svg' || urlPath === '/assets/favicon.svg')) {
       await serveStatic(request, response, '/assets/favicon.svg');
       return;
     }
