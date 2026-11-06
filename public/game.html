@@ -6,8 +6,8 @@
   <title>LUUD - O seu jogo de Ludo!</title>
 
   <!-- Favicon do site -->
-  <link rel="icon" href="/assets/favicon.ico" sizes="any">
-  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/assets/favicon.ico?v=1.0" sizes="any">
+  <link rel="icon" href="/assets/favicon.svg?v=1.0" type="image/svg+xml">
 
   <!-- PWA: Progressive Web App para instalação como aplicativo móvel -->
   <link rel="manifest" href="/manifest.json">
@@ -8323,6 +8323,15 @@
 
         if (onlineServerLegal.length) {
           highlightSelectableTokens(onlineServerLegal);
+          // Modo automático: o computador joga no lugar do jogador humano
+          if (isAutoPlay && player === getHumanPlayerKey()) {
+            makeAutoOnlineMove(onlineServerLegal);
+          }
+        } else {
+          // Sem movimento possível: passa a vez automaticamente
+          if (isAutoPlay && player === getHumanPlayerKey()) {
+            schedule(nextTurn, 1200);
+          }
         }
       });
     }
