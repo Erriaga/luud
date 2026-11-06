@@ -4,7 +4,9 @@
    acidental durante partidas online.
 ------------------------------------------------------------- */
 
-const CACHE_NAME = 'luud-v1';
+// Versão do cache: ao alterar este valor os caches antigos (com ícones,
+// logos e scripts velhos) são apagados na próxima ativação.
+const CACHE_NAME = 'luud-v2';
 const OFFLINE_URL = '/game.html';
 
 // Lista de rotas que devem ser servidas offline
@@ -46,6 +48,8 @@ self.addEventListener('activate', (event) => {
 
 // Intercepta requisições de rede
 self.addEventListener('fetch', (event) => {
+  if (event.request.method !== 'GET') return;
+
   const url = new URL(event.request.url);
 
   // Para navegações (HTML), tenta a rede primeiro, depois o cache
@@ -58,11 +62,22 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Para outros recursos, tenta o cache primeiro, depois a rede
+  // Para os demais recursos a rede vem primeiro: assim um ícone, logo ou
+  // script atualizado aparece assim que é publicado (o cache só entra como
+  // reserva quando o dispositivo está sem internet).
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      return cached || fetch(event.request);
-    })
+    fetch(event.request)
+      .then((response) => {
+        // Guarda no cache apenas o que é do próprio site
+        if (response && response.ok && url.origin === self.location.origin) {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        }
+        return response;
+      })
+      .catch(() => {
+        return caches.match(event.request).then((cached) => cached || Response.error());
+      })
   );
 });
 

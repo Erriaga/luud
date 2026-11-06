@@ -2753,21 +2753,42 @@ async function serveStatic(request, response, urlPath) {
 
     const extension = path.extname(filePath).toLowerCase();
     const contentType = MIME_TYPES[extension] || 'application/octet-stream';
-    const data = await fs.readFile(filePath);
+
+    // Os ícones da guia (favicon) nunca podem ficar "presos" no cache do
+    // navegador: são revalidados a cada carregamento para que uma nova
+    // versão do ícone apareça assim que for publicada.
+    const isFavicon = /favicon\.(ico|svg)$/i.test(filePath);
 
     // HTML, JS e CSS nunca ficam em cache longo: assim uma nova versão
     // publicada aparece imediatamente no navegador do usuário (sem precisar
     // recarregar com cache limpo). Só os demais arquivos (imagens, ícones)
     // aproveitam o cache longo.
     const cacheControl = NODE_ENV === 'production'
-      ? (extension === '.html' || extension === '.js' || extension === '.css'
-        ? 'no-store'
-        : 'public, max-age=3600')
+      ? (isFavicon
+        ? 'no-cache'
+        : (extension === '.html' || extension === '.js' || extension === '.css'
+          ? 'no-store'
+          : 'public, max-age=3600'))
       : 'no-store';
+
+    // ETag simples (tamanho + data de modificação): o navegador revalida o
+    // arquivo sem baixar o conteúdo de novo quando ele não mudou.
+    const etag = `W/"${stat.size.toString(16)}-${Math.floor(stat.mtimeMs).toString(16)}"`;
+    if (request.headers['if-none-match'] === etag) {
+      response.writeHead(304, {
+        'ETag': etag,
+        'Cache-Control': cacheControl
+      });
+      response.end();
+      return;
+    }
+
+    const data = await fs.readFile(filePath);
 
     response.writeHead(200, {
       'Content-Type': contentType,
-      'Cache-Control': cacheControl
+      'Cache-Control': cacheControl,
+      'ETag': etag
     });
     response.end(data);
   } catch (error) {

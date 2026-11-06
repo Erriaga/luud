@@ -5,9 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LUUD - O seu jogo de Ludo!</title>
 
-  <!-- Favicon do site -->
-  <link rel="icon" href="/assets/favicon.ico?v=1.0" sizes="any">
-  <link rel="icon" href="/assets/favicon.svg?v=1.0" type="image/svg+xml">
+  <!-- Favicon do site: imagem da guia da página.
+       Usa o arquivo public/assets/favicon.ico e é a ÚNICA declaração de ícone
+       da página: o navegador considera a última declaração de ícone
+       encontrada, então links extras (luud.svg/luud.png) fariam a guia
+       mostrar outro arquivo. O "?v=" invalida o cache do navegador quando o
+       ícone muda. -->
+  <link rel="icon" href="/assets/favicon.ico?v=2" type="image/x-icon" sizes="32x32">
 
   <!-- PWA: Progressive Web App para instalação como aplicativo móvel -->
   <link rel="manifest" href="/manifest.json">
@@ -97,9 +101,6 @@
       });
     })();
   </script>
-  <!-- Ícone da aba da página: o próprio logo da marca -->
-  <link rel="icon" href="/assets/luud.svg" type="image/svg+xml">
-  <link rel="icon" href="/assets/luud.png" type="image/png">
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Google Fonts: Anton (display), Oswald (interface), Fredoka (texto do jogo) e Bangers (tier da Liga) -->
@@ -1764,6 +1765,8 @@
     let isAnimating = false;
     let isAutoPlay = false; // automático: o computador joga no lugar do jogador
     let autoPlayTimer = null; // timer para rolagem automática do dado
+    let autoAttempts = 0; // tentativas automáticas sem confirmação do servidor
+    let autoMoveTimer = null; // rede de segurança da jogada automática online
     // ARENA: ordem em que os jogadores terminam (salvam todas as peças)
     let arenaFinishedOrder = []; // array de chaves de cor na ordem de conclusão
     // ARENA: ordem de abandono (para atribuição de colocações por desistência)
@@ -3133,11 +3136,18 @@
     function applyServerTurn(slot) {
       const index = serverSlotToTurnIndex(slot);
       if (index < 0) return;
+      // Só uma troca de turno real zera as tentativas automáticas: assim um
+      // pedido recusado pelo servidor não entra em laço de reenvio.
+      const turnChanged = index !== currentTurnIndex;
       currentTurnIndex = index;
       hasRolled = false;
       onlineServerLegal = [];
       clearHighlights();
       updateTurnUI();
+      if (turnChanged) autoAttempts = 0;
+      // O turno pode ter voltado para o jogador local: com o automático
+      // ligado, a próxima rolagem acontece sozinha.
+      syncAutoPlay();
     }
 
     // Time (do servidor) do jogador local: usado para saber quem venceu
@@ -3252,6 +3262,8 @@
       if (activeDiceAnimation) activeDiceAnimation.play();
       if (activeTokenAnimation) activeTokenAnimation.play();
       checkCPUTurn();
+      // Com o automático ligado, a partida continua jogando sozinha
+      syncAutoPlay();
     }
 
     function restartCurrentGame() {
@@ -4611,10 +4623,14 @@
     ------------------------------------------------------------- */
 
     function toggleAutoPlay() {
-      isAutoPlay = !isAutoPlay;
+      setAutoPlay(!isAutoPlay);
+    }
+
+    // Liga/desliga o modo automático (e mantém o toggle visual em dia)
+    function setAutoPlay(enabled) {
+      isAutoPlay = Boolean(enabled);
       const btn = document.getElementById('auto-play-toggle');
       const label = document.getElementById('auto-play-label');
-      const wrap = document.getElementById('auto-play-wrap');
       if (!btn) return;
 
       // Cor do jogador humano para destacar o toggle quando ligado
@@ -4649,22 +4665,46 @@
 
     function enableAutoPlay() {
       const humanKey = getHumanPlayerKey();
-      if (humanKey) playerTypes[humanKey] = 'AUTO';
-      // Se for a vez do jogador e nada está rolando, inicia a jogada automática
-      if (getCurrentPlayer() === humanKey && !hasRolled && !isAnimating && !isPaused) {
-        scheduleAutoRoll();
-      }
-      // No modo online, se o dado já foi rolado e há peças legais esperando,
-      // executa o movimento automático imediatamente
-      if (isOnlineGame && getCurrentPlayer() === humanKey && hasRolled && !isAnimating && !isPaused && onlineServerLegal.length) {
-        makeAutoOnlineMove(onlineServerLegal);
-      }
+      // No modo online o tipo do jogador continua sendo 'HUMAN': o automático
+      // é controlado pela flag isAutoPlay. Trocar o tipo para 'AUTO' desligaria
+      // o relógio do turno, impediria a rolagem manual e mostraria o nome
+      // "CPU" no placar do próprio jogador.
+      if (humanKey && !isOnlineGame) playerTypes[humanKey] = 'AUTO';
+      autoAttempts = 0;
+      syncAutoPlay();
     }
 
     function disableAutoPlay() {
       const humanKey = getHumanPlayerKey();
-      if (humanKey) playerTypes[humanKey] = 'HUMAN';
+      if (humanKey && !isOnlineGame) playerTypes[humanKey] = 'HUMAN';
       stopAutoPlayTimer();
+    }
+
+    /* -------------------------------------------------------------
+       Sincroniza o modo automático com o estado atual da partida.
+       É chamada sempre que o turno, o dado ou a animação mudam, para que
+       o computador continue jogando (inclusive no modo online, onde o
+       turno é definido pelo servidor) até o jogador desativar o toggle.
+    ------------------------------------------------------------- */
+    function syncAutoPlay() {
+      if (!isAutoPlay || isPaused) return;
+
+      const humanKey = getHumanPlayerKey();
+      if (!humanKey) return;
+      if (getCurrentPlayer() !== humanKey) return;
+      if (isAnimating) return;
+
+      if (hasRolled) {
+        // O dado já foi sorteado: no modo online o servidor informou as peças
+        // legais, então a jogada automática pode ser feita agora.
+        if (isOnlineGame && onlineServerLegal.length) {
+          makeAutoOnlineMove(onlineServerLegal);
+        }
+        return;
+      }
+
+      // Ainda não rolou: pede a rolagem ao servidor (online) ou rola local.
+      scheduleAutoRoll();
     }
 
     function scheduleAutoRoll() {
@@ -4673,6 +4713,12 @@
         if (!isAutoPlay || isPaused || isAnimating) return;
         const humanKey = getHumanPlayerKey();
         if (getCurrentPlayer() === humanKey && !hasRolled) {
+          // No modo online evita laços de reenvio quando o servidor recusa
+          // a rolagem (no modo local não há servidor para confirmar).
+          if (isOnlineGame) {
+            if (autoAttempts >= 5) return;
+            autoAttempts++;
+          }
           rollDice();
         }
       }, 800);
@@ -4688,10 +4734,7 @@
     // Inicia a rolagem automática quando termina o turno do outro jogador
     function onTurnChanged() {
       if (!isAutoPlay) return;
-      const humanKey = getHumanPlayerKey();
-      if (getCurrentPlayer() === humanKey && !hasRolled && !isAnimating && !isPaused) {
-        scheduleAutoRoll();
-      }
+      syncAutoPlay();
     }
 
     function initBoard() {
@@ -4958,19 +5001,86 @@
       }
     }
 
-    // Auto-play no modo online: escolhe uma das peças legais e move automaticamente.
+    // Auto-play no modo online: escolhe a melhor peça legal e move.
+    // O servidor continua sendo a fonte da verdade: o cliente só informa
+    // QUAL peça foi escolhida.
     function makeAutoOnlineMove(legalIndices) {
       if (!isAutoPlay || isPaused || isAnimating) return;
       const player = getHumanPlayerKey();
+      if (!player) return;
       if (!legalIndices || !legalIndices.length) {
-        // Sem movimento possível: passa a vez
-        schedule(nextTurn, 1200);
+        // Sem movimento possível: o servidor já passou a vez ('turn_passed'),
+        // por isso o cliente não muda o turno por conta própria.
         return;
       }
-      // Escolhe a primeira peça legal (poderia ser mais sofisticado, mas
-      // o importante é que o computador joga no lugar do jogador)
-      const tokenIdx = legalIndices[0];
+      // Evita laços de reenvio caso o servidor recuse a jogada
+      if (autoAttempts >= 5) return;
+      autoAttempts++;
+
+      const tokenIdx = chooseBestTokenIndex(player, legalIndices, diceValue);
       moveToken(player, tokenIdx, diceValue);
+      startAutoMoveSafetyTimer();
+    }
+
+    // Rede de segurança: se o servidor não confirmar a jogada automática,
+    // libera o tabuleiro para o jogador decidir de novo.
+    function startAutoMoveSafetyTimer() {
+      stopAutoMoveSafetyTimer();
+      autoMoveTimer = setTimeout(() => {
+        autoMoveTimer = null;
+        if (!isOnlineGame || !isAnimating) return;
+        isAnimating = false;
+        hasRolled = false;
+        refreshTurnInstruction();
+      }, 10000);
+    }
+
+    function stopAutoMoveSafetyTimer() {
+      if (autoMoveTimer) {
+        clearTimeout(autoMoveTimer);
+        autoMoveTimer = null;
+      }
+    }
+
+    // Pontua uma peça como destino de jogada. Usado pela CPU local e pelo
+    // modo automático (online e offline) para escolher a melhor jogada.
+    function scoreTokenMove(player, tokenIdx, roll) {
+      const currentPos = tokensState[player][tokenIdx];
+
+      if (currentPos === -1) return 50; // sai da casa inicial (precisa de 6)
+
+      const nextPos = currentPos + roll;
+      let score = 0;
+
+      if (nextPos < FIRST_HOME_POSITION) {
+        const targetMainIdx = getMainPathIndex(player, nextPos);
+        activePlayers.forEach(other => {
+          if (other === player || areSameTeam(player, other)) return;
+          tokensState[other].forEach(oPos => {
+            if (oPos >= 0 && oPos < FIRST_HOME_POSITION && getMainPathIndex(other, oPos) === targetMainIdx) {
+              score += 100; // captura peça adversária
+            }
+          });
+        });
+      }
+
+      return score + nextPos;
+    }
+
+    // Escolhe a peça com maior pontuação entre as opções válidas
+    function chooseBestTokenIndex(player, validIndices, roll) {
+      let chosenTokenIndex = validIndices[0];
+      let maxScore = -999;
+
+      validIndices.forEach(idx => {
+        const score = scoreTokenMove(player, idx, roll);
+        if (score > maxScore) {
+          maxScore = score;
+          chosenTokenIndex = idx;
+        }
+      });
+
+      return chosenTokenIndex;
     }
 
     function getValidTokenIndices(player, roll) {
@@ -5377,7 +5487,7 @@
       movementSession++;
 
       // Reseta o modo automático ao iniciar uma nova partida
-      disableAutoPlay();
+      setAutoPlay(false);
 
       // Partidas locais: quem tem conta Google joga com a cor primária
       // do perfil (a seleção da tela inicial fica oculta para logados).
@@ -5516,38 +5626,7 @@
 
     function makeCPUMove(validIndices) {
       const player = getCurrentPlayer();
-      let chosenTokenIndex = validIndices[0];
-      let maxScore = -999;
-
-      validIndices.forEach(idx => {
-        let score = 0;
-        const currentPos = tokensState[player][idx];
-
-        if (currentPos === -1) {
-          score += 50;
-        } else {
-          const nextPos = currentPos + diceValue;
-          if (nextPos < FIRST_HOME_POSITION) {
-            const targetMainIdx = getMainPathIndex(player, nextPos);
-            activePlayers.forEach(other => {
-              if (other !== player && !areSameTeam(player, other)) {
-                tokensState[other].forEach(oPos => {
-                  if (oPos >= 0 && oPos < FIRST_HOME_POSITION && getMainPathIndex(other, oPos) === targetMainIdx) {
-                    score += 100;
-                  }
-                });
-              }
-            });
-          }
-          score += nextPos;
-        }
-
-        if (score > maxScore) {
-          maxScore = score;
-          chosenTokenIndex = idx;
-        }
-      });
-
+      const chosenTokenIndex = chooseBestTokenIndex(player, validIndices, diceValue);
       moveToken(player, chosenTokenIndex, diceValue);
     }
 
@@ -8310,6 +8389,9 @@
         if (!stillTurn) {
           hasRolled = false;
           refreshTurnInstruction();
+          // O servidor já passou a vez: se o turno voltou para o jogador
+          // local, o automático continua jogando.
+          syncAutoPlay();
           return;
         }
 
@@ -8324,25 +8406,28 @@
         }
 
         hasRolled = true;
+        autoAttempts = 0;
         document.getElementById('dice-instruction').textContent = `${playerName} tirou ${value}`;
 
         if (onlineServerLegal.length) {
           highlightSelectableTokens(onlineServerLegal);
           // Modo automático: o computador joga no lugar do jogador humano
-          if (isAutoPlay && isLocalRoller) {
+          if (isAutoPlay) {
             makeAutoOnlineMove(onlineServerLegal);
           }
-        } else {
-          // Sem movimento possível: passa a vez automaticamente
-          if (isAutoPlay && isLocalRoller) {
-            schedule(nextTurn, 1200);
-          }
         }
+        // Sem movimento possível: o servidor já passou a vez e avisa via
+        // 'turn_passed', então o cliente não muda o turno por conta própria.
       });
     }
 
     function handleServerTokenMove(data) {
       if (!isOnlineGame) return;
+
+      // O servidor confirmou a jogada: a rede de segurança do automático
+      // não precisa mais agir.
+      stopAutoMoveSafetyTimer();
+      autoAttempts = 0;
 
       const player = data.color;
       const tokenIdx = Number(data.tokenIdx);
@@ -8439,6 +8524,7 @@
       // O pedido de rolagem não está mais em curso: o servidor já decidiu
       // a vez deste jogador.
       onlineRollPending = false;
+      stopAutoMoveSafetyTimer();
 
       // O servidor passou a vez: nenhuma rolagem fica pendente no cliente.
       // Se não houver animação em andamento, libera o bloqueio para o
@@ -8479,6 +8565,7 @@
       // O pedido não foi atendido: libera o estado para o jogador decidir de novo.
       onlineRollPending = false;
       isAnimating = false;
+      stopAutoMoveSafetyTimer();
 
       // O servidor devolve o turno autoritativo: o cliente se realinha
       const serverTurn = Number.isInteger(Number(data.turn)) ? Number(data.turn) : null;
@@ -8491,11 +8578,18 @@
         if (getCurrentPlayer() === getHumanPlayerKey() && legal.length) {
           onlineServerLegal = legal;
           highlightSelectableTokens(legal);
+          // Modo automático: tenta novamente com uma peça válida
+          if (isAutoPlay) {
+            makeAutoOnlineMove(legal);
+          }
         }
       } else {
         if (serverTurn !== null) applyServerTurn(serverTurn);
         hasRolled = false;
         refreshTurnInstruction();
+        // O pedido de rolagem foi recusado: com o automático ligado, a
+        // rolagem é refeita sozinha.
+        syncAutoPlay();
       }
 
       logStatus(`Ação recusada pelo servidor: ${reason}`);
