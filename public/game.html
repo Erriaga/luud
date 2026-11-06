@@ -558,6 +558,21 @@
       -webkit-tap-highlight-color: transparent;
     }
 
+    /* Toggle switch do Jogo Automático (ao lado do dado) */
+    #auto-play-toggle {
+      transition: background-color 0.2s ease;
+    }
+    #auto-play-toggle[aria-pressed="true"] {
+      background-color: #10b981 !important; /* emerald-500 */
+    }
+    #auto-play-toggle[aria-pressed="true"] #auto-play-knob {
+      transform: translateX(4px);
+      background-color: #10b981;
+    }
+    #auto-play-toggle:not([aria-pressed="true"]) #auto-play-knob {
+      background-color: #ffffff;
+    }
+
     /* No celular o relógio fica ao lado esquerdo do dado; no desktop ele
        volta para cima do placar. O espaço do encaixe some quando vazio. */
     #timer-dock:empty {
@@ -1344,14 +1359,22 @@
 
           <div class="flex items-center justify-center gap-4 w-full">
             <div id="timer-dock" class="flex items-center justify-center"></div>
-            <div class="dice-container" onclick="handleDiceClick()">
-              <div id="dice" class="dice">
-              <div class="dice-face face-1"><div></div><div></div><div></div><div></div><div class="dot"></div><div></div><div></div><div></div><div></div></div>
-              <div class="dice-face face-2"><div class="dot"></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div class="dot"></div></div>
-              <div class="dice-face face-3"><div class="dot"></div><div></div><div></div><div></div><div class="dot"></div><div></div><div></div><div></div><div class="dot"></div></div>
-              <div class="dice-face face-4"><div class="dot"></div><div></div><div class="dot"></div><div></div><div></div><div></div><div class="dot"></div><div></div><div class="dot"></div></div>
-              <div class="dice-face face-5"><div class="dot"></div><div></div><div class="dot"></div><div></div><div class="dot"></div><div></div><div class="dot"></div><div></div><div class="dot"></div></div>
-              <div class="dice-face face-6"><div class="dot"></div><div class="dot"></div><div class="dot"></div><div></div><div></div><div></div><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+            <div class="flex items-center gap-3">
+              <div class="dice-container" onclick="handleDiceClick()">
+                <div id="dice" class="dice">
+                <div class="dice-face face-1"><div></div><div></div><div></div><div></div><div class="dot"></div><div></div><div></div><div></div><div class="dot"></div></div>
+                <div class="dice-face face-2"><div class="dot"></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div class="dot"></div></div>
+                <div class="dice-face face-3"><div class="dot"></div><div></div><div></div><div></div><div class="dot"></div><div></div><div></div><div></div><div class="dot"></div></div>
+                <div class="dice-face face-4"><div class="dot"></div><div></div><div class="dot"></div><div></div><div></div><div></div><div class="dot"></div><div></div><div class="dot"></div></div>
+                <div class="dice-face face-5"><div class="dot"></div><div></div><div class="dot"></div><div></div><div class="dot"></div><div></div><div class="dot"></div><div></div><div class="dot"></div></div>
+                <div class="dice-face face-6"><div class="dot"></div><div class="dot"></div><div class="dot"></div><div></div><div></div><div></div><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+                </div>
+              </div>
+              <div class="auto-play-wrap flex items-center gap-2 ml-2">
+                <button type="button" id="auto-play-toggle" onclick="toggleAutoPlay()" class="w-10 h-6 rounded-full bg-slate-600 transition-colors duration-200 focus:outline-none relative" aria-pressed="false" aria-label="Jogo automático">
+                  <span id="auto-play-knob" class="block w-5 h-5 rounded-full bg-white shadow transform translate-x-0 transition-transform duration-200"></span>
+                </button>
+                <span id="auto-play-label" class="text-[10px] font-bold text-slate-400 whitespace-nowrap">Auto: DESLIGADO</span>
               </div>
             </div>
           </div>
@@ -1730,6 +1753,8 @@
     let lastMoveScored = false; // jogador salvou uma peça na jogada atual
     let lastMoveCaptured = false; // jogador capturou uma peça adversária na jogada atual
     let isAnimating = false;
+    let isAutoPlay = false; // automático: o computador joga no lugar do jogador
+    let autoPlayTimer = null; // timer para rolagem automática do dado
     // ARENA: ordem em que os jogadores terminam (salvam todas as peças)
     let arenaFinishedOrder = []; // array de chaves de cor na ordem de conclusão
     // ARENA: ordem de abandono (para atribuição de colocações por desistência)
@@ -3122,7 +3147,7 @@
     }
 
     function isAutomatedPlayer(player) {
-      return playerTypes[player] === 'CPU' || playerTypes[player] === 'ALLY';
+      return playerTypes[player] === 'CPU' || playerTypes[player] === 'ALLY' || playerTypes[player] === 'AUTO';
     }
 
     function areSameTeam(playerA, playerB) {
@@ -4553,6 +4578,76 @@
       }
     }
 
+    /* -------------------------------------------------------------
+       AUTOMÁTICO (Auto-play)
+       Quando ativado, o computador joga no lugar do jogador humano:
+       rola o dado e escolhe a peça automaticamente. Quando desativado,
+       o jogador retoma o controle normalmente.
+    ------------------------------------------------------------- */
+
+    function toggleAutoPlay() {
+      isAutoPlay = !isAutoPlay;
+      const btn = document.getElementById('auto-play-toggle');
+      const label = document.getElementById('auto-play-label');
+      if (!btn) return;
+
+      if (isAutoPlay) {
+        btn.classList.add('bg-emerald-500', 'text-white');
+        btn.classList.remove('bg-slate-600', 'text-slate-400');
+        btn.setAttribute('aria-pressed', 'true');
+        label.textContent = 'Auto: LIGADO';
+        enableAutoPlay();
+      } else {
+        btn.classList.remove('bg-emerald-500', 'text-white');
+        btn.classList.add('bg-slate-600', 'text-slate-400');
+        btn.setAttribute('aria-pressed', 'false');
+        label.textContent = 'Auto: DESLIGADO';
+        disableAutoPlay();
+      }
+    }
+
+    function enableAutoPlay() {
+      const humanKey = getHumanPlayerKey();
+      if (humanKey) playerTypes[humanKey] = 'AUTO';
+      // Se for a vez do jogador e nada está rolando, inicia a jogada automática
+      if (getCurrentPlayer() === humanKey && !hasRolled && !isAnimating && !isPaused) {
+        scheduleAutoRoll();
+      }
+    }
+
+    function disableAutoPlay() {
+      const humanKey = getHumanPlayerKey();
+      if (humanKey) playerTypes[humanKey] = 'HUMAN';
+      stopAutoPlayTimer();
+    }
+
+    function scheduleAutoRoll() {
+      stopAutoPlayTimer();
+      autoPlayTimer = setTimeout(() => {
+        if (!isAutoPlay || isPaused || isAnimating) return;
+        const humanKey = getHumanPlayerKey();
+        if (getCurrentPlayer() === humanKey && !hasRolled) {
+          rollDice();
+        }
+      }, 800);
+    }
+
+    function stopAutoPlayTimer() {
+      if (autoPlayTimer) {
+        clearTimeout(autoPlayTimer);
+        autoPlayTimer = null;
+      }
+    }
+
+    // Inicia a rolagem automática quando termina o turno do outro jogador
+    function onTurnChanged() {
+      if (!isAutoPlay) return;
+      const humanKey = getHumanPlayerKey();
+      if (getCurrentPlayer() === humanKey && !hasRolled && !isAnimating && !isPaused) {
+        scheduleAutoRoll();
+      }
+    }
+
     function initBoard() {
       const board = document.getElementById('ludo-board');
       board.innerHTML = '';
@@ -4793,11 +4888,17 @@
     }
 
     function evaluateMoves() {
+      const player = getCurrentPlayer();
+
       // No modo online quem decide as jogadas é o servidor (a lista de
       // peças legais vem em 'dice_rolled').
-      if (isOnlineGame) return;
+      if (isOnlineGame) {
+        if (isAutoPlay && player === getHumanPlayerKey() && onlineServerLegal.length) {
+          schedule(() => makeAutoOnlineMove(onlineServerLegal), 800);
+        }
+        return;
+      }
 
-      const player = getCurrentPlayer();
       const validTokens = getValidTokenIndices(player, diceValue);
 
       if (validTokens.length === 0) {
@@ -4809,6 +4910,21 @@
       } else {
         highlightSelectableTokens(validTokens);
       }
+    }
+
+    // Auto-play no modo online: escolhe uma das peças legais e move automaticamente.
+    function makeAutoOnlineMove(legalIndices) {
+      if (!isAutoPlay || isPaused || isAnimating) return;
+      const player = getHumanPlayerKey();
+      if (!legalIndices || !legalIndices.length) {
+        // Sem movimento possível: passa a vez
+        schedule(nextTurn, 1200);
+        return;
+      }
+      // Escolhe a primeira peça legal (poderia ser mais sofisticado, mas
+      // o importante é que o computador joga no lugar do jogador)
+      const tokenIdx = legalIndices[0];
+      moveToken(player, tokenIdx, diceValue);
     }
 
     function getValidTokenIndices(player, roll) {
@@ -5199,6 +5315,7 @@
       currentTurnIndex = (currentTurnIndex + 1) % activePlayers.length;
       updateTurnUI();
       checkCPUTurn();
+      onTurnChanged();
     }
 
     function startGame() {
@@ -5212,6 +5329,9 @@
       updatePlayerName(startName);
       onlineMatchEnded = false;
       movementSession++;
+
+      // Reseta o modo automático ao iniciar uma nova partida
+      disableAutoPlay();
 
       // Partidas locais: quem tem conta Google joga com a cor primária
       // do perfil (a seleção da tela inicial fica oculta para logados).
