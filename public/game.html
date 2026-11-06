@@ -563,14 +563,23 @@
       transition: background-color 0.2s ease;
     }
     #auto-play-toggle[aria-pressed="true"] {
-      background-color: #10b981 !important; /* emerald-500 */
+      background-color: var(--auto-play-active-color, #10b981) !important;
     }
     #auto-play-toggle[aria-pressed="true"] #auto-play-knob {
       transform: translateX(4px);
-      background-color: #10b981;
+      background-color: var(--auto-play-active-color, #10b981);
     }
     #auto-play-toggle:not([aria-pressed="true"]) #auto-play-knob {
       background-color: #ffffff;
+    }
+
+    /* Texto "AUTO" abaixo do toggle */
+    #auto-play-label {
+      transition: color 0.2s ease;
+    }
+    #auto-play-toggle[aria-pressed="true"] ~ #auto-play-label,
+    #auto-play-wrap.active #auto-play-label {
+      color: var(--auto-play-active-color, #10b981) !important;
     }
 
     /* No celular o relógio fica ao lado esquerdo do dado; no desktop ele
@@ -1370,11 +1379,11 @@
                 <div class="dice-face face-6"><div class="dot"></div><div class="dot"></div><div class="dot"></div><div></div><div></div><div></div><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
                 </div>
               </div>
-              <div class="auto-play-wrap flex items-center gap-2 ml-2">
+              <div id="auto-play-wrap" class="auto-play-wrap flex flex-col items-center gap-1 ml-2">
                 <button type="button" id="auto-play-toggle" onclick="toggleAutoPlay()" class="w-10 h-6 rounded-full bg-slate-600 transition-colors duration-200 focus:outline-none relative" aria-pressed="false" aria-label="Jogo automático">
                   <span id="auto-play-knob" class="block w-5 h-5 rounded-full bg-white shadow transform translate-x-0 transition-transform duration-200"></span>
                 </button>
-                <span id="auto-play-label" class="text-[10px] font-bold text-slate-400 whitespace-nowrap">Auto: DESLIGADO</span>
+                <span id="auto-play-label" class="text-[10px] font-bold text-slate-400 whitespace-nowrap">AUTO</span>
               </div>
             </div>
           </div>
@@ -4589,19 +4598,31 @@
       isAutoPlay = !isAutoPlay;
       const btn = document.getElementById('auto-play-toggle');
       const label = document.getElementById('auto-play-label');
+      const wrap = document.getElementById('auto-play-wrap'); // será criado abaixo
       if (!btn) return;
 
+      // Cor do jogador humano para destacar o toggle quando ligado
+      const humanKey = getHumanPlayerKey();
+      const playerColor = humanKey ? getPlayerColor(humanKey) : null;
+      const activeColor = playerColor ? playerColor.hex : '#10b981';
+
       if (isAutoPlay) {
-        btn.classList.add('bg-emerald-500', 'text-white');
-        btn.classList.remove('bg-slate-600', 'text-slate-400');
         btn.setAttribute('aria-pressed', 'true');
-        label.textContent = 'Auto: LIGADO';
+        document.documentElement.style.setProperty('--auto-play-active-color', activeColor);
+        label.textContent = 'AUTO';
+        label.style.color = activeColor;
+        // Destaca o wrapper
+        const wp = btn.parentElement;
+        if (wp) wp.classList.add('active');
         enableAutoPlay();
       } else {
-        btn.classList.remove('bg-emerald-500', 'text-white');
-        btn.classList.add('bg-slate-600', 'text-slate-400');
         btn.setAttribute('aria-pressed', 'false');
-        label.textContent = 'Auto: DESLIGADO';
+        document.documentElement.style.removeProperty('--auto-play-active-color');
+        label.textContent = 'AUTO';
+        label.style.color = '';
+        // Remove destaque do wrapper
+        const wp = btn.parentElement;
+        if (wp) wp.classList.remove('active');
         disableAutoPlay();
       }
     }
