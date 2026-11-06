@@ -2927,6 +2927,17 @@ async function handleRequest(request, response) {
       return;
     }
 
+    // Favicon (servido diretamente da pasta public)
+    if (request.method === 'GET' && urlPath === '/favicon.ico') {
+      await serveStatic(request, response, '/favicon.ico');
+      return;
+    }
+
+    if (request.method === 'GET' && urlPath === '/favicon.svg') {
+      await serveStatic(request, response, '/favicon.svg');
+      return;
+    }
+
     // Página de login descontinuada: redireciona para a página inicial
     if (request.method === 'GET' && urlPath === '/login') {
       response.writeHead(302, { Location: '/' });
