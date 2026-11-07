@@ -1,5 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 150" width="160" height="160" role="img" aria-label="LUUD">
   <title>LUUD</title>
+  <!-- Fundo transparente (sem rect de fundo) -->
   <g fill="none" stroke="#FFFFFF" stroke-width="7" stroke-linejoin="round" stroke-linecap="round">
     <path d="M 80 22 L 132 48 L 80 74 L 28 48 Z"/>
     <path d="M 28 48 L 28 104 L 80 130 L 80 74 Z"/>

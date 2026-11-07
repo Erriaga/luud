@@ -23,6 +23,34 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 const COOKIE_NAME = 'luud_session';
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7;
 
+// CSRF tokens por sessão (em memória)
+const csrfTokens = new Map();
+
+// Rate limiting HTTP por IP
+const httpRateLimits = new Map();
+const HTTP_RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minuto
+const HTTP_RATE_LIMIT_MAX_REQUESTS = 120; // 120 req/min por IP
+
+// Limpeza periódica de mapas antigos (evita memory leak)
+setInterval(() => {
+  const now = Date.now();
+  // CSRF tokens antigos (> 1 hora)
+  for (const [token, { createdAt }] of csrfTokens) {
+    if (now - createdAt > 60 * 60 * 1000) csrfTokens.delete(token);
+  }
+  // Rate limits HTTP antigos (> 5 minutos)
+  for (const [ip, { windowStart }] of httpRateLimits) {
+    if (now - windowStart > 5 * 60 * 1000) httpRateLimits.delete(ip);
+  }
+  // absentPlayers órfãos (timers já dispararam mas mapa não limpo)
+  for (const [roomCode, data] of absentPlayers) {
+    if (data.timer && data.timer._idleTimeout === -1) {
+      // Timer já executou, limpar entrada órfã
+      absentPlayers.delete(roomCode);
+    }
+  }
+}, 5 * 60 * 1000); // A cada 5 minutos
+
 /* -------------------------------------------------------------
    CONTA PREMIUM (pagamento único via Pix, acesso vitalício)
 ------------------------------------------------------------- */
@@ -212,7 +240,16 @@ function untrackUserConnection(ws, userId) {
   const set = userConnections.get(userId);
   if (set) {
     set.delete(ws);
-    if (set.size === 0) userConnections.delete(userId);
+    if (set.size === 0) {
+      userConnections.delete(userId);
+      // Não remove userRoom se o usuário está em uma partida que pode ser retomada via take-over
+      const estaEmPartidaParaTakeover = Array.from(absentPlayers.values()).some(
+        entry => entry.userId === userId
+      );
+      if (!estaEmPartidaParaTakeover) {
+        userRoom.delete(userId);
+      }
+    }
   }
 }
 
@@ -236,6 +273,7 @@ function sendToUser(userId, message) {
 
 /**
  * Envia para todos os clientes conectados uma mudança de status online/offline.
+ * Otimizado: usa apenas conexões autenticadas.
  */
 function broadcastUserStatus(userId, online) {
   const payload = JSON.stringify({
@@ -243,45 +281,130 @@ function broadcastUserStatus(userId, online) {
     userId
   });
   for (const [ws, conn] of connections) {
-    if (ws.readyState === 1) {
+    if (conn.authenticated && ws.readyState === 1) {
       ws.send(payload);
     }
   }
 }
 
 // Retira a conexão da sala atual, avisando quem ficou nela e
-// removendo a sala quando fica vazia
+// removendo a sala quando fica vazia.
+// Para usuários autenticados, o slot não é limpo imediatamente: o jogador
+// é marcado como ausente para permitir take-over em outro dispositivo
+// (ex.: começa no desktop, continua no celular). Se não retornar dentro
+// do TAKEOVER_WINDOW_MS, o abandono é aplicado.
 function detachFromRoom(ws, notifyOpponent = true) {
   const conn = connections.get(ws);
   if (!conn || !conn.roomCode) return;
 
   const roomCode = conn.roomCode;
   const playerIdx = conn.playerIdx;
+  const userId = conn.userId;
   conn.roomCode = null;
   conn.playerIdx = null;
 
   const room = rooms.get(roomCode);
   if (!room || room.players[playerIdx] !== ws) return;
 
-  // Partida da Liga em andamento: quem sai perde por desistência (0-4)
-  // e quem ficou vence por 4-0, recebendo os pontos do placar.
-  if (room.mode === 'liga') {
-    applyLeagueAbandonResult(room, playerIdx);
+  // Para usuários autenticados, não limpa o slot imediatamente:
+  // marca o jogador como ausente para permitir take-over.
+  if (userId) {
+    // Cancela timer de abandono anterior para este slot (se houver)
+    const existing = absentPlayers.get(roomCode);
+    if (existing && existing.playerIdx === playerIdx) {
+      clearTimeout(existing.timer);
+    }
+
+    // Mantém o userId no slot para que o take-over possa reanexar o jogador
+    room.players[playerIdx] = null;
+    room.names[playerIdx] = null;
+    room.ready[playerIdx] = false;
+    // room.userIds[playerIdx] continua = userId (slot reservado)
+
+    // Aplica abandono imediato para modos que não suportam take-over
+    if (room.mode === 'solo') {
+      // Partida contra a CPU: não há take-over, encerra normalmente
+      room.userIds[playerIdx] = null;
+      userRoom.delete(userId);
+      if (notifyOpponent) {
+        room.players.forEach(other => {
+          if (other && other !== ws && other.readyState === 1) {
+            sendTo(other, { type: 'opponent_disconnected' });
+          }
+        });
+      }
+      if (!room.players.some(player => player)) {
+        clearRoomTurnTimer(room);
+        rooms.delete(roomCode);
+      }
+      return;
+    }
+
+    if (room.mode === 'liga') {
+      applyLeagueAbandonResult(room, playerIdx);
+    }
+    if (room.mode === 'arena') {
+      applyArenaAbandonResult(room, playerIdx);
+    }
+
+    // Registra o jogador como ausente para take-over (espera até TAKEOVER_WINDOW_MS)
+    const abandonAt = Date.now() + TAKEOVER_WINDOW_MS;
+    const timer = setTimeout(() => {
+      absentPlayers.delete(roomCode);
+      userRoom.delete(userId);
+      // Aplica o abandono definitivo após o tempo de espera
+      if (room.mode === 'liga' && !room.game.over) {
+        applyLeagueAbandonResult(room, playerIdx);
+      }
+      if (room.mode === 'arena' && !room.game.over) {
+        applyArenaAbandonResult(room, playerIdx);
+      }
+      room.userIds[playerIdx] = null;
+      room.players.forEach(other => {
+        if (other && other.readyState === 1) {
+          sendTo(other, { type: 'opponent_left', playerIdx, reason: 'abandon' });
+        }
+      });
+      if (!room.players.some(player => player)) {
+        clearRoomTurnTimer(room);
+        rooms.delete(roomCode);
+      }
+    }, TAKEOVER_WINDOW_MS);
+
+    absentPlayers.set(roomCode, { playerIdx, userId, abandonAt, timer });
+
+    if (notifyOpponent) {
+      room.players.forEach(other => {
+        if (other && other !== ws && other.readyState === 1) {
+          sendTo(other, {
+            type: 'opponent_offline',
+            playerIdx,
+            userId,
+            canTakeover: true,
+            room: roomCode,
+            mode: room.mode
+          });
+        }
+      });
+    }
+
+    // Reinicia o timer de turno se a partida já começou e ainda está ativa
+    if (room.game && room.game.started && !room.game.over) {
+      startRoomTurnTimer(room);
+    }
+
+    // Não remove o rastreamento de userRoom: o usuário ainda tem uma sala
+    // em andamento que pode ser retomada em outro dispositivo.
+    return;
   }
 
-  // Partida ARENA em andamento: quem abandona recebe a pior colocação
-  // disponível (4º, 3º, 2º ou 1º lugar na ordem de abandono).
-  if (room.mode === 'arena') {
-    applyArenaAbandonResult(room, playerIdx);
-  }
-
+  // Usuário não autenticado: comportamento original (limpa o slot)
   room.players[playerIdx] = null;
   room.names[playerIdx] = null;
   room.userIds[playerIdx] = null;
   room.ready[playerIdx] = false;
 
   if (notifyOpponent) {
-    // avisa todos os outros jogadores que ficaram na sala (1 vs 1 ou 2 vs 2)
     room.players.forEach(other => {
       if (other && other !== ws && other.readyState === 1) {
         sendTo(other, { type: 'opponent_disconnected' });
@@ -1588,21 +1711,28 @@ function parseCookies(request) {
 }
 
 // Verifica proteção CSRF para rotas mutáveis (POST, PATCH, DELETE, PUT)
-// Exige o header X-Requested-With ou o cookie de sessão com SameSite=Strict
+// Exige header X-CSRF-Token ou cookie de sessão com SameSite=Strict
 function checkCsrf(request) {
   const method = (request.method || '').toUpperCase();
   const safeMethods = new Set(['GET', 'HEAD', 'OPTIONS']);
   if (safeMethods.has(method)) return true;
 
+  const cookies = parseCookies(request);
+  const sessionId = cookies[COOKIE_NAME];
+  
+  // Verifica token CSRF no header
+  const csrfToken = request.headers['x-csrf-token'];
+  if (sessionId && csrfToken && validateCsrfToken(sessionId, csrfToken)) {
+    return true;
+  }
+  
+  // Fallback: verifica origem (menos seguro mas compatível)
   const origin = request.headers.origin || '';
   const referer = request.headers.referer || request.headers.referrer || '';
   const host = request.headers.host || '';
 
-  // Permite requisições sem origem (ex.: curl, aplicações nativas)
-  // mas exige que o cookie de sessão esteja presente para rotas autenticadas
   if (!origin && !referer) return true;
 
-  // Se há origem/referer, verifica se é do mesmo host
   try {
     const originHost = origin ? new URL(origin).host : '';
     const refererHost = referer ? new URL(referer).host : '';
@@ -1666,6 +1796,41 @@ function sendJson(response, statusCode, data, extraHeaders = {}) {
     ...extraHeaders
   });
   response.end(body);
+}
+
+function generateCsrfToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+function getCsrfToken(sessionId) {
+  const entry = csrfTokens.get(sessionId);
+  if (!entry) return null;
+  return entry.token;
+}
+
+function validateCsrfToken(sessionId, token) {
+  const entry = csrfTokens.get(sessionId);
+  if (!entry) return false;
+  if (Date.now() - entry.createdAt > 60 * 60 * 1000) {
+    csrfTokens.delete(sessionId);
+    return false;
+  }
+  // timingSafeEqual para evitar timing attacks
+  const provided = Buffer.from(String(token || ''), 'utf8');
+  const expected = Buffer.from(entry.token, 'utf8');
+  if (provided.length !== expected.length) return false;
+  return crypto.timingSafeEqual(provided, expected);
+}
+
+function checkHttpRateLimit(ip) {
+  const now = Date.now();
+  let entry = httpRateLimits.get(ip);
+  if (!entry || now - entry.windowStart > HTTP_RATE_LIMIT_WINDOW_MS) {
+    entry = { windowStart: now, count: 0 };
+    httpRateLimits.set(ip, entry);
+  }
+  entry.count++;
+  return entry.count <= HTTP_RATE_LIMIT_MAX_REQUESTS;
 }
 
 async function readJsonBody(request) {
@@ -2801,6 +2966,13 @@ async function handleRequest(request, response) {
   const requestUrl = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
   const urlPath = requestUrl.pathname;
 
+  // Rate limiting por IP (aplicado a todas as rotas)
+  const clientIp = request.headers['x-forwarded-for'] || request.socket?.remoteAddress || 'unknown';
+  if (!checkHttpRateLimit(clientIp)) {
+    sendJson(response, 429, { error: 'Muitas requisições. Tente novamente em um minuto.' });
+    return;
+  }
+
   try {
     if (request.method === 'GET' && urlPath === '/healthz') {
       // Diagnóstico do banco: mostra se o PostgreSQL está em uso e o último erro
@@ -2814,6 +2986,20 @@ async function handleRequest(request, response) {
 
     if (request.method === 'GET' && urlPath === '/api/auth/config') {
       await handleAuthConfig(request, response);
+      return;
+    }
+
+    // Endpoint para obter token CSRF (necessário para rotas mutáveis)
+    if (request.method === 'GET' && urlPath === '/api/csrf-token') {
+      const cookies = parseCookies(request);
+      const sessionId = cookies[COOKIE_NAME];
+      if (!sessionId) {
+        sendJson(response, 401, { error: 'Sessão não encontrada.' });
+        return;
+      }
+      const token = generateCsrfToken();
+      csrfTokens.set(sessionId, { token, createdAt: Date.now() });
+      sendJson(response, 200, { csrfToken: token });
       return;
     }
 
@@ -2990,7 +3176,26 @@ async function main() {
   /* -------------------------------------------------------------
      WEBSOCKET - Salas multiplayer online
   ------------------------------------------------------------- */
-  const wss = new WebSocketServer({ server, path: '/ws' });
+  const wss = new WebSocketServer({ 
+    server, 
+    path: '/ws',
+    verifyClient: (info) => {
+      // Valida origem do WebSocket (previne cross-site WebSocket hijacking)
+      const origin = info.origin || info.req.headers.origin || '';
+      const host = info.req.headers.host || '';
+      if (origin) {
+        try {
+          const originHost = new URL(origin).host;
+          if (originHost !== host) {
+            return false;
+          }
+        } catch (e) {
+          return false;
+        }
+      }
+      return true;
+    }
+  });
 
   wss.on('connection', (ws, request) => {
     const conn = {
