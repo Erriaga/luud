@@ -6,7 +6,7 @@
 
 // Versão do cache: ao alterar este valor os caches antigos (com ícones,
 // logos e scripts velhos) são apagados na próxima ativação.
-const CACHE_NAME = 'luud-v2';
+const CACHE_NAME = 'luud-v3';
 const OFFLINE_URL = '/game.html';
 
 // Lista de rotas que devem ser servidas offline
