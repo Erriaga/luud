@@ -1811,7 +1811,10 @@
           "let timer=null;" +
           "onmessage=e=>{if(e.data==='start'){if(!timer)timer=setInterval(()=>postMessage('tick'),200);}" +
           "else if(e.data==='stop'){if(timer){clearInterval(timer);timer=null;}}};";
-        backgroundClockWorker = new Worker(URL.createObjectURL(new Blob([source], { type: 'application/javascript' })));
+        const workerUrl = URL.createObjectURL(new Blob([source], { type: 'application/javascript' }));
+        backgroundClockWorker = new Worker(workerUrl);
+        // O blob já foi carregado pelo Worker: libera a referência da URL
+        URL.revokeObjectURL(workerUrl);
         backgroundClockWorker.onmessage = (event) => {
           if (event.data === 'tick') runBackgroundTick();
         };
@@ -3144,7 +3147,12 @@
       onlineServerLegal = [];
       clearHighlights();
       updateTurnUI();
-      if (turnChanged) autoAttempts = 0;
+      if (turnChanged) {
+        autoAttempts = 0;
+        // Trocou o turno: a contagem de seis do jogador anterior não deve
+        // "vazar" para o próximo (era global e contaminava a vez dele)
+        consecutiveSixes = 0;
+      }
       // O turno pode ter voltado para o jogador local: com o automático
       // ligado, a próxima rolagem acontece sozinha.
       syncAutoPlay();
@@ -4265,7 +4273,14 @@
       const running = Boolean(turnTimer.endsAt);
       const seconds = Math.max(0, Math.ceil(turnTimer.remaining));
 
-      value.textContent = String(seconds);
+      // Texto e aria-label só mudam quando o segundo inteiro muda: o tick
+      // roda a cada 250ms e reescrever a cada tick gerava trabalho
+      // desnecessário no DOM e na árvore de acessibilidade
+      if (seconds !== renderTurnTimer.lastSeconds) {
+        renderTurnTimer.lastSeconds = seconds;
+        value.textContent = String(seconds);
+        root.setAttribute('aria-label', `Tempo restante para jogar: ${seconds} segundos`);
+      }
       progress.style.strokeDashoffset = String(
         TURN_TIMER_CIRCUMFERENCE * (1 - Math.max(0, Math.min(1, turnTimer.remaining / turnTimer.duration)))
       );
@@ -4290,8 +4305,11 @@
       turnTimer.endsAt = Date.now() + turnTimer.duration * 1000;
       turnTimer.expired = false;
       turnTimer.mirrored = Boolean(mirrored);
+      renderTurnTimer.lastSeconds = null;
       renderTurnTimer();
-      turnTimer.interval = setInterval(tickTurnTimer, 100);
+      // 250ms: o texto muda 1x/s e o traço do relógio tem transition de
+      // 0.15s — 10 tick/s só desperdiçava escritas no DOM
+      turnTimer.interval = setInterval(tickTurnTimer, 250);
     }
 
     function stopTurnTimer() {
@@ -4300,6 +4318,7 @@
       turnTimer.remaining = turnTimer.duration;
       turnTimer.expired = false;
       turnTimer.mirrored = false;
+      renderTurnTimer.lastSeconds = null;
       renderTurnTimer();
     }
 
@@ -4316,7 +4335,7 @@
       if (!isHumanTurn() || isPaused) return;
       turnTimer.endsAt = Date.now() + turnTimer.remaining * 1000;
       clearTurnTimerInterval();
-      turnTimer.interval = setInterval(tickTurnTimer, 100);
+      turnTimer.interval = setInterval(tickTurnTimer, 250);
       renderTurnTimer();
     }
 
@@ -4382,14 +4401,18 @@
       isAnimating = false;
       clearHighlights();
 
-      schedule(() => {
+      const applyTimeoutTurnLoss = () => {
         turnTimer.expired = false;
         if (isPaused) {
+          // Pausado na hora da perda de vez: ADIA em vez de descartar —
+          // descartar deixava o mesmo jogador jogar de novo sem punição
           renderTurnTimer();
+          schedule(applyTimeoutTurnLoss, 500);
           return;
         }
         nextTurn();
-      }, 1200);
+      };
+      schedule(applyTimeoutTurnLoss, 1200);
     }
 
     function syncTurnTimerWithTurn() {
@@ -4519,11 +4542,11 @@
         line3.classList.add('hidden');
         line4.classList.add('hidden');
 
-        // No modo DUPLA, o jogador humano (p1) é o "Dupla" e o primeiro oponente (p4, último na ordem horária) representa o "CPU"
+        // No modo DUPLA, a linha "CPU" mostra o somatório do time adversário:
+        // getCpuScore() filtra por tipo 'CPU' — somar orderedPlayers[2] na
+        // linha incluía o ALIADO (diagonal) no placar do time de baixo
         const p4 = orderedPlayers[3];
-        const cpuTeamScore = (playerScores[orderedPlayers[2]] || 0) + (playerScores[p4] || 0);
-        document.getElementById('score-line2-name').innerText = 'CPU';
-        document.getElementById('score-line2-points').innerText = cpuTeamScore;
+        document.getElementById('score-line2-points').innerText = getCpuScore();
         document.getElementById('score-line2-dot').style.backgroundColor = getPlayerColor(p4).hex;
         document.getElementById('score-line2-dot').className = 'w-2 h-2 rounded-full shrink-0';
 
@@ -4843,7 +4866,7 @@
 
       isAnimating = false;
       hasRolled = true;
-      document.getElementById('dice-instruction').textContent = 'Toque para rolar';
+      document.getElementById('dice-instruction').textContent = 'Escolha uma peça para mover';
       logStatus(`${getPlayerColor(getCurrentPlayer()).name} tirou ${diceValue} no dado`);
 
       if (diceValue === 6) {
@@ -4966,7 +4989,11 @@
         // por exemplo), libera o dado para o jogador poder tentar de novo.
         // O servidor continua sendo a fonte da verdade: uma segunda
         // rolagem fora de hora é recusada por ele.
-        setTimeout(() => {
+        // O id fica guardado: um novo pedido cancela o timer anterior —
+        // solto, ele disparava sobre o pedido NOVO e resetava o estado.
+        if (onlineRollSafetyTimer) clearTimeout(onlineRollSafetyTimer);
+        onlineRollSafetyTimer = setTimeout(() => {
+          onlineRollSafetyTimer = null;
           if (!onlineRollPending || !isOnlineGame) return;
           onlineRollPending = false;
           isAnimating = false;
@@ -5129,14 +5156,28 @@
       return new Promise(resolve => setTimeout(resolve, duration));
     }
 
+    // Tamanho da casa do tabuleiro (0 a 15 do grid): medido uma única vez
+    // e recalculado só quando a janela muda de tamanho — evita leitura de
+    // layout síncrona (board.clientWidth) a cada passo de cada animação
+    let cachedCellSize = 0;
+    function getBoardCellSize() {
+      if (!cachedCellSize) {
+        const board = document.getElementById('ludo-board');
+        if (board && board.clientWidth > 0) cachedCellSize = board.clientWidth / 15;
+      }
+      return cachedCellSize;
+    }
+
     async function animateTokenTransition(player, tokenIdx, fromPos, toPos, duration = 320) {
       const token = document.getElementById(`token-${player}-${tokenIdx}`);
       if (!token) return;
 
       const [fromRow, fromCol] = getCoords(player, tokenIdx, fromPos);
       const [toRow, toCol] = getCoords(player, tokenIdx, toPos);
-      const board = document.getElementById('ludo-board');
-      const cellSize = board.clientWidth / 15;
+      // Tamanho da casa medido uma vez por mudança de layout: ler
+      // board.clientWidth a cada passo da animação forçava layout
+      // síncrono do grid 15x15 várias vezes por jogada (cell thrashing)
+      const cellSize = getBoardCellSize();
       const deltaX = (fromCol - toCol) * cellSize;
       const deltaY = (fromRow - toRow) * cellSize;
 
@@ -5214,6 +5255,10 @@
       // devolve o resultado em 'token_moved'.
       if (isOnlineGame && !isRemote) {
         sendOnlineMoveRequest(tokenIdx);
+        // Rede de segurança também para a jogada manual: se o servidor não
+        // confirmar ('token_moved'/'game_rejected'), o tabuleiro destrava
+        // em vez de ficar congelado até o timeout de 30s
+        startAutoMoveSafetyTimer();
         return;
       }
 
@@ -5341,14 +5386,18 @@
       // Se tirou 6 no dado, ou salvou uma peça, ou capturou uma peça adversária, ganha outro turno!
       if (diceValue === 6 || lastMoveScored || lastMoveCaptured) {
         hasRolled = false;
+        // Motivo capturado ANTES de zerar as flags: zerar antes do if
+        // deixava as mensagens de "salvou/capturou" inalcançáveis
+        const scoredNow = lastMoveScored;
+        const capturedNow = lastMoveCaptured;
         // Reseta as flags para a próxima jogada
         lastMoveScored = false;
         lastMoveCaptured = false;
         if (diceValue === 6) {
           logStatus(`${getPlayerColor(player).name} tirou 6 e joga novamente! 🎲`);
-        } else if (lastMoveScored) {
+        } else if (scoredNow) {
           logStatus(`${getPlayerColor(player).name} salvou uma peça e joga novamente!`);
-        } else if (lastMoveCaptured) {
+        } else if (capturedNow) {
           logStatus(`${getPlayerColor(player).name} capturou uma peça e joga novamente!`);
         }
         updateTurnUI();
@@ -5374,6 +5423,15 @@
 
       stopTurnTimer();
 
+      // Fim da partida: encerra o relógio em segundo plano e invalida
+      // callbacks agendados AGORA (antes de qualquer await). Deixar para o
+      // final da função permitia o jogador clicar "Reiniciar" enquanto o
+      // registro da partida estava em voo — e o tail derrubava o relógio e
+      // a epoch da partida NOVA, congelando os turnos com a aba oculta.
+      stopBackgroundClock();
+      invalidateScheduledCallbacks();
+      setMenuButtonVisible(false);
+
       // O automático não pode continuar jogando depois do fim da partida:
       // cancela rolagem e jogada automáticas que estejam agendadas
       stopAutoPlayTimer();
@@ -5384,6 +5442,9 @@
         // Determina a colocação do jogador humano na arena
         const humanKey = getHumanPlayerKey();
         const humanFinishedIndex = arenaFinishedOrder.indexOf(humanKey);
+        // Na ARENA não existe vitória/derrota binária: fanfarra de vitória
+        // apenas no 1º lugar (antes tocava sempre som de derrota)
+        humanWon = humanFinishedIndex === 0;
         let placementText;
         let placementColor;
         if (humanFinishedIndex === 0) {
@@ -5440,11 +5501,6 @@
         getCpuScore(),
         historyOpponent
       );
-
-      // Fim da partida: encerra o relógio em segundo plano
-      stopBackgroundClock();
-      invalidateScheduledCallbacks();
-      setMenuButtonVisible(false);
     }
 
     // Fim de partida online: o vencedor é decidido pelo servidor
@@ -5482,6 +5538,9 @@
       hasRolled = false;
       lastMoveScored = false;
       lastMoveCaptured = false;
+      // O contador de "3 seis consecutivos" vale para a sequência de
+      // jogadas do MESMO jogador (turnos extras): trocou a vez, zera
+      consecutiveSixes = 0;
       currentTurnIndex = (currentTurnIndex + 1) % activePlayers.length;
       updateTurnUI();
       checkCPUTurn();
@@ -5613,11 +5672,20 @@
       gameAudio.startMusic();
       const greeting = playerName ? `Boa sorte, ${playerName}! ` : '';
       logStatus(`${greeting}Partida iniciada! Sua cor (${getPlayerColor(humanPlayerKey).name}) está no Canto Inferior Esquerdo.`);
+
+      // Invalida callbacks agendados de partidas anteriores ANTES de agendar
+      // qualquer coisa da partida nova (checkCPUTurn abaixo): na ordem antiga
+      // o primeiro agendamento já nascia com epoch velha e era descartado
+      invalidateScheduledCallbacks();
+
+      // ARENA: limpa a ordem de término/abandono da partida anterior —
+      // sem isso a segunda arena da sessão herdava as colocações antigas
+      arenaFinishedOrder = [];
+      arenaAbandonOrder = [];
+
       checkCPUTurn();
 
-      // Ativa o relógio em segundo plano (Web Worker) e invalida callbacks
-      // agendados de partidas anteriores
-      invalidateScheduledCallbacks();
+      // Ativa o relógio em segundo plano (Web Worker)
       startBackgroundClock();
       // O botão Menu volta a ficar disponível durante a partida
       setMenuButtonVisible(true);
@@ -5729,6 +5797,7 @@
     let onlineServerTurnSlot = 0; // slot (do servidor) que está com a vez
     let onlineServerLegal = []; // peças liberadas pelo servidor para o dado atual
     let onlineRollPending = false; // existe um pedido de rolagem aguardando resposta
+    let onlineRollSafetyTimer = null; // id do timer de segurança da rolagem online
     let opponentMenuOpen = false; // menu do oponente aberto no placar
     let friendConfirmTarget = null; // { id, name } aguardando confirmação de remoção
     let pendingFriendRequestsCount = 0; // solicitações de amizade recebidas não lidas
@@ -8380,7 +8449,15 @@
       const playerName = getOnlinePlayerNameBySlot(slot);
 
       // O servidor respondeu: o pedido de rolagem foi atendido.
+      if (onlineRollSafetyTimer) {
+        clearTimeout(onlineRollSafetyTimer);
+        onlineRollSafetyTimer = null;
+      }
       onlineRollPending = false;
+
+      // O servidor reinicia o relógio do turno a cada rolagem: o cliente
+      // espelha o reinício para não expirar antes da hora
+      syncTurnTimerWithTurn();
 
       isAnimating = true;
       document.getElementById('dice-instruction').textContent = 'Girando o dado...';
@@ -8510,6 +8587,23 @@
         } else if (data.points && data.points.color) {
           playerScores[data.points.color] = Number(data.points.score) || 0;
         }
+
+        // ARENA: registra a ordem de término a partir do placar do servidor.
+        // awardFinalPoint só roda no fluxo local — sem isso arenaFinishedOrder
+        // ficava vazio no online e a colocação final exibida era sempre
+        // "4º LUGAR" (e o histórico registrava 4º para todo mundo). As
+        // mensagens chegam na ordem das jogadas, então a inserção aqui
+        // preserva a ordem cronológica de conclusão.
+        if (onlineMatchType === 'arena') {
+          const arenaTarget = getWinningScore();
+          Object.keys(playerScores).forEach(color => {
+            if (!activePlayers.includes(color)) return;
+            if ((playerScores[color] || 0) >= arenaTarget && !arenaFinishedOrder.includes(color)) {
+              arenaFinishedOrder.push(color);
+            }
+          });
+        }
+
         if (data.points) gameAudio.playPoint();
         updateScoreboardUI();
 
@@ -8523,8 +8617,17 @@
         // O próximo turno é decidido pelo servidor
         applyServerTurn(Number(data.turn));
         if (data.extraTurn) {
-          logStatus(`${getPlayerColor(player).name} tirou 6 e joga novamente! 🎲`);
+          // O motivo do turno extra vem da jogada confirmada pelo servidor
+          const extraReason = (Array.isArray(data.captured) && data.captured.length)
+            ? 'capturou uma peça'
+            : (data.points ? 'salvou uma peça' : 'tirou 6');
+          logStatus(`${getPlayerColor(player).name} ${extraReason} e joga novamente! 🎲`);
         }
+        // O servidor rearma o relógio do turno a cada jogada: o cliente
+        // acompanha (inclusive em turno extra, quando a vez não muda) —
+        // sem isso o countdown local expirava antes da hora e apagava as
+        // peças clicáveis no meio da jogada
+        syncTurnTimerWithTurn();
       })();
     }
 
@@ -8578,6 +8681,10 @@
 
       // O pedido não foi atendido: libera o estado para o jogador decidir de novo.
       onlineRollPending = false;
+      if (onlineRollSafetyTimer) {
+        clearTimeout(onlineRollSafetyTimer);
+        onlineRollSafetyTimer = null;
+      }
       isAnimating = false;
       stopAutoMoveSafetyTimer();
 
@@ -8586,10 +8693,13 @@
       const legal = onlineServerLegal.slice();
 
       if (action === 'move_request') {
-        // A jogada foi recusada: as opções válidas do servidor continuam valendo
+        // A jogada foi recusada: as opções válidas do servidor continuam valendo.
+        // hasRolled só fica true quando o jogador da vez tem peças legais para
+        // clicar: com legal=[] (ex.: o servidor expirou o turno no meio do
+        // clique), manter hasRolled=true travava o dado até vir o timeout
         if (serverTurn !== null) applyServerTurn(serverTurn);
-        hasRolled = true;
-        if (getCurrentPlayer() === getHumanPlayerKey() && legal.length) {
+        hasRolled = getCurrentPlayer() === getHumanPlayerKey() && legal.length > 0;
+        if (hasRolled) {
           onlineServerLegal = legal;
           highlightSelectableTokens(legal);
           // Modo automático: tenta novamente com uma peça válida
@@ -8725,25 +8835,35 @@
           return;
         }
 
+        // Espera o script do Google carregar (uma tentativa a cada 100ms)
+        // com teto de tentativas: com CDN bloqueada (ad-blocker/offline) o
+        // intervalo ficava sondando 10x por segundo para sempre
+        let googleLoadTries = 0;
         const waitForGoogle = setInterval(() => {
-          if (!window.google?.accounts?.id) return;
-          clearInterval(waitForGoogle);
+          if (window.google?.accounts?.id) {
+            clearInterval(waitForGoogle);
 
-          window.google.accounts.id.initialize({
-            client_id: config.clientId,
-            callback: handleGoogleCredentialSetup,
-            auto_select: false,
-            cancel_on_tap_outside: true
-          });
+            window.google.accounts.id.initialize({
+              client_id: config.clientId,
+              callback: handleGoogleCredentialSetup,
+              auto_select: false,
+              cancel_on_tap_outside: true
+            });
 
-          window.google.accounts.id.renderButton(buttonEl, {
-            theme: 'filled_blue',
-            size: 'large',
-            shape: 'rect',
-            text: 'signin_with',
-            logo_alignment: 'center',
-            width: 280
-          });
+            window.google.accounts.id.renderButton(buttonEl, {
+              theme: 'filled_blue',
+              size: 'large',
+              shape: 'rect',
+              text: 'signin_with',
+              logo_alignment: 'center',
+              width: 280
+            });
+            return;
+          }
+          if (++googleLoadTries >= 100) {
+            clearInterval(waitForGoogle);
+            statusEl.textContent = 'Não foi possível carregar o login do Google.';
+          }
         }, 100);
       }
 
@@ -8811,7 +8931,12 @@
       initWebSocket();
       initGoogleLoginSetup();
       syncTurnTimerPlacement();
-      window.addEventListener('resize', syncTurnTimerPlacement);
+      // O tabuleiro pode mudar de tamanho (rotação, teclado virtual):
+      // invalida a medida cacheada da casa do grid
+      window.addEventListener('resize', () => {
+        cachedCellSize = 0;
+        syncTurnTimerPlacement();
+      });
       // Tela inicial: sem partida em andamento, o Menu fica oculto
       setMenuButtonVisible(false);
       // Botão de conta centralizado abaixo da logo na tela inicial
