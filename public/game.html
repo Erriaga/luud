@@ -3162,7 +3162,12 @@
     }
 
     function isHumanTeamPlayer(player) {
-      return playerTypes[player] === 'HUMAN' || playerTypes[player] === 'ALLY';
+      // 'AUTO' é o slot do próprio humano sendo jogado pelo computador
+      // (toggle de automático em partida local): para placar, duplas e
+      // times ele continua contando como lado humano. Sem isso, os pontos
+      // do jogador em automático não entram em getHumanTeamScore() e a
+      // partida nunca termina (salvar as quatro peças não dá vitória).
+      return playerTypes[player] === 'HUMAN' || playerTypes[player] === 'ALLY' || playerTypes[player] === 'AUTO';
     }
 
     function isAutomatedPlayer(player) {
@@ -3203,7 +3208,10 @@
         }
       }
       if (isOnlineGame && player !== getHumanPlayerKey()) return getFirstName(onlineOpponentName) || 'Oponente';
-      if (playerTypes[player] === 'HUMAN') return playerName || 'Você';
+      // 'AUTO' continua sendo o jogador local: o computador só joga no
+      // lugar dele. Mostrar "CPU" aqui fazia a guia "Turno:" anunciar a
+      // CPU na vez do próprio jogador com o automático ligado.
+      if (playerTypes[player] === 'HUMAN' || playerTypes[player] === 'AUTO') return playerName || 'Você';
       if (playerTypes[player] === 'ALLY') return playerName ? `Aliado de ${playerName}` : 'Aliado';
       return isTeamMode() ? 'CPU adversária' : 'CPU';
     }
@@ -4687,7 +4695,8 @@
        turno é definido pelo servidor) até o jogador desativar o toggle.
     ------------------------------------------------------------- */
     function syncAutoPlay() {
-      if (!isAutoPlay || isPaused) return;
+      // Partida decidida (alguém salvou todas as peças): nada mais a jogar
+      if (!isAutoPlay || isPaused || checkWin()) return;
 
       const humanKey = getHumanPlayerKey();
       if (!humanKey) return;
@@ -4710,7 +4719,7 @@
     function scheduleAutoRoll() {
       stopAutoPlayTimer();
       autoPlayTimer = setTimeout(() => {
-        if (!isAutoPlay || isPaused || isAnimating) return;
+        if (!isAutoPlay || isPaused || isAnimating || checkWin()) return;
         const humanKey = getHumanPlayerKey();
         if (getCurrentPlayer() === humanKey && !hasRolled) {
           // No modo online evita laços de reenvio quando o servidor recusa
@@ -5364,6 +5373,11 @@
       document.getElementById('win-countdown').classList.add('hidden');
 
       stopTurnTimer();
+
+      // O automático não pode continuar jogando depois do fim da partida:
+      // cancela rolagem e jogada automáticas que estejam agendadas
+      stopAutoPlayTimer();
+      stopAutoMoveSafetyTimer();
 
       // Modo ARENA: cada jogador por si, mostrar colocação final de todos os 4
       if (isOnlineArenaMode() || (!isTeamMode() && !isOnlineGame && activePlayers.length === 4)) {
