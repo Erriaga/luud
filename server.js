@@ -2970,9 +2970,12 @@ async function handleRequest(request, response) {
   const requestUrl = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
   const urlPath = requestUrl.pathname;
 
-  // Rate limiting por IP (aplicado a todas as rotas)
+  // Rate limiting por IP: apenas rotas de API (login, perfil, partidas...).
+  // Arquivos estáticos e o próprio HTML não contam: recarregar a tela
+  // inicial dispara dezenas de pedidos de assets e estourava o limite
+  // global, travando a página com HTTP 429.
   const clientIp = request.headers['x-forwarded-for'] || request.socket?.remoteAddress || 'unknown';
-  if (!checkHttpRateLimit(clientIp)) {
+  if (urlPath.startsWith('/api/') && !checkHttpRateLimit(clientIp)) {
     sendJson(response, 429, { error: 'Muitas requisições. Tente novamente em um minuto.' });
     return;
   }
