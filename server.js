@@ -31,6 +31,10 @@ const httpRateLimits = new Map();
 const HTTP_RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minuto
 const HTTP_RATE_LIMIT_MAX_REQUESTS = 120; // 120 req/min por IP
 
+// Jogadores ausentes em partidas online (key: roomCode): aguardam o
+// take-over durante TAKEOVER_WINDOW_MS antes do abandono definitivo
+const absentPlayers = new Map();
+
 // Limpeza periódica de mapas antigos (evita memory leak)
 setInterval(() => {
   const now = Date.now();
