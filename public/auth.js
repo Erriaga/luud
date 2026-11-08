@@ -158,6 +158,10 @@ function closeProfileModal() {
   profileModal.classList.add('hidden');
   // As alterações de cor que não foram salvas são descartadas
   if (typeof discardProfileColorChanges === 'function') discardProfileColorChanges();
+  // Fecha também o polling do pagamento Pix (aberto no checkout):
+  // fechar o perfil encerra a espera — o intervalo de 4s não pode
+  // continuar rodando em segundo plano
+  if (typeof stopPremiumPolling === 'function') stopPremiumPolling();
 }
 
 // Habilita (Premium) ou bloqueia (conta gratuita) a edição do nickname
