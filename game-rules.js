@@ -192,7 +192,10 @@ function rollForTurn(state, slot) {
   const legal = validTokenIndices(state, slot, value);
 
   if (!legal.length) {
-    // Sem movimento possível: o turno passa
+    // Sem movimento possível: o turno passa. O contador de seis é zerado
+    // junto: ele vale para jogadas consecutivas do MESMO jogador (turno
+    // extra); o próximo jogador começa do zero.
+    state.sixes = 0;
     state.dice = null;
     const next = nextSlot(state, slot);
     state.turn = next;

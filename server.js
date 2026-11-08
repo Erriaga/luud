@@ -47,10 +47,19 @@ setInterval(() => {
     if (now - windowStart > 5 * 60 * 1000) httpRateLimits.delete(ip);
   }
   // absentPlayers órfãos (timers já dispararam mas mapa não limpo)
-  for (const [roomCode, data] of absentPlayers) {
-    if (data.timer && data.timer._idleTimeout === -1) {
+  for (const [absenceKey, data] of absentPlayers) {
+    if (data.timer && data.timer._destroyed) {
       // Timer já executou, limpar entrada órfã
-      absentPlayers.delete(roomCode);
+      absentPlayers.delete(absenceKey);
+    }
+  }
+  // Convites de dupla/lobby expirados (sem resposta em 10 minutos)
+  const INVITE_TTL_MS = 10 * 60 * 1000;
+  for (const invites of [duplaPendingInvites, lobbyPendingInvites]) {
+    for (const [inviteId, invite] of invites) {
+      if (invite.createdAt && Date.now() - invite.createdAt > INVITE_TTL_MS) {
+        invites.delete(inviteId);
+      }
     }
   }
 }, 5 * 60 * 1000); // A cada 5 minutos
@@ -124,6 +133,8 @@ const connections = new Map();
 const userConnections = new Map();
 // Fila do Jogo Rápido: [{ ws, uid, name }]
 const matchmakingQueue = [];
+// Sala atual de cada usuário autenticado: userId -> roomCode
+const userRoom = new Map();
 
 /* -------------------------------------------------------------
    PROTEÇÃO CONTRA QUEBRA (anti-cheat)
@@ -136,6 +147,9 @@ const RATE_LIMIT_MAX_MESSAGES = 60;
 const ROOM_TURN_TIMEOUT_MS = 30 * 1000;
 // Tempo máximo de turno para partidas classificatorias da Liga (mais curto)
 const LEAGUE_TURN_TIMEOUT_MS = 10 * 1000;
+// Janela para o jogador autenticado reconectar e retomar a partida
+// (take-over) antes de ser declarado como abandono definitivo
+const TAKEOVER_WINDOW_MS = 60 * 1000;
 // Mensagens que o cliente NÃO pode mais enviar: o dado, o movimento e a
 // passagem de turno são decididos pelo servidor.
 const FORBIDDEN_CLIENT_MESSAGES = new Set(['dice_roll', 'token_move', 'pass_turn']);
@@ -313,10 +327,16 @@ function detachFromRoom(ws, notifyOpponent = true) {
   // Para usuários autenticados, não limpa o slot imediatamente:
   // marca o jogador como ausente para permitir take-over.
   if (userId) {
-    // Cancela timer de abandono anterior para este slot (se houver)
-    const existing = absentPlayers.get(roomCode);
-    if (existing && existing.playerIdx === playerIdx) {
+    // Cancela timer de abandono anterior para este slot (se houver).
+    // A chave inclui o slot: em salas com 2+ humanos (dupla/arena), dois
+    // jogadores podem estar ausentes ao mesmo tempo — uma chave única por
+    // sala fazia o 2º registro sobrescrever o 1º (e o timer do 1º apagar
+    // a entrada do 2º antes da hora).
+    const absenceKey = `${roomCode}:${playerIdx}`;
+    const existing = absentPlayers.get(absenceKey);
+    if (existing) {
       clearTimeout(existing.timer);
+      absentPlayers.delete(absenceKey);
     }
 
     // Mantém o userId no slot para que o take-over possa reanexar o jogador
@@ -354,7 +374,7 @@ function detachFromRoom(ws, notifyOpponent = true) {
     // Registra o jogador como ausente para take-over (espera até TAKEOVER_WINDOW_MS)
     const abandonAt = Date.now() + TAKEOVER_WINDOW_MS;
     const timer = setTimeout(() => {
-      absentPlayers.delete(roomCode);
+      absentPlayers.delete(absenceKey);
       userRoom.delete(userId);
       // Aplica o abandono definitivo após o tempo de espera
       if (room.mode === 'liga' && !room.game.over) {
@@ -375,7 +395,7 @@ function detachFromRoom(ws, notifyOpponent = true) {
       }
     }, TAKEOVER_WINDOW_MS);
 
-    absentPlayers.set(roomCode, { playerIdx, userId, abandonAt, timer });
+    absentPlayers.set(absenceKey, { roomCode, playerIdx, userId, abandonAt, timer });
 
     if (notifyOpponent) {
       room.players.forEach(other => {
@@ -548,6 +568,13 @@ function handleRollRequest(ws, conn, room) {
   if (state.over) {
     rejectClientMessage(ws, conn, 'roll_request', 'A partida já terminou.', room);
     return;
+  }
+  // Defesa: a rolagem é possível mesmo sem 'game_start' (mensagem enviada
+  // pelo cliente). Se nenhum cliente avisou que a partida começou, arma o
+  // relógio aqui — o limite de tempo do turno nunca pode ficar inerte.
+  if (!state.started) {
+    state.started = true;
+    startRoomTurnTimer(room);
   }
   if (state.turn !== slot) {
     rejectClientMessage(ws, conn, 'roll_request', 'Não é a vez deste jogador.', room);
@@ -735,23 +762,19 @@ function applyArenaAbandonResult(room, leaverIdx) {
   room.arenaAbandonOrder.push(leaverIdx);
 
   const abandonedCount = room.arenaAbandonOrder.length;
-  const totalPlayers = room.players ? room.players.filter(p => p).length : 0;
-  const remainingPlayers = totalPlayers - abandonedCount;
 
-  // Colocação do jogador que abandona:
-  // 1º a abandonar = 4º lugar, 2º = 3º, 3º = 2º, último restante = 1º
-  let placement;
-  if (remainingPlayers === 0) {
-    // Todos abandonaram: o último é 1º lugar (padrão)
-    placement = 1;
-  } else if (remainingPlayers === 1) {
-    // Sobrou apenas 1 jogador: ele é 1º lugar, o que acabou de abandonar é 2º
-    placement = abandonedCount === totalPlayers - 1 ? 2 : 1;
-  } else {
-    placement = 5 - abandonedCount; // 1º abandona=4º, 2º=3º, 3º=2º
-  }
+  // Colocação calculada pelo total de slots da sala (fixo na criação) e
+  // não pela contagem de conexões: quem abandona já foi removido de
+  // room.players antes desta função, e misturar as duas bases fazia o
+  // 2º a abandonar receber "1º lugar" (4-2+... com bases diferentes).
+  // 1º a abandonar = 4º lugar, 2º = 3º, 3º = 2º, último = 1º.
+  const slotCount = room.players ? room.players.length : 4;
+  const placement = Math.max(1, slotCount - abandonedCount + 1);
 
-  // Encerra a partida para o jogador que abandonou
+  // NOTA: hoje o estado compartilhado é encerrado para TODOS os jogadores
+  // da sala (limitação conhecida). O ideal seria a partida continuar para
+  // quem ficou, com o fim apenas quando restar 1 jogador — exigiria que
+  // nextSlot ignorasse slots ausentes em game-rules.js.
   state.over = true;
   // Armazena a colocação do jogador que abandonou para o cliente ler
   state.abandonedPlacement = placement;
@@ -2902,10 +2925,18 @@ async function listUserMatches(request, response, targetId) {
    SERVIDOR ESTÁTICO E ROTAS
 ------------------------------------------------------------- */
 function isSafePublicPath(urlPath) {
-  const decodedPath = decodeURIComponent(urlPath.split('?')[0]);
+  let decodedPath;
+  try {
+    decodedPath = decodeURIComponent(urlPath.split('?')[0]);
+  } catch (error) {
+    // Sequência de escape inválida (ex.: %zz): trata como não encontrado
+    return null;
+  }
   const relativePath = path.normalize(decodedPath).replace(/^(\.\.[/\\])+/, '');
   const filePath = path.join(PUBLIC_DIR, relativePath);
-  return filePath.startsWith(PUBLIC_DIR) ? filePath : null;
+  // O sufixo path.sep impede que um diretório irmão (ex.: public-evil)
+  // passe na checagem de prefixo
+  return filePath.startsWith(PUBLIC_DIR + path.sep) ? filePath : null;
 }
 
 async function serveStatic(request, response, urlPath) {
@@ -2974,7 +3005,13 @@ async function handleRequest(request, response) {
   // Arquivos estáticos e o próprio HTML não contam: recarregar a tela
   // inicial dispara dezenas de pedidos de assets e estourava o limite
   // global, travando a página com HTTP 429.
-  const clientIp = request.headers['x-forwarded-for'] || request.socket?.remoteAddress || 'unknown';
+  // x-forwarded-for só é aceito quando a conexão chega de um proxy local
+  // (loopback): direto do cliente o header é forjável e zera o limite.
+  const peer = request.socket?.remoteAddress || 'unknown';
+  const forwarded = request.headers['x-forwarded-for'];
+  const clientIp = (forwarded && (peer === '127.0.0.1' || peer === '::1' || peer === '::ffff:127.0.0.1'))
+    ? String(forwarded).split(',')[0].trim()
+    : peer;
   if (urlPath.startsWith('/api/') && !checkHttpRateLimit(clientIp)) {
     sendJson(response, 429, { error: 'Muitas requisições. Tente novamente em um minuto.' });
     return;
@@ -3168,8 +3205,11 @@ async function handleRequest(request, response) {
     response.end('Method not allowed');
   } catch (error) {
     console.error('[servidor] erro ao tratar requisição:', error && error.message);
-    // Erros de banco não expõem dados sensíveis: usamos a mensagem já sanitizada
-    const message = error && error.safeMessage ? error.safeMessage : (error && error.message) || 'Erro interno do servidor.';
+    // Mensagem genérica no corpo da resposta: erros internos (ex.:
+    // "Cannot read properties of undefined") não podem vazar detalhes
+    // para o cliente. Erros de banco usam a mensagem já sanitizada
+    // (error.safeMessage); o detalhe completo fica só no log.
+    const message = error && error.safeMessage ? error.safeMessage : 'Erro interno do servidor.';
     sendJson(response, 500, { error: message });
   }
 }
@@ -3293,9 +3333,12 @@ async function main() {
 
       /* --- MATCHMAKING DA LIGA (partida classificatória) ---------------- */
       if (data.type === 'liga_match') {
-        const uid = data.uid || null;
+        // A identidade vem da sessão autenticada (mensagem 'identify'),
+        // nunca do corpo: o cliente não pode entrar na fila jogando na
+        // conta de outro usuário (uid forjado aplicaria pontos/derrotas
+        // na conta da vítima)
+        const uid = conn.userId || null;
         const name = String(data.name || 'Jogador').slice(0, 24);
-        conn.userId = uid;
         conn.name = name;
 
         if (!uid) {
@@ -3399,11 +3442,15 @@ async function main() {
           return;
         }
 
-        // A mesma conta Google não pode entrar numa partida em que
-        // ela própria já é um dos jogadores (nem por convite)
-        if (uid && (room.userIds[0] === uid || room.userIds[1] === uid)) {
-          sendTo(ws, { type: 'error', error: 'Esta conta já está nesta partida.' });
-          return;
+        // A mesma conta Google não pode controlar os dois slots da
+        // partida. Se o uid está num slot cuja conexão caiu, é o dono
+        // voltando (take-over do próprio slot): reentrada permitida.
+        if (uid) {
+          const ownSlot = room.userIds.indexOf(uid);
+          if (ownSlot !== -1 && room.players[ownSlot]) {
+            sendTo(ws, { type: 'error', error: 'Esta conta já está nesta partida.' });
+            return;
+          }
         }
 
         // Busca o perfil do oponente já presente na sala (criador do convite)
@@ -3419,6 +3466,16 @@ async function main() {
         room.names[playerIdx] = cleanName || `Jogador ${playerIdx + 1}`;
         room.userIds[playerIdx] = uid || null;
         room.ready[playerIdx] = true;
+
+        // Reentrada no próprio slot cancela a contagem de abandono
+        // (take-over): sem isso o timer dispararia depois e aplicaria o
+        // abandono de um jogador que já voltou
+        const rejoinAbsenceKey = `${code}:${playerIdx}`;
+        const rejoinAbsence = absentPlayers.get(rejoinAbsenceKey);
+        if (rejoinAbsence) {
+          clearTimeout(rejoinAbsence.timer);
+          absentPlayers.delete(rejoinAbsenceKey);
+        }
 
         conn.roomCode = code;
         conn.playerIdx = playerIdx;
@@ -4084,9 +4141,11 @@ async function main() {
       }
 
       const forward = {
+        ...data,
+        // type e from por último: o cliente não pode forjar a autoria
+        // (o spread antes deixaria data.from sobrescrever conn.playerIdx)
         type: data.type,
-        from: conn.playerIdx,
-        ...data
+        from: conn.playerIdx
       };
 
       const payload = JSON.stringify(forward);
