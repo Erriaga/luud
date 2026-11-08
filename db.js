@@ -1006,9 +1006,12 @@ async function createSession(userId) {
       throw recordDbError(error, "createSession");
     }
   } else {
-    const sessions = await readJsonFile(SESSIONS_FILE);
-    sessions[token] = { userId, expiresAt };
-    await writeJsonFile(SESSIONS_FILE, sessions);
+    // updateJsonFile serializa leitura+escrita na mesma fila: com dois
+    // logins simultâneos, o par read+write separado perdia a 1ª sessão
+    await updateJsonFile(SESSIONS_FILE, (sessions) => {
+      sessions[token] = { userId, expiresAt };
+      return sessions;
+    });
   }
   return token;
 }
@@ -1022,7 +1025,11 @@ async function getSessionUser(token) {
       const result = await p.query('SELECT * FROM sessions WHERE token = $1', [token]);
       if (result.rows.length === 0) return null;
       const session = result.rows[0];
-      if (typeof session.expires_at === 'number' && session.expires_at < Date.now()) {
+      // expires_at é BIGINT: o driver pg devolve int8 como string, então
+      // typeof === 'number' nunca era verdadeiro e a sessão nunca expirava
+      // (token vazado valeria para sempre). Normalizar antes de comparar.
+      const expiresAt = Number(session.expires_at);
+      if (Number.isFinite(expiresAt) && expiresAt < Date.now()) {
         await p.query('DELETE FROM sessions WHERE token = $1', [token]);
         return null;
       }
@@ -1031,15 +1038,18 @@ async function getSessionUser(token) {
       throw recordDbError(error, "getSessionUser");
     }
   } else {
-    const sessions = await readJsonFile(SESSIONS_FILE);
-    const session = sessions[token];
-    if (!session) return null;
-    if (typeof session.expiresAt === 'number' && session.expiresAt < Date.now()) {
-      delete sessions[token];
-      await writeJsonFile(SESSIONS_FILE, sessions);
-      return null;
-    }
-    return ensureNickname(await getUserById(session.userId));
+    let sessionUserId = null;
+    await updateJsonFile(SESSIONS_FILE, (sessions) => {
+      const session = sessions[token];
+      if (!session) return sessions;
+      if (typeof session.expiresAt === 'number' && session.expiresAt < Date.now()) {
+        delete sessions[token];
+        return sessions;
+      }
+      sessionUserId = session.userId;
+      return sessions;
+    });
+    return sessionUserId !== null ? ensureNickname(await getUserById(sessionUserId)) : null;
   }
 }
 
@@ -1053,11 +1063,10 @@ async function destroySession(token) {
       throw recordDbError(error, "destroySession");
     }
   } else {
-    const sessions = await readJsonFile(SESSIONS_FILE);
-    if (sessions[token]) {
-      delete sessions[token];
-      await writeJsonFile(SESSIONS_FILE, sessions);
-    }
+    await updateJsonFile(SESSIONS_FILE, (sessions) => {
+      if (sessions[token]) delete sessions[token];
+      return sessions;
+    });
   }
 }
 
@@ -1108,12 +1117,15 @@ async function createMatchRecord(userId, record) {
     }
   }
 
-  const matches = await readJsonFile(MATCHES_FILE);
-  const cutoff = Date.now() - MATCH_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
-  const history = (matches[userId] || []).filter(item => !isCpuMatchRecord(item) && isFreshMatchRecord(item, cutoff));
-  history.unshift(record);
-  matches[userId] = history.slice(0, 100);
-  await writeJsonFile(MATCHES_FILE, matches);
+  // Leitura+escrita na mesma fila: partidas gravadas em paralelo não se
+  // sobrescrevem (o par read+write separado perdia o registro do outro)
+  await updateJsonFile(MATCHES_FILE, (matches) => {
+    const cutoff = Date.now() - MATCH_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
+    const history = (matches[userId] || []).filter(item => !isCpuMatchRecord(item) && isFreshMatchRecord(item, cutoff));
+    history.unshift(record);
+    matches[userId] = history.slice(0, 100);
+    return matches;
+  });
 }
 
 async function listMatchRecords(userId) {
@@ -1494,26 +1506,30 @@ async function sendFriendRequest(fromUserId, toUserId) {
       throw recordDbError(error, "sendFriendRequest");
     }
   } else {
-    const users = await readJsonFile(USERS_FILE);
-    const current = users[fromUserId];
-    const target = users[toUserId];
-    if (!current || !target) throw new Error('Conta não encontrada.');
+    // Leitura+escrita na fila (updateJsonFile): pedidos simultâneos não
+    // se sobrescrevem. Erros de negócio lançados dentro do updater abortam
+    // antes da gravação — nada é persistido pela metade.
+    await updateJsonFile(USERS_FILE, (users) => {
+      const current = users[fromUserId];
+      const target = users[toUserId];
+      if (!current || !target) throw new Error('Conta não encontrada.');
 
-    current.friends = Array.isArray(current.friends) ? current.friends : [];
-    current.friendRequestsSent = Array.isArray(current.friendRequestsSent) ? current.friendRequestsSent : [];
-    current.friendRequestsReceived = Array.isArray(current.friendRequestsReceived) ? current.friendRequestsReceived : [];
-    target.friendRequestsReceived = Array.isArray(target.friendRequestsReceived) ? target.friendRequestsReceived : [];
-    target.friendRequestsSent = Array.isArray(target.friendRequestsSent) ? target.friendRequestsSent : [];
+      current.friends = Array.isArray(current.friends) ? current.friends : [];
+      current.friendRequestsSent = Array.isArray(current.friendRequestsSent) ? current.friendRequestsSent : [];
+      current.friendRequestsReceived = Array.isArray(current.friendRequestsReceived) ? current.friendRequestsReceived : [];
+      target.friendRequestsReceived = Array.isArray(target.friendRequestsReceived) ? target.friendRequestsReceived : [];
+      target.friendRequestsSent = Array.isArray(target.friendRequestsSent) ? target.friendRequestsSent : [];
 
-    if (current.friends.includes(toUserId)) throw new Error('Esta conta já é seu amigo.');
-    if (current.friendRequestsSent.includes(toUserId)) throw new Error('Solicitação de amizade já enviada para esta conta.');
-    if (current.friendRequestsReceived.includes(toUserId)) throw new Error('Esta conta já lhe enviou uma solicitação de amizade.');
+      if (current.friends.includes(toUserId)) throw new Error('Esta conta já é seu amigo.');
+      if (current.friendRequestsSent.includes(toUserId)) throw new Error('Solicitação de amizade já enviada para esta conta.');
+      if (current.friendRequestsReceived.includes(toUserId)) throw new Error('Esta conta já lhe enviou uma solicitação de amizade.');
 
-    current.friendRequestsSent.push(toUserId);
-    target.friendRequestsReceived.push(fromUserId);
-    current.updatedAt = new Date().toISOString();
-    target.updatedAt = new Date().toISOString();
-    await writeJsonFile(USERS_FILE, users);
+      current.friendRequestsSent.push(toUserId);
+      target.friendRequestsReceived.push(fromUserId);
+      current.updatedAt = new Date().toISOString();
+      target.updatedAt = new Date().toISOString();
+      return users;
+    });
   }
 }
 
@@ -1532,27 +1548,30 @@ async function acceptFriendRequest(toUserId, fromUserId) {
       throw recordDbError(error, "acceptFriendRequest");
     }
   } else {
-    const users = await readJsonFile(USERS_FILE);
-    const current = users[toUserId];
-    const target = users[fromUserId];
-    if (!current || !target) throw new Error('Conta não encontrada.');
+    // Leitura+escrita na fila (updateJsonFile): aceites simultâneos não
+    // se sobrescrevem
+    await updateJsonFile(USERS_FILE, (users) => {
+      const current = users[toUserId];
+      const target = users[fromUserId];
+      if (!current || !target) throw new Error('Conta não encontrada.');
 
-    current.friendRequestsReceived = Array.isArray(current.friendRequestsReceived) ? current.friendRequestsReceived : [];
-    current.friends = Array.isArray(current.friends) ? current.friends : [];
-    target.friendRequestsSent = Array.isArray(target.friendRequestsSent) ? target.friendRequestsSent : [];
-    target.friends = Array.isArray(target.friends) ? target.friends : [];
+      current.friendRequestsReceived = Array.isArray(current.friendRequestsReceived) ? current.friendRequestsReceived : [];
+      current.friends = Array.isArray(current.friends) ? current.friends : [];
+      target.friendRequestsSent = Array.isArray(target.friendRequestsSent) ? target.friendRequestsSent : [];
+      target.friends = Array.isArray(target.friends) ? target.friends : [];
 
-    if (!current.friendRequestsReceived.includes(fromUserId) || !target.friendRequestsSent.includes(toUserId)) {
-      throw new Error('Solicitação de amizade não encontrada.');
-    }
+      if (!current.friendRequestsReceived.includes(fromUserId) || !target.friendRequestsSent.includes(toUserId)) {
+        throw new Error('Solicitação de amizade não encontrada.');
+      }
 
-    current.friendRequestsReceived = current.friendRequestsReceived.filter(id => id !== fromUserId);
-    target.friendRequestsSent = target.friendRequestsSent.filter(id => id !== toUserId);
-    if (!current.friends.includes(fromUserId)) current.friends.push(fromUserId);
-    if (!target.friends.includes(toUserId)) target.friends.push(toUserId);
-    current.updatedAt = new Date().toISOString();
-    target.updatedAt = new Date().toISOString();
-    await writeJsonFile(USERS_FILE, users);
+      current.friendRequestsReceived = current.friendRequestsReceived.filter(id => id !== fromUserId);
+      target.friendRequestsSent = target.friendRequestsSent.filter(id => id !== toUserId);
+      if (!current.friends.includes(fromUserId)) current.friends.push(fromUserId);
+      if (!target.friends.includes(toUserId)) target.friends.push(toUserId);
+      current.updatedAt = new Date().toISOString();
+      target.updatedAt = new Date().toISOString();
+      return users;
+    });
   }
 }
 
