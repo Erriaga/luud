@@ -803,6 +803,13 @@
           </button>
         </div>
       </div>
+
+      <!-- ROLAGEM: notas de atualização (versão atual vem do calendário) -->
+      <button type="button" onclick="openRolagem()" class="w-full py-2.5 bg-slate-900/60 hover:bg-slate-900 border border-slate-700 hover:border-slate-500 text-slate-300 hover:text-slate-100 font-bold text-xs tracking-widest transition flex items-center justify-center gap-2">
+        <span aria-hidden="true">🎲</span>
+        <span>ROLAGEM <span id="setup-rolagem-version" class="text-slate-500 font-normal tracking-normal">v1.0</span></span>
+        <span class="text-slate-500 font-normal normal-case tracking-normal">notas de atualização</span>
+      </button>
       </div>
 
       <!-- SELEÇÃO DO MODO CPU -->
@@ -1230,6 +1237,20 @@
     </div>
   </div>
 
+  <!-- ROLAGEM: notas de atualização (histórico e calendário de versões) -->
+  <div id="rolagem-modal" class="hidden fixed inset-0 z-[100] bg-slate-950/85 backdrop-blur-sm flex items-start sm:items-center justify-center p-3 sm:p-6">
+    <div class="bg-slate-800 border-2 border-slate-600 w-full max-w-2xl shadow-2xl flex flex-col max-h-[92vh]">
+      <div class="flex items-center justify-between gap-3 p-4 border-b-2 border-slate-700 bg-slate-900/60">
+        <div class="text-left">
+          <h2 class="font-oswald text-2xl sm:text-3xl font-black text-amber-400 tracking-tight leading-none">ROLAGEM</h2>
+          <p class="text-[11px] text-slate-400 mt-1.5">Notas de atualização — cada versão é uma nova jogada de dado</p>
+        </div>
+        <button type="button" onclick="closeRolagem()" class="w-9 h-9 bg-slate-700 hover:bg-slate-600 text-slate-200 text-lg leading-none shrink-0" aria-label="Fechar ROLAGEM">✕</button>
+      </div>
+      <div id="rolagem-content" class="overflow-y-auto p-4 space-y-4 text-left"></div>
+    </div>
+  </div>
+
   <!-- HISTÓRICO -->
   <div id="history-modal" class="hidden fixed inset-0 z-[90] bg-slate-950/90 flex items-center justify-center p-4">
     <div class="bg-slate-900 border-2 border-slate-600 w-full max-w-xl shadow-2xl max-h-[85vh] overflow-y-auto">
@@ -1400,9 +1421,9 @@
     </div>
   </main>
 
-  <!-- RODAPÉ -->
+  <!-- RODAPÉ: a versão é clicável e abre a ROLAGEM (calendário de versões) -->
   <footer class="w-full max-w-5xl mt-4 mb-1 flex items-center justify-center gap-2 text-center">
-    <p class="font-brand text-xs sm:text-sm text-slate-500 tracking-widest">© 2026 LUUD Studios™ - v1.0</p>
+    <p class="font-brand text-xs sm:text-sm text-slate-500 tracking-widest">© <span id="footer-year">2026</span> LUUD Studios™ - <button type="button" id="footer-version-btn" onclick="openRolagem()" title="Ver ROLAGEM (notas de atualização)" class="font-brand tracking-widest underline decoration-dotted underline-offset-4 hover:text-slate-300 transition">v1.0</button></p>
   </footer>
 
   <!-- MENU DO OPONENTE (partida online) -->
@@ -7175,6 +7196,211 @@
       try {
         sessionStorage.removeItem('luud_pending_abandon');
       } catch (error) { /* sessionStorage indisponível */ }
+    }
+
+    /* -------------------------------------------------------------
+       ROLAGEM — notas de atualização (patch notes)
+       Cada versão do LUUD fica no ar por 52 dias. O calendário abaixo
+       é a FONTE DA VERDADE: o rodapé, o botão da tela inicial e o selo
+       de status derivam da data de hoje, então a troca de versão
+       acontece sozinha à meia-noite do dia marcado (sem deploy).
+
+       COMO PUBLICAR:
+       - Correções urgentes de mecânica entram em produção na hora e
+         são adicionadas como itens na seção "Correções" da versão EM
+         ANDAMENTO (é assim que o jogador sabe que a correção já vale).
+       - Ao planejar uma versão, adicione o objeto dela no calendário
+         com start/end; o conteúdo entra quando ela entra no ar.
+    ------------------------------------------------------------- */
+    const VERSION_ROLLOUT = [
+      {
+        version: '1.0',
+        title: 'Lançamento',
+        start: '2026-11-09',
+        end: '2026-12-31',
+        highlights: [
+          'LUUD no ar: Ludo online com LIGA, ARENA e DUO, além dos modos locais.',
+          'Modo automático (AUTO): o computador rola o dado e escolhe a peça por você.'
+        ],
+        sections: [
+          { kind: 'new', title: 'Novidades', items: [
+            { tag: 'NOVO', text: 'Painel ROLAGEM (esta tela): histórico completo e calendário das versões do jogo.' },
+            { tag: 'NOVO', text: 'Toggle AUTO ao lado do dado, com destaque na cor do jogador.' }
+          ]},
+          { kind: 'fix', title: 'Correções de mecânica', items: [
+            { tag: 'CORREÇÃO', text: 'Modo automático: salvar as quatro peças não dava vitória — os pontos do jogador não entravam no placar do time e a partida nunca terminava.' },
+            { tag: 'CORREÇÃO', text: 'Modo automático: a guia "Turno:" exibia "CPU" na vez do próprio jogador.' },
+            { tag: 'CORREÇÃO', text: 'LIGA: relógio do cliente contava 30s enquanto o servidor expirava aos 10s (o turno trocava aos 20). Agora conta 10s.' },
+            { tag: 'CORREÇÃO', text: 'Regra dos 3 seis: o contador não zerava na troca de turno e penalizava o jogador seguinte com apenas 2 seis próprios.' },
+            { tag: 'CORREÇÃO', text: 'ARENA: colocação final aparecia sempre como "4º LUGAR" no online; no abandono, o 2º a sair recebia "1º lugar".' },
+            { tag: 'CORREÇÃO', text: 'DUO local: o placar somava os pontos do aliado na linha "CPU".' },
+            { tag: 'CORREÇÃO', text: 'Online: o relógio local expirava antes do servidor e apagava as peças clicáveis no meio da vez.' },
+            { tag: 'CORREÇÃO', text: 'Online: jogada recusada pelo anti-cheat deixava o dado travado; o tabuleiro agora destrava sozinho.' },
+            { tag: 'CORREÇÃO', text: 'Cores claras (branco #FFFFFF e próximas) ficavam invisíveis no triângulo central do tabuleiro.' },
+            { tag: 'CORREÇÃO', text: 'Recarregar a tela inicial travava o app (o limite de requisições contava arquivos estáticos).' },
+            { tag: 'CORREÇÃO', text: 'Pausar no instante do timeout cancelava a perda de vez; "joga novamente" não anunciava captura/salvamento.' }
+          ]},
+          { kind: 'security', title: 'Segurança e estabilidade', items: [
+            { tag: 'SEGURANÇA', text: 'Fila da LIGA passou a exigir a sessão autenticada: era possível entrar na fila jogando na conta de outra pessoa.' },
+            { tag: 'SEGURANÇA', text: 'Sessões expiradas voltavam a autenticar com banco Postgres (o token valia para sempre).' },
+            { tag: 'SEGURANÇA', text: 'Mensagem relayada entre jogadores não aceita mais autoria forjada; erros internos não vazam detalhes.' },
+            { tag: 'SEGURANÇA', text: 'Service Worker não guarda mais respostas de API em cache; navegação offline recebe o documento recente.' },
+            { tag: 'ESTABILIDADE', text: 'Três falhas que derrubavam o servidor (desconexão de jogador em sala, take-over e limpeza periódica).' },
+            { tag: 'ESTABILIDADE', text: 'Logins simultâneos não perdem mais a sessão no modo arquivo; dono de sala consegue reentrar após queda.' }
+          ]},
+          { kind: 'polish', title: 'Visual e desempenho', items: [
+            { tag: 'VISUAL', text: 'Favicon da guia com fundo transparente e o vermelho exato do logo (#E01B24).' },
+            { tag: 'VISUAL', text: 'Rodapé com versão clicável e calendário público de versões (52 dias por rolagem).' },
+            { tag: 'PERFORMANCE', text: 'Animações das peças e o relógio do turno custam menos ao celular (menos reflow e escritas no DOM).' },
+            { tag: 'PERFORMANCE', text: 'Cache offline restrito aos assets do jogo; convites de lobby expiram sozinhos.' }
+          ]}
+        ]
+      },
+      { version: '1.1', start: '2027-01-01', end: '2027-02-21' },
+      { version: '1.2', start: '2027-02-22', end: '2027-04-14' },
+      { version: '1.3', start: '2027-04-15', end: '2027-06-05' },
+      { version: '1.4', start: '2027-06-06', end: '2027-07-27' },
+      { version: '1.5', start: '2027-07-28', end: '2027-09-17' },
+      { version: '1.6', start: '2027-09-18', end: '2027-11-08' },
+      { version: '2.0', title: 'A Grande Rolagem', start: '2027-11-09', end: '2027-12-31', major: true }
+    ];
+
+    // Estilo por tipo de seção (texto do título + chip do item)
+    const ROLAGEM_KIND_STYLES = {
+      new:      { title: 'text-emerald-300', chip: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40' },
+      fix:      { title: 'text-red-300',     chip: 'bg-red-500/15 text-red-300 border-red-500/40' },
+      security: { title: 'text-amber-300',   chip: 'bg-amber-500/15 text-amber-300 border-amber-500/40' },
+      polish:   { title: 'text-sky-300',     chip: 'bg-sky-500/15 text-sky-300 border-sky-500/40' }
+    };
+
+    function parseRolagemDate(value) {
+      const [year, month, day] = String(value).split('-').map(Number);
+      return new Date(year, month - 1, day);
+    }
+
+    // Status derivado da data: encerrada / atual / programada
+    function rolagemStatusFor(entry, today = new Date()) {
+      const start = parseRolagemDate(entry.start);
+      const endExclusive = parseRolagemDate(entry.end);
+      endExclusive.setDate(endExclusive.getDate() + 1); // fim é inclusivo
+      if (today < start) return 'planned';
+      if (today >= endExclusive) return 'past';
+      return 'current';
+    }
+
+    function getCurrentRolagemEntry() {
+      const today = new Date();
+      return VERSION_ROLLOUT.find(entry => rolagemStatusFor(entry, today) === 'current') || VERSION_ROLLOUT[0];
+    }
+
+    function formatRolagemRange(entry) {
+      const options = { day: '2-digit', month: '2-digit', year: 'numeric' };
+      const start = parseRolagemDate(entry.start).toLocaleDateString('pt-BR', options);
+      const end = parseRolagemDate(entry.end).toLocaleDateString('pt-BR', options);
+      return `${start} — ${end}`;
+    }
+
+    function rolagemStatusBadge(status) {
+      if (status === 'current') return '<span class="shrink-0 px-2 py-1 bg-emerald-500/20 border border-emerald-500/50 text-emerald-300 text-[10px] font-black tracking-widest">NO AR</span>';
+      if (status === 'planned') return '<span class="shrink-0 px-2 py-1 bg-slate-700/60 border border-slate-600 text-slate-400 text-[10px] font-black tracking-widest">PROGRAMADA</span>';
+      return '<span class="shrink-0 px-2 py-1 bg-slate-800 border border-slate-700 text-slate-500 text-[10px] font-black tracking-widest">ENCERRADA</span>';
+    }
+
+    function renderRolagemSection(section) {
+      const style = ROLAGEM_KIND_STYLES[section.kind] || ROLAGEM_KIND_STYLES.polish;
+      const items = (section.items || []).map(item => `
+          <li class="flex items-start gap-2 text-xs text-slate-300 leading-snug">
+            <span class="shrink-0 mt-px px-1.5 py-0.5 border text-[9px] font-black tracking-wider ${style.chip}">${item.tag}</span>
+            <span>${item.text}</span>
+          </li>`).join('');
+      return `
+          <div class="mt-3">
+            <p class="text-[11px] font-black uppercase tracking-widest ${style.title}">${section.title}</p>
+            <ul class="mt-2 space-y-1.5">${items}</ul>
+          </div>`;
+    }
+
+    function renderRolagemEntry(entry, status) {
+      const isCurrent = status === 'current';
+      const isPlanned = status === 'planned';
+      const versionColor = isCurrent ? 'text-amber-400' : (isPlanned ? 'text-slate-500' : 'text-slate-300');
+      const border = isCurrent ? 'border-amber-500/50 bg-amber-500/5' : 'border-slate-700 bg-slate-900/40';
+      const majorBadge = entry.major ? '<span class="shrink-0 px-2 py-1 bg-purple-500/20 border border-purple-500/50 text-purple-300 text-[10px] font-black tracking-widest">MAJOR</span>' : '';
+
+      let body = '';
+      if (isPlanned && !(entry.sections && entry.sections.length)) {
+        body = '<p class="mt-3 text-xs text-slate-500 italic">Rolagem programada: as novidades desta versão serão publicadas aqui quando ela entrar no ar.</p>';
+      } else {
+        const highlights = (entry.highlights || []).map(text => `
+            <li class="flex items-start gap-2 text-xs text-slate-200 leading-snug font-medium">
+              <span class="text-amber-400 mt-px" aria-hidden="true">▸</span>
+              <span>${text}</span>
+            </li>`).join('');
+        body = `
+          ${highlights ? `<ul class="mt-3 space-y-1.5">${highlights}</ul>` : ''}
+          ${(entry.sections || []).map(renderRolagemSection).join('')}`;
+      }
+
+      return `
+        <article class="border ${border} p-4 rounded">
+          <div class="flex items-start justify-between gap-3">
+            <div class="flex items-baseline gap-3 min-w-0">
+              <span class="font-oswald font-black text-3xl leading-none ${versionColor}">${entry.version}</span>
+              <div class="min-w-0">
+                ${entry.title ? `<p class="font-bold text-sm text-slate-100 truncate">${entry.title}</p>` : ''}
+                <p class="text-[11px] text-slate-400 font-mono">${formatRolagemRange(entry)} · 52 dias</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-1.5">${majorBadge}${rolagemStatusBadge(status)}</div>
+          </div>
+          ${body}
+        </article>`;
+    }
+
+    function renderRolagem() {
+      const container = document.getElementById('rolagem-content');
+      if (!container) return;
+      const today = new Date();
+      const statusOf = entry => rolagemStatusFor(entry, today);
+      // Ordem de leitura: a rolagem NO AR primeiro, depois as programadas
+      // (da mais distante para a próxima) e por fim as encerradas
+      const ordered = [
+        ...VERSION_ROLLOUT.filter(entry => statusOf(entry) === 'current'),
+        ...VERSION_ROLLOUT.filter(entry => statusOf(entry) === 'planned').reverse(),
+        ...VERSION_ROLLOUT.filter(entry => statusOf(entry) === 'past').reverse()
+      ];
+      container.innerHTML = ordered
+        .map(entry => renderRolagemEntry(entry, statusOf(entry)))
+        .join('');
+    }
+
+    function openRolagem() {
+      gameAudio.playClick();
+      renderRolagem();
+      document.getElementById('rolagem-modal').classList.remove('hidden');
+    }
+
+    function closeRolagem() {
+      document.getElementById('rolagem-modal').classList.add('hidden');
+    }
+
+    // Versão atual nos textos fixos (rodapé e tela inicial): deriva do
+    // calendário, então a virada de versão acontece sozinha
+    function syncRolagemVersionLabels() {
+      const current = getCurrentRolagemEntry();
+      const label = `v${current.version}`;
+      const footerBtn = document.getElementById('footer-version-btn');
+      if (footerBtn) footerBtn.textContent = label;
+      const setupLabel = document.getElementById('setup-rolagem-version');
+      if (setupLabel) setupLabel.textContent = label;
+      const yearEl = document.getElementById('footer-year');
+      if (yearEl) yearEl.textContent = String(new Date().getFullYear());
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', syncRolagemVersionLabels);
+    } else {
+      syncRolagemVersionLabels();
     }
 
     /* -------------------------------------------------------------
