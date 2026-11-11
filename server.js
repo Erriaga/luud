@@ -147,6 +147,12 @@ const RATE_LIMIT_MAX_MESSAGES = 60;
 const ROOM_TURN_TIMEOUT_MS = 30 * 1000;
 // Tempo máximo de turno para partidas classificatorias da Liga (mais curto)
 const LEAGUE_TURN_TIMEOUT_MS = 10 * 1000;
+// Janela de graça depois que o relógio do turno acaba: quando o tempo do
+// jogador acaba, o cliente liga o modo AUTOMÁTICO e a jogada da CPU chega
+// logo em seguida (o relógio do cliente roda um pouco atrasado em relação
+// ao do servidor, por causa da latência da rede). Sem essa janela, o
+// servidor passaria a vez antes de a jogada automática chegar.
+const TURN_GRACE_MS = 5 * 1000;
 // Janela para o jogador autenticado reconectar e retomar a partida
 // (take-over) antes de ser declarado como abandono definitivo
 const TAKEOVER_WINDOW_MS = 60 * 1000;
@@ -485,6 +491,10 @@ function startRoomTurnTimer(room) {
   if (!room || !room.game || room.game.over) return;
   if (!room.game.started) return;
 
+  // Cada fase do turno (sortear o dado, escolher a peça) começa com a
+  // janela de graça disponível
+  room.graceUsed = false;
+
   // Partidas da Liga usam um tempo de turno mais curto (10 segundos)
   const turnTimeout = room.mode === 'liga' ? LEAGUE_TURN_TIMEOUT_MS : ROOM_TURN_TIMEOUT_MS;
 
@@ -496,21 +506,41 @@ function startRoomTurnTimer(room) {
     if (!state || state.over) return;
 
     const slot = state.turn;
-    state.dice = null;
-    state.sixes = 0;
-    const next = rules.nextSlot(state, slot);
-    state.turn = next;
 
-    console.warn(`[anti-cheat] tempo do turno esgotado - sala ${room.code || ''} slot=${slot}`);
-    broadcastRoomGame(room, {
-      type: 'turn_passed',
-      slot,
-      reason: 'timeout',
-      turn: next,
-      scores: state.scores
-    });
-    startRoomTurnTimer(room);
+    // Janela de graça: o tempo do jogador acabou no cliente (que liga o
+    // automático para a CPU jogar por ele) e a jogada está a caminho.
+    // Espera alguns instantes antes de passar a vez.
+    if (!room.graceUsed) {
+      room.graceUsed = true;
+      room.turnTimer = setTimeout(() => passTurnAfterTimeout(room, slot), TURN_GRACE_MS);
+      return;
+    }
+
+    passTurnAfterTimeout(room, slot);
   }, turnTimeout);
+}
+
+// Passa a vez do jogador que deixou o tempo acabar (chamado depois da
+// janela de graça, quando nenhuma jogada chegou)
+function passTurnAfterTimeout(room, slot) {
+  const state = room.game;
+  if (!state || state.over) return;
+  if (Number(state.turn) !== Number(slot)) return; // o turno já mudou
+
+  state.dice = null;
+  state.sixes = 0;
+  const next = rules.nextSlot(state, slot);
+  state.turn = next;
+
+  console.warn(`[anti-cheat] tempo do turno esgotado - sala ${room.code || ''} slot=${slot}`);
+  broadcastRoomGame(room, {
+    type: 'turn_passed',
+    slot,
+    reason: 'timeout',
+    turn: next,
+    scores: state.scores
+  });
+  startRoomTurnTimer(room);
 }
 
 // Registro das mensagens rejeitadas (tentativas de manipulação)

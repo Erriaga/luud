@@ -1791,6 +1791,15 @@
     let autoPlayTimer = null; // timer para rolagem automática do dado
     let autoAttempts = 0; // tentativas automáticas sem confirmação do servidor
     let autoMoveTimer = null; // rede de segurança da jogada automática online
+    // AUTO por ausência: quando o relógio do turno acaba sem ação do
+    // jogador, o automático assume (o toggle liga sozinho) e a CPU joga
+    // por ele até o jogador voltar e desligar o toggle.
+    // - autoPlayEngagedForTurn: o automático já foi ligado neste turno
+    // - autoPlayOptOutForTurn: o jogador voltou e desligou o toggle neste
+    //   turno (aí o automático não é religado até a próxima vez dele)
+    let autoPlayEngagedForTurn = false;
+    let autoPlayOptOutForTurn = false;
+    let autoLocalMoveScheduled = false; // evita agendar duas jogadas automáticas
     // ARENA: ordem em que os jogadores terminam (salvam todas as peças)
     let arenaFinishedOrder = []; // array de chaves de cor na ordem de conclusão
     // ARENA: ordem de abandono (para atribuição de colocações por desistência)
@@ -3203,6 +3212,10 @@
         // Trocou o turno: a contagem de seis do jogador anterior não deve
         // "vazar" para o próximo (era global e contaminava a vez dele)
         consecutiveSixes = 0;
+        // Novo turno do servidor: o automático pode ser ligado de novo
+        // se o jogador deixar o tempo acabar.
+        autoPlayEngagedForTurn = false;
+        autoPlayOptOutForTurn = false;
       }
       // O turno pode ter voltado para o jogador local: com o automático
       // ligado, a próxima rolagem acontece sozinha.
@@ -4428,6 +4441,16 @@
       renderTurnTimer();
     }
 
+    // O tempo do jogador acabou: em vez de perder a vez, o AUTOMÁTICO
+    // assume (o toggle liga sozinho) e a CPU joga por ele. O jogador
+    // pode voltar a qualquer momento e desligar o toggle para assumir o
+    // controle da partida.
+    function engageAutoPlayForTurn() {
+      autoPlayEngagedForTurn = true;
+      setAutoPlay(true);
+      logStatus('⏱️ Tempo esgotado! O AUTO foi ligado e a CPU vai jogar por você. Desligue o AUTO para retomar o controle.');
+    }
+
     function onTurnTimeout() {
       if (turnTimer.mirrored) return; // o oponente cuida do próprio tempo
       if (turnTimer.expired || isPaused || !isHumanTurn()) return;
@@ -4445,8 +4468,33 @@
       turnTimer.expired = true;
       renderTurnTimer();
 
-      gameAudio.playNoMove();
+      // O jogador não jogou a tempo: em vez de perder a vez, o AUTOMÁTICO
+      // assume (o toggle liga sozinho) e a CPU joga por ele. O jogador
+      // pode voltar a qualquer momento e desligar o toggle para assumir.
+      if (!isAutoPlay && !autoPlayOptOutForTurn) {
+        engageAutoPlayForTurn();
+        // O relógio não pode ficar marcado como "expirado": a jogada
+        // automática ainda vai sair (no online, dentro da janela de graça
+        // que o servidor dá para ela).
+        turnTimer.expired = false;
+        renderTurnTimer();
+        return;
+      }
 
+      if (isAutoPlay) {
+        // O automático já estava ligado: a CPU assume esta jogada agora.
+        logStatus('⏱️ Tempo esgotado! O automático vai jogar por você.');
+        const instruction = document.getElementById('dice-instruction');
+        if (instruction) instruction.textContent = 'O automático está jogando...';
+        // Garante que a jogada automática dispare: online pede a rolagem
+        // (ou escolhe a peça, se o dado já tinha saído); local escolhe a
+        // peça destacada na tela.
+        syncAutoPlay();
+        return;
+      }
+
+      // O jogador voltou (desligou o automático) e mesmo assim deixou o
+      // tempo acabar: aí a vez é perdida, como sempre foi.
       if (isOnlineGame) {
         // No modo online o tempo é controlado pelo servidor: o cliente
         // apenas avisa e espera a mensagem 'turn_passed' (nada é enviado).
@@ -4462,6 +4510,7 @@
       }
 
       logStatus('⏱️ Tempo esgotado! Você perdeu a vez.');
+      gameAudio.playNoMove();
       const instruction = document.getElementById('dice-instruction');
       if (instruction) instruction.textContent = 'Tempo esgotado!';
 
@@ -4485,6 +4534,11 @@
 
     function syncTurnTimerWithTurn() {
       const player = getCurrentPlayer();
+      if (!player) {
+        // Partida ainda não configurada (ou já encerrada): sem relógio
+        stopTurnTimer();
+        return;
+      }
       const color = getPlayerColor(player);
       const root = document.getElementById('turn-timer');
       if (root) root.style.setProperty('--timer-color', color.hex);
@@ -4722,7 +4776,19 @@
     ------------------------------------------------------------- */
 
     function toggleAutoPlay() {
-      setAutoPlay(!isAutoPlay);
+      const next = !isAutoPlay;
+      setAutoPlay(next);
+
+      if (!next) {
+        // O jogador voltou e assumiu o controle: o automático não é
+        // religado até a próxima vez dele (a marcação vale só para este
+        // turno) e o relógio volta a contar para a jogada.
+        autoPlayOptOutForTurn = true;
+        if (!isOnlineGame && !isPaused && !isAnimating && !hasRolled && isHumanTurn()) {
+          turnTimer.expired = false;
+          startTurnTimer();
+        }
+      }
     }
 
     // Liga/desliga o modo automático (e mantém o toggle visual em dia)
@@ -4771,12 +4837,18 @@
       if (humanKey && !isOnlineGame) playerTypes[humanKey] = 'AUTO';
       autoAttempts = 0;
       syncAutoPlay();
+      // Partida local: com o humano virando CPU, o relógio do turno para
+      // (é a CPU que joga). No online o relógio é do servidor e não é
+      // reiniciado aqui (senão o cliente contaria mais tempo que ele).
+      if (!isOnlineGame) syncTurnTimerWithTurn();
     }
 
     function disableAutoPlay() {
       const humanKey = getHumanPlayerKey();
       if (humanKey && !isOnlineGame) playerTypes[humanKey] = 'HUMAN';
       stopAutoPlayTimer();
+      // Partida local: o relógio volta para o humano (se for a vez dele)
+      if (!isOnlineGame) syncTurnTimerWithTurn();
     }
 
     /* -------------------------------------------------------------
@@ -4797,9 +4869,24 @@
       if (hasRolled) {
         // O dado já foi sorteado: no modo online o servidor informou as peças
         // legais, então a jogada automática pode ser feita agora.
-        if (isOnlineGame && onlineServerLegal.length) {
-          makeAutoOnlineMove(onlineServerLegal);
+        if (isOnlineGame) {
+          if (onlineServerLegal.length) {
+            makeAutoOnlineMove(onlineServerLegal);
+          }
+          return;
         }
+        // Partida local: falta escolher a peça. O automático escolhe a
+        // melhor e move - cobre também o caso em que o tempo acabou
+        // depois do dado, com as peças destacadas na tela.
+        const validTokens = getValidTokenIndices(humanKey, diceValue);
+        if (!validTokens.length || autoLocalMoveScheduled) return;
+        autoLocalMoveScheduled = true;
+        schedule(() => {
+          autoLocalMoveScheduled = false;
+          if (!isAutoPlay || isPaused || isAnimating) return;
+          if (getCurrentPlayer() !== humanKey) return;
+          makeCPUMove(validTokens);
+        }, 600);
         return;
       }
 
@@ -5609,6 +5696,11 @@
       // O contador de "3 seis consecutivos" vale para a sequência de
       // jogadas do MESMO jogador (turnos extras): trocou a vez, zera
       consecutiveSixes = 0;
+      // Novo turno: o automático pode ser ligado de novo se o jogador
+      // deixar o tempo acabar (a marcação de "voltou e desligou" vale
+      // apenas para o turno em que ele voltou).
+      autoPlayEngagedForTurn = false;
+      autoPlayOptOutForTurn = false;
       currentTurnIndex = (currentTurnIndex + 1) % activePlayers.length;
       updateTurnUI();
       checkCPUTurn();
@@ -5629,6 +5721,9 @@
 
       // Reseta o modo automático ao iniciar uma nova partida
       setAutoPlay(false);
+      autoPlayEngagedForTurn = false;
+      autoPlayOptOutForTurn = false;
+      autoLocalMoveScheduled = false;
 
       // Partidas locais: quem tem conta Google joga com a cor primária
       // do perfil (a seleção da tela inicial fica oculta para logados).
@@ -7226,7 +7321,8 @@
         sections: [
           { kind: 'new', title: 'Novidades', items: [
             { tag: 'NOVO', text: 'Painel ROLAGEM (esta tela): histórico completo e calendário das versões do jogo.' },
-            { tag: 'NOVO', text: 'Toggle AUTO ao lado do dado, com destaque na cor do jogador.' }
+            { tag: 'NOVO', text: 'Toggle AUTO ao lado do dado, com destaque na cor do jogador.' },
+            { tag: 'NOVO', text: 'Tempo esgotado não custa mais a vez: o toggle AUTO liga sozinho e a CPU joga por você até você voltar e desligar o AUTO (vale para todos os modos, inclusive o online).' }
           ]},
           { kind: 'fix', title: 'Correções de mecânica', items: [
             { tag: 'CORREÇÃO', text: 'Modo automático: salvar as quatro peças não dava vitória — os pontos do jogador não entravam no placar do time e a partida nunca terminava.' },
