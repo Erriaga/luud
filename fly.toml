@@ -1,13 +1,19 @@
-app = 'luud-server'
-primary_region = 'gru'
+app = "luud-server"
+primary_region = "gru"
 
 [build]
-  dockerfile = 'Dockerfile'
+  dockerfile = "Dockerfile"
 
-[deploy]
 [env]
-  PORT = '4000'
+  PORT = "4000"
+
+[http_service]
+  internal_port = 4000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
 
 [[vm]]
-  size = 'shared-cpu-1x'
-  memory = '256'
+  size = "shared-cpu-1x"
+  memory = "256"
