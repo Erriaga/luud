@@ -2442,7 +2442,7 @@
     const ICON_CRISTAL = '<img src="/assets/cristal.svg" alt="Cristal" class="coin-icon" title="Cristais">';
     const ICON_XP = '<img src="/assets/xp.svg" alt="XP" class="coin-icon" title="XP">';
     const ICON_STREAK = '<img src="/assets/streak.svg" alt="Sequência" class="coin-icon" title="Sequência de logins diários">';
-    const ICON_COMPENSATOR = '<img src="/assets/compensador.svg" alt="Compensador" class="coin-icon" title="Compensador de login">';
+    const ICON_COMPENSATOR = '<img src="/assets/compensador.svg" alt="Compensador" class="w-7 h-7 shrink-0" title="Compensador de login">';
 
     const SHOP_RARITY_STYLES = {
       common: { chip: 'bg-slate-700/60 text-slate-300 border-slate-600', label: 'Comum' },
@@ -5623,7 +5623,7 @@
         if (item.today && !item.claimed) {
           action = `<button type="button" onclick="claimDailyReward()" class="mt-1 w-full py-1 bg-amber-400 hover:bg-amber-300 text-slate-900 font-black text-[10px] tracking-wider transition">RESGATAR</button>`;
         } else if (item.missed && item.canCompensate) {
-          action = `<button type="button" onclick="claimDailyReward('${item.date}')" class="mt-1 w-full py-1 bg-slate-700 hover:bg-slate-600 text-amber-300 border border-amber-500/40 font-black text-xs tracking-wider transition"><span class="inline-flex items-center justify-center gap-1">1 compensador ${ICON_COMPENSATOR}</span></button>`;
+          action = `<button type="button" onclick="claimDailyReward('${item.date}')" class="mt-1 w-full py-1 bg-slate-700 hover:bg-slate-600 text-amber-300 border border-amber-500/40 font-black text-xs tracking-wider transition"><span class="inline-flex items-center justify-center gap-1">1 ${ICON_COMPENSATOR}</span></button>`;
         }
 
         return `
@@ -5641,7 +5641,7 @@
           <p class="text-sm font-bold uppercase tracking-wider text-slate-300">
             ${formatShortDate(daily.weekKey)} — ${formatShortDate(weekEnd)}
           </p>
-          <p class="text-xs text-slate-500 flex items-center gap-1">${tokens} compensador(es) ${ICON_COMPENSATOR}</p>
+          <p class="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1">${tokens} ${ICON_COMPENSATOR}</p>
         </div>`;
 
       const hint = daily.missedDays && daily.missedDays.length
