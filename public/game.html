@@ -3006,7 +3006,7 @@
       if (rewardsData) {
         resourceRows.push({ icon: ICON_STREAK, title: 'Sequência de logins diários', text: `${Number(daily.streak) || 0} dia(s) resgatado(s) na semana` });
         resourceRows.push({ icon: ICON_COMPENSATOR, title: 'Compensadores de login', text: `${Number(daily.compensationTokens) || 0} compensador(es) para resgatar dias perdidos` });
-        resourceRows.push({ icon: ICON_XP, title: 'XP total', text: `${Number(rewardsData.xp) || 0} XP` });
+        resourceRows.push({ icon: ICON_XP, title: 'XP total', text: `${Number(rewardsData.xp) || 0}` });
       }
       if (resourceRows.length) {
         cards.push(`
@@ -5576,7 +5576,7 @@
           <span title="Ludas: moeda gratuita" class="flex items-center gap-1">${ICON_LUDA} ${(data && data.coins) || 0}</span>
           <span title="Cristais: moeda premium" class="flex items-center gap-1">${ICON_CRISTAL} ${(data && data.crystals) || 0}</span>
           <span title="Nível" class="flex items-center gap-1">🏅 ${(data && data.level) || 1}</span>
-          <span title="XP total" class="flex items-center gap-1">${ICON_XP} ${(data && data.xp) || 0} XP</span>
+          <span title="XP total" class="flex items-center gap-1">${ICON_XP} ${(data && data.xp) || 0}</span>
           <span title="Sequência de logins diários" class="flex items-center gap-1">${ICON_STREAK} ${streak}</span>
         </div>`;
     }
@@ -5630,7 +5630,7 @@
           <div class="${tone} border-2 p-2 text-center flex flex-col">
             <p class="text-[10px] font-bold tracking-wider text-slate-400">${item.label || '—'}</p>
             <p class="text-base font-black text-amber-300 flex items-center justify-center gap-1">${ICON_LUDA} ${item.coins}</p>
-            <p class="text-[10px] text-slate-400 flex items-center justify-center gap-1">${ICON_XP} ${item.xp} XP</p>
+            <p class="text-[10px] text-slate-400 flex items-center justify-center gap-1">${ICON_XP} ${item.xp}</p>
             <p class="text-[10px] font-bold ${labelTone}">${label}</p>
             ${action}
           </div>`;
@@ -5694,7 +5694,7 @@
               </div>
               <div class="flex items-center justify-between text-[10px] text-slate-400">
                 <span>${stateLabel}</span>
-                <span class="flex items-center gap-1">${ICON_LUDA} ${item.coins} · ${ICON_XP} ${item.xp} XP</span>
+                <span class="flex items-center gap-1">${ICON_LUDA} ${item.coins} · ${ICON_XP} ${item.xp}</span>
               </div>
             </div>`;
         }).join('');
@@ -6329,7 +6329,7 @@
           ? '<span class="text-[11px] font-black tracking-wider text-emerald-400">RESGATADO</span>'
           : item.canClaim
             ? `<button type="button" onclick="claimSeasonReward(${item.level})" class="w-full py-1 bg-amber-400 hover:bg-amber-300 text-slate-900 font-black text-[11px] tracking-wider transition">RESGATAR</button>`
-            : `<span class="text-[11px] font-bold text-slate-500 flex items-center justify-center gap-1">${ICON_XP} ${item.requiredXp} XP</span>`;
+            : `<span class="text-[11px] font-bold text-slate-500 flex items-center justify-center gap-1">${ICON_XP} ${item.requiredXp}</span>`;
         return `
           <div class="${tone} border-2 p-2 text-center flex flex-col gap-1">
             <p class="text-[11px] font-bold tracking-widest text-slate-400">NÍVEL ${item.level}</p>
