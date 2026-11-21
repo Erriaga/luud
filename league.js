@@ -195,6 +195,30 @@ function describeStanding(standing) {
   };
 }
 
+/**
+ * Regras do sistema de tiers em formato de dados, para a tela
+ * explicativa do cliente. Os números saem daqui (fonte da verdade) -
+ * o cliente não inventa pontuação nem nomes de tier.
+ */
+function describeGuide() {
+  return {
+    tiers: TIERS.map(tier => ({ tier, color: TIER_COLORS[tier], points: TIER_POINTS })),
+    pointsPerTier: TIER_POINTS,
+    promotionWins: PROMOTION_WINS,
+    promotionLosses: PROMOTION_LOSSES,
+    seriesLossPoints: SERIES_LOSS_POINTS,
+    ssRankingSize: SS_RANKING_SIZE,
+    matchTarget: MATCH_TARGET,
+    // Tabela de pontos por placar (vitória): a derrota tira o mesmo valor
+    pointsTable: [
+      { score: `${MATCH_TARGET} x 0`, points: pointsDelta(MATCH_TARGET, 0) },
+      { score: `${MATCH_TARGET} x 1`, points: pointsDelta(MATCH_TARGET, 1) },
+      { score: `${MATCH_TARGET} x 2`, points: pointsDelta(MATCH_TARGET, 2) },
+      { score: `${MATCH_TARGET} x 3`, points: pointsDelta(MATCH_TARGET, 3) }
+    ]
+  };
+}
+
 module.exports = {
   TIERS,
   TIER_COLORS,
@@ -214,5 +238,6 @@ module.exports = {
   clampPoints,
   seriesDecision,
   applyMatchResult,
-  describeStanding
+  describeStanding,
+  describeGuide
 };

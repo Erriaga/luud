@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <!-- Gradiente principal da mesa (centro) -->
+    <linearGradient id="emerald-table" x1="15%" y1="10%" x2="85%" y2="90%">
+      <stop offset="0%" stop-color="#80FFBA" />
+      <stop offset="40%" stop-color="#10B981" />
+      <stop offset="100%" stop-color="#047857" />
+    </linearGradient>
+
+    <!-- Facetas claras (topo/esquerda) -->
+    <linearGradient id="facet-light" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#D1FAE5" />
+      <stop offset="100%" stop-color="#34D399" />
+    </linearGradient>
+
+    <!-- Facetas médias (laterais) -->
+    <linearGradient id="facet-mid" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#10B981" />
+      <stop offset="100%" stop-color="#059669" />
+    </linearGradient>
+
+    <!-- Facetas escuras (base/direita) -->
+    <linearGradient id="facet-dark" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#065F46" />
+      <stop offset="100%" stop-color="#022C22" />
+    </linearGradient>
+  </defs>
+
+  <!-- Sombra sutil de profundidade -->
+  <polygon points="44,14 84,14 108,38 108,94 84,118 44,118 20,94 20,38" fill="#011F18" />
+
+  <!-- Contorno externo da gema -->
+  <g stroke="#022C22" stroke-width="2.2" stroke-linejoin="round">
+    <!-- Faceta Superior -->
+    <polygon points="44,10 84,10 74,28 54,28" fill="url(#facet-light)" />
+    <!-- Faceta Superior-Esquerda -->
+    <polygon points="20,34 44,10 54,28 38,44" fill="#A7F3D0" />
+    <!-- Faceta Superior-Direita -->
+    <polygon points="84,10 108,34 90,44 74,28" fill="url(#facet-mid)" />
+    <!-- Faceta Esquerda -->
+    <polygon points="20,34 38,44 38,84 20,94" fill="url(#facet-mid)" />
+    <!-- Faceta Direita -->
+    <polygon points="108,34 108,94 90,84 90,44" fill="url(#facet-dark)" />
+    <!-- Faceta Inferior-Esquerda -->
+    <polygon points="20,94 38,84 54,100 44,114" fill="#059669" />
+    <!-- Faceta Inferior-Direita -->
+    <polygon points="90,84 108,94 84,114 74,100" fill="#022C22" />
+    <!-- Faceta Inferior -->
+    <polygon points="54,100 74,100 84,114 44,114" fill="url(#facet-dark)" />
+
+    <!-- Mesa central (topo plano da pedra) -->
+    <polygon points="54,28 74,28 90,44 90,84 74,100 54,100 38,84 38,44" fill="url(#emerald-table)" />
+  </g>
+
+  <!-- Linhas internas de brilho (arestas da lapidação) -->
+  <polyline points="38,84 38,44 54,28 74,28 90,44" fill="none" stroke="#ECFDF5" stroke-width="1.5" stroke-opacity="0.75" stroke-linecap="round" />
+
+  <!-- Reflexo diagonal translúcido na mesa -->
+  <polygon points="43,46 56,33 68,33 43,58" fill="#FFFFFF" opacity="0.45" />
+  <polygon points="43,64 74,33 78,37 43,72" fill="#FFFFFF" opacity="0.2" />
+
+  <!-- Estrela de brilho (sparkle) no canto superior esquerdo -->
+  <path d="M 34 22 Q 34 30 42 30 Q 34 30 34 38 Q 34 30 26 30 Q 34 30 34 22 Z" fill="#FFFFFF" />
+</svg>

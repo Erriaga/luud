@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <!-- Gradiente externo da chama -->
+    <linearGradient id="flame-outer" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#FF9E00" />
+      <stop offset="50%" stop-color="#FF5400" />
+      <stop offset="100%" stop-color="#BD1F00" />
+    </linearGradient>
+
+    <!-- Gradiente intermediário -->
+    <linearGradient id="flame-mid" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#FFE600" />
+      <stop offset="100%" stop-color="#FF7B00" />
+    </linearGradient>
+
+    <!-- Gradiente do núcleo quente -->
+    <linearGradient id="flame-core" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="100%" stop-color="#FFF066" />
+    </linearGradient>
+  </defs>
+
+  <!-- Sombra de base (espessura 3D sutil, igual às moedas) -->
+  <path d="M 64 14 C 64 14, 98 46, 98 82 C 98 104, 83 120, 64 120 C 45 120, 30 104, 30 82 C 30 67, 38 54, 45 45 C 43 56, 48 63, 53 63 C 48 45, 56 26, 64 14 Z" fill="#590D00" />
+
+  <!-- Corpo principal da chama -->
+  <path d="M 64 10 C 64 10, 98 42, 98 78 C 98 100, 83 116, 64 116 C 45 116, 30 100, 30 78 C 30 63, 38 50, 45 41 C 43 52, 48 59, 53 59 C 48 41, 56 22, 64 10 Z" fill="url(#flame-outer)" stroke="#4D0B00" stroke-width="2.5" stroke-linejoin="round" />
+
+  <!-- Camada intermediária -->
+  <path d="M 64 36 C 64 36, 86 58, 86 82 C 86 98, 76 110, 64 110 C 52 110, 42 98, 42 82 C 42 71, 47 62, 52 56 C 51 64, 54 68, 57 68 C 54 56, 59 44, 64 36 Z" fill="url(#flame-mid)" />
+
+  <!-- Núcleo brilhante -->
+  <path d="M 64 62 C 64 62, 76 75, 76 90 C 76 100, 71 106, 64 106 C 57 106, 52 100, 52 90 C 52 75, 64 62, 64 62 Z" fill="url(#flame-core)" />
+
+  <!-- Reflexo especular na curva direita -->
+  <path d="M 73 30 C 82 42, 90 58, 90 74 C 90 60, 82 44, 73 30 Z" fill="#FFFFFF" opacity="0.55" />
+</svg>

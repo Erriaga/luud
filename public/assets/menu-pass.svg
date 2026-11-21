@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <g fill="none" stroke="#FFFFFF" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round">
+    
+    <path d="M 24 44 L 94 20 C 97 19, 100 21, 101 24 L 104 32 C 99 34, 97 39, 99 44 C 101 49, 106 51, 111 49 L 114 57" />
+
+    
+    <path d="M 20 44 L 108 44 C 111 44, 114 47, 114 50 L 114 60 C 107 60, 102 65, 102 72 C 102 79, 107 84, 114 84 L 114 94 C 114 97, 111 100, 108 100 L 20 100 C 17 100, 14 97, 14 94 L 14 84 C 21 84, 26 79, 26 72 C 26 65, 21 60, 14 60 L 14 50 C 14 47, 17 44, 20 44 Z" />
+
+    
+    <line x1="46" y1="46" x2="46" y2="98" stroke-dasharray="7 8" />
+  </g>
+</svg>

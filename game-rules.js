@@ -268,6 +268,60 @@ function applyMove(state, slot, tokenIdx) {
 }
 
 /**
+ * Escolhe a melhor peça para o bot que assumiu um slot abandoned:
+ * prioriza capturar, depois salvar a peça e por fim avançar a peça
+ * mais adiantada. Devolve -1 quando não há jogada legal.
+ */
+function chooseBotTokenIndex(state, slot, roll) {
+  const color = colorOfSlot(state, slot);
+  if (!color) return -1;
+
+  const legal = validTokenIndices(state, slot, roll);
+  if (!legal.length) return -1;
+
+  const tokens = state.tokens[color] || [];
+  let bestIndex = -1;
+  let bestScore = -Infinity;
+
+  legal.forEach(idx => {
+    const from = tokens[idx];
+    const to = from === -1 ? 0 : from + roll;
+    let score = 0;
+
+    // Captura: derruba uma peça adversária
+    if (to < FIRST_HOME_POSITION && !isSafeCell(color, to)) {
+      const mainIdx = mainPathIndex(color, to);
+      state.slots.forEach(other => {
+        if (other.color === color) return;
+        if (isSameTeam(state, color, other.color)) return;
+        (state.tokens[other.color] || []).forEach(pos => {
+          if (pos >= 0 && pos < FIRST_HOME_POSITION && mainPathIndex(other.color, pos) === mainIdx) {
+            score += 120;
+          }
+        });
+      });
+    }
+
+    // Salvar a peça (última casa) vale muito
+    if (to === FINAL_POSITION) score += 90;
+    else if (to >= FIRST_HOME_POSITION) score += 45;
+
+    // Peça mais avançada no percurso
+    score += to === 0 ? 10 : to;
+
+    // Sair da base com 6 abre mais caminhos
+    if (from === -1) score += 8;
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestIndex = idx;
+    }
+  });
+
+  return bestIndex;
+}
+
+/**
  * Próximo slot na ordem do turno.
  */
 function nextSlot(state, slot) {
@@ -338,6 +392,7 @@ module.exports = {
   rollForTurn,
   validTokenIndices,
   applyMove,
+  chooseBotTokenIndex,
   nextSlot,
   checkWinner,
   teamStandings,

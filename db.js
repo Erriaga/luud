@@ -15,6 +15,10 @@ const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
 const MATCHES_FILE = path.join(DATA_DIR, 'matches.json');
 const PAYMENTS_FILE = path.join(DATA_DIR, 'payments.json');
 const LEAGUE_FILE = path.join(DATA_DIR, 'league.json');
+// Progresso do jogador: moedas, XP, baú diário e missões (roadmap #6/#7)
+const PROGRESS_FILE = path.join(DATA_DIR, 'progress.json');
+// Torneios com horário marcado (roadmap #10)
+const TOURNAMENTS_FILE = path.join(DATA_DIR, 'tournaments.json');
 
 let pool = null;
 let dbAvailable = false; // true quando o banco externo respondeu bem alguma vez
@@ -93,7 +97,10 @@ function getPool() {
 async function readJsonFile(filePath) {
   try {
     const content = await fs.readFile(filePath, 'utf8');
-    return JSON.parse(content || '{}');
+    // Remove o BOM (UTF-8 com BOM): o JSON.parse falha com ele e o arquivo
+    // inteiro seria lido como vazio sem nenhuma indicação do problema
+    const clean = String(content || '').replace(/^\uFEFF/, '');
+    return JSON.parse(clean || '{}');
   } catch (error) {
     return {};
   }
@@ -142,7 +149,8 @@ async function updateJsonFile(filePath, updater) {
 
 function readJsonFileSync(filePath) {
   try {
-    return JSON.parse(fss.readFileSync(filePath, 'utf8') || '{}');
+    const content = String(fss.readFileSync(filePath, 'utf8') || '').replace(/^\uFEFF/, '');
+    return JSON.parse(content || '{}');
   } catch (error) {
     return {};
   }
@@ -226,7 +234,8 @@ async function ensureDatabaseSchema() {
       console.warn('Não foi possível migrar as cores do perfil:', migrationError.message);
     }
 
-    // Tabela de cobranças Pix (pagamento único da Conta Premium)
+    // Tabela de cobranças Pix (pagamento único da Conta Premium e
+    // pacotes de Cristais da loja)
     await createTable('payments', `
       CREATE TABLE IF NOT EXISTS payments (
         id TEXT PRIMARY KEY,
@@ -237,11 +246,25 @@ async function ensureDatabaseSchema() {
         gateway_ref TEXT DEFAULT '',
         copy_paste TEXT DEFAULT '',
         qr_code TEXT DEFAULT '',
+        product_type TEXT DEFAULT 'premium',
+        product_id TEXT DEFAULT '',
+        product_amount INTEGER NOT NULL DEFAULT 0,
+        delivered_at TIMESTAMP,
         created_at TIMESTAMP DEFAULT NOW(),
         expires_at TIMESTAMP DEFAULT NOW(),
         paid_at TIMESTAMP
       );
     `);
+
+    // Migra bancos antigos: produtos da loja e marca de entrega
+    try {
+      await p.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS product_type TEXT DEFAULT 'premium';`);
+      await p.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS product_id TEXT DEFAULT '';`);
+      await p.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS product_amount INTEGER NOT NULL DEFAULT 0;`);
+      await p.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMP;`);
+    } catch (migrationError) {
+      console.warn('Não foi possível migrar a tabela de pagamentos:', migrationError.message);
+    }
 
     await createTable('matches', `
       CREATE TABLE IF NOT EXISTS matches (
@@ -289,6 +312,71 @@ async function ensureDatabaseSchema() {
         created_at TIMESTAMP DEFAULT NOW()
       );
     `);
+
+    // Torneios com horário marcado (roadmap #10): inscrições, chaveamento
+    // e estado de cada edição (scheduled/running/finished).
+    await createTable('tournament_editions', `
+      CREATE TABLE IF NOT EXISTS tournament_editions (
+        id TEXT PRIMARY KEY,
+        tournament_id TEXT NOT NULL,
+        starts_at TIMESTAMP NOT NULL,
+        status TEXT NOT NULL DEFAULT 'scheduled',
+        state JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+
+    // Progresso do jogador: moedas, XP, baú diário e missões (roadmap #6/#7)
+    await createTable('player_progress', `
+      CREATE TABLE IF NOT EXISTS player_progress (
+        user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        coins INTEGER NOT NULL DEFAULT 0,
+        xp INTEGER NOT NULL DEFAULT 0,
+        daily_streak INTEGER NOT NULL DEFAULT 0,
+        last_daily_claim_date DATE,
+        daily_claims JSONB NOT NULL DEFAULT '{}'::jsonb,
+        mission_state JSONB NOT NULL DEFAULT '{}'::jsonb,
+        processed_match_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+        matches_played INTEGER NOT NULL DEFAULT 0,
+        wins INTEGER NOT NULL DEFAULT 0,
+        season_id TEXT,
+        season_xp INTEGER NOT NULL DEFAULT 0,
+        season_claims JSONB NOT NULL DEFAULT '[]'::jsonb,
+        streak_freezes INTEGER NOT NULL DEFAULT 0,
+        compensation_tokens INTEGER NOT NULL DEFAULT 0,
+        xp_boost_until TIMESTAMP,
+        crystals INTEGER NOT NULL DEFAULT 0,
+        shop_state JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+
+    // Migra bancos antigos: colunas novas do progresso do jogador
+    try {
+      await p.query(`ALTER TABLE player_progress ADD COLUMN IF NOT EXISTS coins INTEGER NOT NULL DEFAULT 0;`);
+      await p.query(`ALTER TABLE player_progress ADD COLUMN IF NOT EXISTS xp INTEGER NOT NULL DEFAULT 0;`);
+      await p.query(`ALTER TABLE player_progress ADD COLUMN IF NOT EXISTS daily_streak INTEGER NOT NULL DEFAULT 0;`);
+      await p.query(`ALTER TABLE player_progress ADD COLUMN IF NOT EXISTS last_daily_claim_date DATE;`);
+      await p.query(`ALTER TABLE player_progress ADD COLUMN IF NOT EXISTS daily_claims JSONB NOT NULL DEFAULT '{}'::jsonb;`);
+      await p.query(`ALTER TABLE player_progress ADD COLUMN IF NOT EXISTS mission_state JSONB NOT NULL DEFAULT '{}'::jsonb;`);
+      await p.query(`ALTER TABLE player_progress ADD COLUMN IF NOT EXISTS processed_match_ids JSONB NOT NULL DEFAULT '[]'::jsonb;`);
+      await p.query(`ALTER TABLE player_progress ADD COLUMN IF NOT EXISTS matches_played INTEGER NOT NULL DEFAULT 0;`);
+      await p.query(`ALTER TABLE player_progress ADD COLUMN IF NOT EXISTS wins INTEGER NOT NULL DEFAULT 0;`);
+      await p.query(`ALTER TABLE player_progress ADD COLUMN IF NOT EXISTS season_id TEXT;`);
+      await p.query(`ALTER TABLE player_progress ADD COLUMN IF NOT EXISTS season_xp INTEGER NOT NULL DEFAULT 0;`);
+      await p.query(`ALTER TABLE player_progress ADD COLUMN IF NOT EXISTS season_claims JSONB NOT NULL DEFAULT '[]'::jsonb;`);
+      await p.query(`ALTER TABLE player_progress ADD COLUMN IF NOT EXISTS streak_freezes INTEGER NOT NULL DEFAULT 0;`);
+      await p.query(`ALTER TABLE player_progress ADD COLUMN IF NOT EXISTS compensation_tokens INTEGER NOT NULL DEFAULT 0;`);
+      await p.query(`ALTER TABLE player_progress ADD COLUMN IF NOT EXISTS xp_boost_until TIMESTAMP;`);
+      await p.query(`ALTER TABLE player_progress ADD COLUMN IF NOT EXISTS crystals INTEGER NOT NULL DEFAULT 0;`);
+      await p.query(`ALTER TABLE player_progress ADD COLUMN IF NOT EXISTS shop_state JSONB NOT NULL DEFAULT '{}'::jsonb;`);
+      await p.query(`ALTER TABLE player_progress ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW();`);
+      await p.query(`ALTER TABLE player_progress ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW();`);
+    } catch (migrationError) {
+      console.warn('Não foi possível migrar player_progress:', migrationError.message);
+    }
 
     // Migra bancos antigos: finished_at era TIMESTAMP (sem fuso), o que desloca a data da partida
     try {
@@ -369,6 +457,8 @@ async function ensureDataFiles() {
   if (!fss.existsSync(MATCHES_FILE)) await fs.writeFile(MATCHES_FILE, JSON.stringify({}, null, 2), 'utf8');
   if (!fss.existsSync(PAYMENTS_FILE)) await fs.writeFile(PAYMENTS_FILE, JSON.stringify({}, null, 2), 'utf8');
   if (!fss.existsSync(LEAGUE_FILE)) await fs.writeFile(LEAGUE_FILE, JSON.stringify({}, null, 2), 'utf8');
+  if (!fss.existsSync(PROGRESS_FILE)) await fs.writeFile(PROGRESS_FILE, JSON.stringify({}, null, 2), 'utf8');
+  if (!fss.existsSync(TOURNAMENTS_FILE)) await fs.writeFile(TOURNAMENTS_FILE, JSON.stringify({}, null, 2), 'utf8');
 
   // Histórico local: remove partidas contra a CPU e registros com mais de 180 dias
   if (!process.env.DATABASE_URL) {
@@ -810,11 +900,20 @@ async function ensurePaymentsTable() {
         gateway_ref TEXT DEFAULT '',
         copy_paste TEXT DEFAULT '',
         qr_code TEXT DEFAULT '',
+        product_type TEXT DEFAULT 'premium',
+        product_id TEXT DEFAULT '',
+        product_amount INTEGER NOT NULL DEFAULT 0,
+        delivered_at TIMESTAMP,
         created_at TIMESTAMP DEFAULT NOW(),
         expires_at TIMESTAMP DEFAULT NOW(),
         paid_at TIMESTAMP
       );
     `);
+    // Colunas novas em tabelas já existentes
+    await p.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS product_type TEXT DEFAULT 'premium';`);
+    await p.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS product_id TEXT DEFAULT '';`);
+    await p.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS product_amount INTEGER NOT NULL DEFAULT 0;`);
+    await p.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMP;`);
     paymentsTableChecked = true;
     dbLastError = null;
   } catch (error) {
@@ -833,6 +932,13 @@ function normalizePayment(row) {
     gatewayRef: row.gateway_ref || row.gatewayRef || '',
     copyPaste: row.copy_paste || row.copyPaste || '',
     qrCode: row.qr_code || row.qrCode || '',
+    // Produto comprado: 'premium' (conta) ou 'crystals' (pacote da loja)
+    productType: row.product_type || row.productType || 'premium',
+    productId: row.product_id || row.productId || '',
+    productAmount: Math.max(0, Math.floor(Number(row.product_amount ?? row.productAmount) || 0)),
+    deliveredAt: row.delivered_at || row.deliveredAt
+      ? new Date(row.delivered_at || row.deliveredAt).toISOString()
+      : null,
     // Postgres usa snake_case e o fallback JSON usa camelCase
     createdAt: row.created_at || row.createdAt ? new Date(row.created_at || row.createdAt).toISOString() : new Date().toISOString(),
     expiresAt: row.expires_at || row.expiresAt ? new Date(row.expires_at || row.expiresAt).toISOString() : null,
@@ -850,6 +956,10 @@ async function createPayment(payment) {
     gatewayRef: payment.gatewayRef || '',
     copyPaste: payment.copyPaste || '',
     qrCode: payment.qrCode || '',
+    productType: payment.productType || 'premium',
+    productId: payment.productId || '',
+    productAmount: Math.max(0, Math.floor(Number(payment.productAmount) || 0)),
+    deliveredAt: payment.deliveredAt || null,
     createdAt: new Date().toISOString(),
     expiresAt: payment.expiresAt || new Date(Date.now() + 30 * 60 * 1000).toISOString(),
     paidAt: null
@@ -860,11 +970,14 @@ async function createPayment(payment) {
       const p = getPool();
       await ensurePaymentsTable();
       await p.query(
-        `INSERT INTO payments (id, user_id, gateway, amount, status, gateway_ref, copy_paste, qr_code, created_at, expires_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        `INSERT INTO payments (id, user_id, gateway, amount, status, gateway_ref, copy_paste, qr_code,
+                               product_type, product_id, product_amount, created_at, expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
         [
           record.id, record.userId, record.gateway, record.amount, record.status,
-          record.gatewayRef, record.copyPaste, record.qrCode, record.createdAt, record.expiresAt
+          record.gatewayRef, record.copyPaste, record.qrCode,
+          record.productType, record.productId, record.productAmount,
+          record.createdAt, record.expiresAt
         ]
       );
       return record;
@@ -924,13 +1037,19 @@ async function updatePayment(paymentId, fields) {
     try {
       const p = getPool();
       await p.query(
-        `UPDATE payments SET status = $1, gateway_ref = $2, copy_paste = $3, qr_code = $4, paid_at = $5 WHERE id = $6`,
+        `UPDATE payments SET status = $1, gateway_ref = $2, copy_paste = $3, qr_code = $4, paid_at = $5,
+                             product_type = $6, product_id = $7, product_amount = $8, delivered_at = $9
+         WHERE id = $10`,
         [
           updated.status,
           updated.gatewayRef,
           updated.copyPaste,
           updated.qrCode,
           updated.paidAt,
+          updated.productType || 'premium',
+          updated.productId || '',
+          Math.max(0, Math.floor(Number(updated.productAmount) || 0)),
+          updated.deliveredAt || null,
           paymentId
         ]
       );
@@ -1157,6 +1276,54 @@ async function listMatchRecords(userId) {
 
 async function listMatchRecordsForUser(targetUserId) {
   return listMatchRecords(targetUserId);
+}
+
+/* ------------------------------------------------------------------
+   PROVA SOCIAL (roadmap #25)
+   Contadores públicos do jogo: quantas partidas já foram jogadas e
+   quantas contas existem. Servem à tela inicial (landing).
+------------------------------------------------------------------ */
+async function countMatchRecords() {
+  if (useDatabase()) {
+    try {
+      const p = getPool();
+      const result = await p.query(
+        `SELECT COUNT(*)::int AS total
+         FROM matches
+         WHERE mode <> 'local'
+           AND LOWER(TRIM(opponent_name)) <> 'cpu'`
+      );
+      return Number(result.rows[0] && result.rows[0].total) || 0;
+    } catch (error) {
+      throw recordDbError(error, "countMatchRecords");
+    }
+  }
+
+  const matches = await readJsonFile(MATCHES_FILE);
+  let total = 0;
+  for (const userId of Object.keys(matches || {})) {
+    const history = Array.isArray(matches[userId]) ? matches[userId] : [];
+    for (const record of history) {
+      if (!isCpuMatchRecord(record)) total += 1;
+    }
+  }
+  return total;
+}
+
+// Total de contas criadas (visitantes com conta Google)
+async function countRegisteredPlayers() {
+  if (useDatabase()) {
+    try {
+      const p = getPool();
+      const result = await p.query('SELECT COUNT(*)::int AS total FROM users');
+      return Number(result.rows[0] && result.rows[0].total) || 0;
+    } catch (error) {
+      throw recordDbError(error, "countRegisteredPlayers");
+    }
+  }
+
+  const users = await readJsonFile(USERS_FILE);
+  return Object.keys(users || {}).length;
 }
 
 /* ------------------------------------------------------------------
@@ -1664,6 +1831,334 @@ async function removeFriend(userId, friendId) {
 }
 
 /* ------------------------------------------------------------------
+   Progresso do jogador (roadmap #6/#7)
+   Moedas, XP, sequência do baú diário e estado das missões.
+   Postgres: tabela player_progress. Fallback local: data/progress.json.
+------------------------------------------------------------------ */
+
+// Timestamp ISO (ou null) — usado pelo boost de XP do passe de temporada
+function normalizeTimestamp(value) {
+  if (!value) return null;
+  const parsed = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString();
+}
+
+function normalizeDateKey(value) {
+  if (!value) return null;
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null;
+    // A coluna DATE do Postgres chega como meia-noite NO fuso do servidor:
+    // usa os componentes locais (o toISOString() deslocaria o dia).
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, '0');
+    const day = String(value.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+  const text = String(value).trim();
+  if (!text) return null;
+  // Data simples (YYYY-MM-DD): devolve como está
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) return text.slice(0, 10);
+  return parsed.toISOString().slice(0, 10);
+}
+
+function normalizePlayerProgress(row) {
+  const source = row || {};
+  const coins = Math.max(0, Math.floor(Number(source.coins) || 0));
+  const xp = Math.max(0, Math.floor(Number(source.xp) || 0));
+  const streak = Math.max(0, Math.floor(Number(source.dailyStreak ?? source.daily_streak) || 0));
+  const matchesPlayed = Math.max(0, Math.floor(Number(source.matchesPlayed ?? source.matches_played) || 0));
+  const wins = Math.max(0, Math.floor(Number(source.wins) || 0));
+  const dailyClaims = source.dailyClaims ?? source.daily_claims;
+  const missionState = source.missionState ?? source.mission_state;
+  const processed = source.processedMatchIds ?? source.processed_match_ids;
+  const seasonClaims = source.seasonClaims ?? source.season_claims;
+  const xpBoostUntil = source.xpBoostUntil ?? source.xp_boost_until;
+  const shopState = source.shopState ?? source.shop_state;
+
+  return {
+    userId: source.userId || source.user_id || '',
+    coins,
+    xp,
+    // Cristais: moeda premium (aba "Preços em Reais" da loja)
+    crystals: Math.max(0, Math.floor(Number(source.crystals) || 0)),
+    dailyStreak: streak,
+    lastDailyClaimDate: normalizeDateKey(source.lastDailyClaimDate ?? source.last_daily_claim_date),
+    dailyClaims: dailyClaims && typeof dailyClaims === 'object' && !Array.isArray(dailyClaims) ? dailyClaims : {},
+    missionState: missionState && typeof missionState === 'object' && !Array.isArray(missionState) ? missionState : {},
+    processedMatchIds: Array.isArray(processed) ? processed.filter(item => typeof item === 'string') : [],
+    matchesPlayed,
+    wins,
+    // Passe de temporada (roadmap #9)
+    seasonId: source.seasonId || source.season_id || null,
+    seasonXp: Math.max(0, Math.floor(Number(source.seasonXp ?? source.season_xp) || 0)),
+    seasonClaims: Array.isArray(seasonClaims) ? seasonClaims.filter(item => typeof item === 'string') : [],
+    streakFreezes: Math.max(0, Math.floor(Number(source.streakFreezes ?? source.streak_freezes) || 0)),
+    compensationTokens: Math.max(0, Math.floor(Number(source.compensationTokens ?? source.compensation_tokens) || 0)),
+    xpBoostUntil: normalizeTimestamp(xpBoostUntil),
+    // Estado da loja: itens comprados, equipado e efeitos ativos
+    shopState: shopState && typeof shopState === 'object' && !Array.isArray(shopState) ? shopState : {},
+    createdAt: source.createdAt || source.created_at || new Date().toISOString(),
+    updatedAt: source.updatedAt || source.updated_at || new Date().toISOString()
+  };
+}
+
+// Lê o progresso do jogador (sem criar nada)
+async function getPlayerProgress(userId) {
+  if (!userId) return null;
+
+  if (useDatabase()) {
+    try {
+      const p = getPool();
+      const result = await p.query(
+        `SELECT user_id, coins, xp, daily_streak, last_daily_claim_date,
+                daily_claims, mission_state, processed_match_ids,
+                matches_played, wins, season_id, season_xp, season_claims,
+                streak_freezes, compensation_tokens, xp_boost_until,
+                crystals, shop_state, created_at, updated_at
+         FROM player_progress
+         WHERE user_id = $1`,
+        [userId]
+      );
+      if (!result.rows.length) {
+        const empty = normalizePlayerProgress({ user_id: userId });
+        empty.createdAt = new Date().toISOString();
+        empty.updatedAt = empty.createdAt;
+        return empty;
+      }
+      return normalizePlayerProgress(result.rows[0]);
+    } catch (error) {
+      throw recordDbError(error, 'getPlayerProgress');
+    }
+  }
+
+  const all = await readJsonFile(PROGRESS_FILE);
+  const stored = all && all[userId] ? all[userId] : null;
+  const progress = normalizePlayerProgress(stored || { user_id: userId });
+  progress.userId = userId;
+  return progress;
+}
+
+/**
+ * Atualiza o progresso do jogador de forma atômica.
+ * O updater recebe o progresso atual e devolve { progress, ... }.
+ * No Postgres usa transação com SELECT ... FOR UPDATE; no JSON local
+ * usa a fila de escrita do arquivo.
+ */
+async function updatePlayerProgress(userId, updater) {
+  if (!userId) throw new Error('Usuário inválido.');
+  if (typeof updater !== 'function') throw new Error('Atualização inválida.');
+
+  if (useDatabase()) {
+    const p = getPool();
+    const client = await p.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        `INSERT INTO player_progress (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING`,
+        [userId]
+      );
+      const locked = await client.query(
+        'SELECT * FROM player_progress WHERE user_id = $1 FOR UPDATE',
+        [userId]
+      );
+      const current = normalizePlayerProgress(locked.rows[0] || { user_id: userId });
+      current.userId = userId;
+
+      const outcome = await updater(current);
+      const next = normalizePlayerProgress((outcome && outcome.progress) || current);
+      next.userId = userId;
+      next.updatedAt = new Date().toISOString();
+
+      await client.query(
+        `UPDATE player_progress
+         SET coins = $2,
+             xp = $3,
+             daily_streak = $4,
+             last_daily_claim_date = $5,
+             daily_claims = $6::jsonb,
+             mission_state = $7::jsonb,
+             processed_match_ids = $8::jsonb,
+             matches_played = $9,
+             wins = $10,
+             season_id = $11,
+             season_xp = $12,
+             season_claims = $13::jsonb,
+             streak_freezes = $14,
+             compensation_tokens = $15,
+             xp_boost_until = $16,
+             crystals = $17,
+             shop_state = $18::jsonb,
+             updated_at = NOW()
+         WHERE user_id = $1`,
+        [
+          userId,
+          next.coins,
+          next.xp,
+          next.dailyStreak,
+          next.lastDailyClaimDate,
+          JSON.stringify(next.dailyClaims),
+          JSON.stringify(next.missionState),
+          JSON.stringify(next.processedMatchIds),
+          next.matchesPlayed,
+          next.wins,
+          next.seasonId,
+          next.seasonXp,
+          JSON.stringify(next.seasonClaims),
+          next.streakFreezes,
+          next.compensationTokens,
+          next.xpBoostUntil,
+          next.crystals,
+          JSON.stringify(next.shopState)
+        ]
+      );
+      await client.query('COMMIT');
+      return outcome;
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch (rollbackError) { /* ignora */ }
+      throw recordDbError(error, 'updatePlayerProgress');
+    } finally {
+      client.release();
+    }
+  }
+
+  // Fallback local: escrita serializada no arquivo progress.json
+  let outcome = null;
+  await updateJsonFile(PROGRESS_FILE, async (all) => {
+    const data = all && typeof all === 'object' ? all : {};
+    const current = normalizePlayerProgress(data[userId] || { user_id: userId });
+    current.userId = userId;
+
+    const result = await updater(current);
+    outcome = result;
+
+    const next = normalizePlayerProgress((result && result.progress) || current);
+    next.userId = userId;
+    next.updatedAt = new Date().toISOString();
+    data[userId] = next;
+    return data;
+  });
+  return outcome;
+}
+
+/* ------------------------------------------------------------------
+   TORNEIOS COM HORÁRIO MARCADO (roadmap #10)
+   Postgres: tabela tournament_editions. Fallback local:
+   data/tournaments.json.
+------------------------------------------------------------------ */
+
+function normalizeTournamentEdition(row) {
+  const source = row || {};
+  // No Postgres a edição fica na coluna JSONB "state"; no fallback local
+  // o próprio objeto já é a edição.
+  const hasState = source.state && typeof source.state === 'object' && !Array.isArray(source.state);
+  const state = hasState ? source.state : source;
+  const startsAt = source.starts_at || source.startsAt || state.startsAt || null;
+  const parsedStart = startsAt ? new Date(startsAt) : null;
+
+  return {
+    ...state,
+    id: source.id || state.id || '',
+    tournamentId: source.tournament_id || source.tournamentId || state.tournamentId || '',
+    name: state.name || source.name || '',
+    dayKey: state.dayKey || '',
+    startsAt: parsedStart && !Number.isNaN(parsedStart.getTime()) ? parsedStart.toISOString() : null,
+    slots: Number(state.slots) || Number(source.slots) || 0,
+    status: source.status || state.status || 'scheduled',
+    entrants: Array.isArray(state.entrants) ? state.entrants : [],
+    size: Number(state.size) || 0,
+    rounds: Array.isArray(state.rounds) ? state.rounds : [],
+    winnerId: state.winnerId || null,
+    placements: state.placements && typeof state.placements === 'object' ? state.placements : {},
+    createdAt: state.createdAt || source.created_at || new Date().toISOString(),
+    updatedAt: state.updated_at ? new Date(state.updated_at).toISOString() : (state.updatedAt || new Date().toISOString())
+  };
+}
+
+// Todas as edições salvas (usado pelo agendador do servidor)
+async function listTournamentEditions() {
+  if (useDatabase()) {
+    try {
+      const p = getPool();
+      const result = await p.query(
+        'SELECT * FROM tournament_editions ORDER BY starts_at ASC'
+      );
+      return result.rows.map(normalizeTournamentEdition);
+    } catch (error) {
+      throw recordDbError(error, 'listTournamentEditions');
+    }
+  }
+
+  const all = await readJsonFile(TOURNAMENTS_FILE);
+  const data = all && typeof all === 'object' && !Array.isArray(all) ? all : {};
+  return Object.keys(data)
+    .map(key => normalizeTournamentEdition({ ...data[key], id: (data[key] && data[key].id) || key }))
+    .sort((a, b) => new Date(a.startsAt || 0) - new Date(b.startsAt || 0));
+}
+
+async function getTournamentEdition(id) {
+  if (!id) return null;
+  if (useDatabase()) {
+    try {
+      const p = getPool();
+      const result = await p.query(
+        'SELECT * FROM tournament_editions WHERE id = $1',
+        [id]
+      );
+      return result.rows.length ? normalizeTournamentEdition(result.rows[0]) : null;
+    } catch (error) {
+      throw recordDbError(error, 'getTournamentEdition');
+    }
+  }
+
+  const all = await readJsonFile(TOURNAMENTS_FILE);
+  const data = all && typeof all === 'object' && !Array.isArray(all) ? all : {};
+  const row = data[id];
+  return row ? normalizeTournamentEdition({ ...row, id }) : null;
+}
+
+// Salva (cria ou atualiza) uma edição de torneio
+async function saveTournamentEdition(edition) {
+  if (!edition || !edition.id) throw new Error('Edição de torneio inválida.');
+  const payload = { ...edition, updatedAt: new Date().toISOString() };
+
+  if (useDatabase()) {
+    try {
+      const p = getPool();
+      await p.query(
+        `INSERT INTO tournament_editions (id, tournament_id, starts_at, status, state, updated_at)
+         VALUES ($1, $2, $3, $4, $5::jsonb, NOW())
+         ON CONFLICT (id) DO UPDATE
+           SET tournament_id = EXCLUDED.tournament_id,
+               starts_at = EXCLUDED.starts_at,
+               status = EXCLUDED.status,
+               state = EXCLUDED.state,
+               updated_at = NOW()`,
+        [
+          payload.id,
+          payload.tournamentId || '',
+          payload.startsAt || new Date().toISOString(),
+          payload.status || 'scheduled',
+          JSON.stringify(payload)
+        ]
+      );
+      return payload;
+    } catch (error) {
+      throw recordDbError(error, 'saveTournamentEdition');
+    }
+  }
+
+  await updateJsonFile(TOURNAMENTS_FILE, (all) => {
+    const data = all && typeof all === 'object' && !Array.isArray(all) ? all : {};
+    data[payload.id] = payload;
+    return data;
+  });
+  return payload;
+}
+
+/* ------------------------------------------------------------------
    Envio de notificação interna (usado pelo server.js)
 ------------------------------------------------------------------ */
 function sendToUserInternal(userId, message) {
@@ -1683,6 +2178,8 @@ module.exports = {
   DEFAULT_TERTIARY_COLOR,
   normalizeUser,
   normalizeUserFromDb,
+  PAID_TEST_EMAILS,
+  isPaidEmail,
   getUserById,
   getUserByEmail,
   getUserProfile,
@@ -1701,11 +2198,18 @@ module.exports = {
   createMatchRecord,
   listMatchRecords,
   listMatchRecordsForUser,
+  countMatchRecords,
+  countRegisteredPlayers,
   getLeagueStanding,
   ensureLeagueStanding,
   saveLeagueStanding,
   listLeagueStandingsByTier,
   getLeagueTierRank,
+  getPlayerProgress,
+  updatePlayerProgress,
+  listTournamentEditions,
+  getTournamentEdition,
+  saveTournamentEdition,
   getFriends,
   getSentRequests,
   getReceivedRequests,

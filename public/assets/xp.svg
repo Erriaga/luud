@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <!-- Gradiente da borda metálica -->
+    <linearGradient id="xp-rim" x1="15%" y1="10%" x2="85%" y2="90%">
+      <stop offset="0%" stop-color="#BAE6FD" />
+      <stop offset="40%" stop-color="#38BDF8" />
+      <stop offset="80%" stop-color="#0284C7" />
+      <stop offset="100%" stop-color="#0369A1" />
+    </linearGradient>
+
+    <!-- Gradiente do fundo interno -->
+    <linearGradient id="xp-bg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1E3A8A" />
+      <stop offset="100%" stop-color="#0F172A" />
+    </linearGradient>
+
+    <!-- Gradiente das letras XP -->
+    <linearGradient id="xp-letters" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="55%" stop-color="#E0F2FE" />
+      <stop offset="100%" stop-color="#7DD3FC" />
+    </linearGradient>
+  </defs>
+
+  <!-- Sombra de profundidade inferior -->
+  <polygon points="64,14 112,41 112,95 64,122 16,95 16,41" fill="#082F49" />
+
+  <!-- Hexágono externo -->
+  <polygon points="64,10 112,37 112,91 64,118 16,91 16,37" fill="url(#xp-rim)" stroke="#082F49" stroke-width="2.5" stroke-linejoin="round" />
+
+  <!-- Hexágono interno escuro -->
+  <polygon points="64,20 103,42 103,86 64,108 25,86 25,42" fill="url(#xp-bg)" stroke="#7DD3FC" stroke-width="1.5" stroke-opacity="0.5" stroke-linejoin="round" />
+
+  <!-- Letra X (sólida e centralizada à esquerda) -->
+  <polygon points="34,46 44,46 50,57 56,46 66,46 56,64 66,82 56,82 50,71 44,82 34,82 44,64" fill="url(#xp-letters)" stroke="#0369A1" stroke-width="1.5" stroke-linejoin="round" />
+
+  <!-- Letra P (sólida e centralizada à direita) -->
+  <path d="M 70,46 L 86,46 C 94,46 98,51 98,58 C 98,65 94,70 86,70 L 79,70 L 79,82 L 70,82 Z M 79,53 L 79,63 L 85,63 C 88,63 90,61 90,58 C 90,55 88,53 85,53 Z" fill="url(#xp-letters)" stroke="#0369A1" stroke-width="1.5" stroke-linejoin="round" />
+
+  <!-- Brilho superior no vidro do emblema -->
+  <polygon points="64,20 103,42 103,54 25,54 25,42" fill="#FFFFFF" opacity="0.14" />
+</svg>

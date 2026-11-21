@@ -3,12 +3,10 @@
 const DEFAULT_AVATAR = '/assets/avatar.svg';
 let accountUser = null;
 
-const accountButton = document.getElementById('account-button');
 const accountAvatar = document.getElementById('account-avatar');
 const accountName = document.getElementById('account-name');
-const accountDropdown = document.getElementById('account-dropdown');
-const dropdownAccountName = document.getElementById('dropdown-account-name');
-const dropdownAccountEmail = document.getElementById('dropdown-account-email');
+const accountMenuName = document.getElementById('account-menu-name');
+const accountMenuEmail = document.getElementById('account-menu-email');
 const profileModal = document.getElementById('account-profile-modal');
 const profileAvatarPreview = document.getElementById('profile-avatar-preview');
 const profileEmail = document.getElementById('profile-account-email');
@@ -16,16 +14,16 @@ const profilePlayerName = document.getElementById('profile-player-name');
 const profileStatus = document.getElementById('profile-status');
 
 // Selos do plano da conta exibidos junto do nickname
-// (cabeçalho, menu suspenso e modal de perfil)
+// (cabeçalho, painel do menu e modal de perfil)
 const premiumBadges = [
   document.getElementById('account-premium-badge'),
-  document.getElementById('dropdown-premium-badge'),
+  document.getElementById('account-menu-premium-badge'),
   document.getElementById('profile-premium-badge')
 ];
 
 const freeBadges = [
   document.getElementById('account-free-badge'),
-  document.getElementById('dropdown-free-badge'),
+  document.getElementById('account-menu-free-badge'),
   document.getElementById('profile-free-badge')
 ];
 
@@ -59,6 +57,10 @@ function updatePremiumBadges(user) {
   freeBadges.forEach(badge => {
     if (badge) badge.classList.toggle('hidden', !logged || visible);
   });
+  // O atalho "Premium" do menu só faz sentido para quem ainda não tem
+  // o plano: conta Premium enxerga os benefícios dentro do próprio menu.
+  // O cartão é desenhado na grade do menu, então a grade é redesenhada.
+  if (typeof renderAccountMenuGrid === 'function') renderAccountMenuGrid();
 }
 
 function setAvatarImage(imageElement, url) {
@@ -82,8 +84,8 @@ function updateAccountUI(user) {
     accountUser = null;
     accountName.textContent = 'Entrar';
     setAvatarImage(accountAvatar, DEFAULT_AVATAR);
-    dropdownAccountName.textContent = 'Conta';
-    dropdownAccountEmail.textContent = 'Não conectado';
+    accountMenuName.textContent = 'Conta';
+    accountMenuEmail.textContent = 'Não conectado';
     updatePremiumBadges(null);
     // Sem login não existe tier de Liga para exibir
     if (typeof renderProfileLeagueTier === 'function') renderProfileLeagueTier(null);
@@ -98,10 +100,18 @@ function updateAccountUI(user) {
   // No cabeçalho, ao lado da foto, aparece o nickname
   accountName.textContent = getAccountNickname(user) || 'Conta';
   setAvatarImage(accountAvatar, user.avatarUrl || user.picture || DEFAULT_AVATAR);
-  dropdownAccountName.textContent = getAccountNickname(user) || 'Conta';
-  dropdownAccountEmail.textContent = user.email || '';
+  accountMenuName.textContent = getAccountNickname(user) || 'Conta';
+  accountMenuEmail.textContent = user.email || '';
   // Selo Premium (conta paga)
   updatePremiumBadges(user);
+  // Loja: carrega o inventário e a carteira (Ludas e Cristais)
+  if (typeof loadShop === 'function') {
+    loadShop().then(() => {
+      if (typeof applyNicknameEditingState === 'function') {
+        applyNicknameEditingState(accountCanEditNickname());
+      }
+    });
+  }
   // Com login o botão de conta volta a aparecer no canto superior direito
   setAccountAreaVisible(true);
   // Tier da Liga (apenas para contas Premium)
@@ -113,8 +123,15 @@ function updateAccountUI(user) {
   if (typeof syncSetupLoginUI === 'function') syncSetupLoginUI();
 }
 
-function hideAccountDropdown() {
-  accountDropdown.classList.add('hidden');
+// Fecha o painel do menu da conta (o painel em grade é desenhado
+// em game.html; aqui só garante o fechamento).
+function hideAccountMenu() {
+  if (typeof closeAccountMenu === 'function') {
+    closeAccountMenu();
+    return;
+  }
+  const modal = document.getElementById('account-menu-modal');
+  if (modal) modal.classList.add('hidden');
 }
 
 function handleAccountButtonClick(event) {
@@ -125,11 +142,13 @@ function handleAccountButtonClick(event) {
     return;
   }
 
-  accountDropdown.classList.toggle('hidden');
+  if (typeof openAccountMenu === 'function') {
+    openAccountMenu();
+  }
 }
 
 function openProfileModal() {
-  hideAccountDropdown();
+  hideAccountMenu();
 
   if (!accountUser) {
     window.location.href = '/';
@@ -137,9 +156,10 @@ function openProfileModal() {
   }
 
   profileEmail.textContent = accountUser.email || '';
-  // O nickname só pode ser alterado por contas Premium
+  // O nickname só pode ser alterado por contas Premium ou por quem tem
+  // uma renomeação comprada na loja (item PRO-008)
   if (profilePlayerName) profilePlayerName.value = getAccountNickname(accountUser);
-  applyNicknameEditingState(isPremiumAccount(accountUser));
+  applyNicknameEditingState(accountCanEditNickname());
   setAvatarImage(profileAvatarPreview, accountUser.avatarUrl || accountUser.picture || DEFAULT_AVATAR);
   profileStatus.textContent = '';
   // Carrega as cores do perfil (primária, secundária e terciária)
@@ -164,25 +184,37 @@ function closeProfileModal() {
   if (typeof stopPremiumPolling === 'function') stopPremiumPolling();
 }
 
-// Habilita (Premium) ou bloqueia (conta gratuita) a edição do nickname
-function applyNicknameEditingState(premium) {
+// Habilita (Premium ou renomeação comprada na loja) ou bloqueia a edição do nickname
+function applyNicknameEditingState(editable) {
+  const canEdit = editable === undefined
+    ? accountCanEditNickname()
+    : Boolean(editable);
   const saveBtn = document.getElementById('profile-save-name-btn');
 
   if (profilePlayerName) {
-    profilePlayerName.readOnly = !premium;
-    profilePlayerName.setAttribute('aria-readonly', String(!premium));
-    profilePlayerName.tabIndex = premium ? 0 : -1;
-    profilePlayerName.classList.toggle('profile-editable', premium);
+    profilePlayerName.readOnly = !canEdit;
+    profilePlayerName.setAttribute('aria-readonly', String(!canEdit));
+    profilePlayerName.tabIndex = canEdit ? 0 : -1;
+    profilePlayerName.classList.toggle('profile-editable', canEdit);
   }
 
-  if (saveBtn) saveBtn.classList.toggle('hidden', !premium);
+  if (saveBtn) saveBtn.classList.toggle('hidden', !canEdit);
+}
+
+// O nickname pode ser alterado por contas Premium e por quem tem uma
+// renomeação comprada na loja (item PRO-008).
+function accountCanEditNickname() {
+  if (isPremiumAccount(typeof accountUser !== 'undefined' ? accountUser : null)) return true;
+  const data = typeof shopData !== 'undefined' ? shopData : null;
+  if (!data || !data.inventory) return false;
+  return (Number(data.inventory.renameTokens) || 0) > 0;
 }
 
 // O nickname não pode ser alterado por contas gratuitas:
 // a edição é liberada para as contas Premium (ver applyNicknameEditingState).
 
 async function logoutAccount() {
-  hideAccountDropdown();
+  hideAccountMenu();
 
   // No lobby ou durante a partida, a saída da página é bloqueada:
   // pede confirmação e só então encerra a sessão.
@@ -213,10 +245,25 @@ async function loadAccountSession() {
     const data = await response.json();
     if (!data.authenticated || !data.user) {
       updateAccountUI(null);
+      // Convite por link (roadmap #15): avisa que é preciso entrar na conta
+      if (typeof handleInviteLink === 'function') {
+        handleInviteLink();
+      }
       return;
     }
 
     updateAccountUI(data.user);
+
+    // Avisa se há recompensa esperando (baú do dia ou missão concluída)
+    if (typeof refreshRewardsBadge === 'function') {
+      refreshRewardsBadge();
+    }
+
+    // Convite por link (roadmap #15): com a sessão ativa, entra na sala
+    // que veio na URL (?sala=CODIGO) sem precisar digitar o código
+    if (typeof handleInviteLink === 'function') {
+      handleInviteLink();
+    }
 
     // Identifica a conexão WebSocket com esta conta (convites de partida,
     // solicitações de amizade e status online para os amigos)
@@ -234,16 +281,22 @@ async function loadAccountSession() {
   }
 }
 
-document.addEventListener('click', event => {
-  if (!accountDropdown.classList.contains('hidden') && !accountButton.contains(event.target) && !accountDropdown.contains(event.target)) {
-    hideAccountDropdown();
-  }
-});
-
 document.addEventListener('keydown', event => {
   if (event.key === 'Escape') {
-    hideAccountDropdown();
+    hideAccountMenu();
     closeProfileModal();
+    if (typeof closeSeasonModal === 'function') {
+      closeSeasonModal();
+    }
+    if (typeof closeTournamentModal === 'function') {
+      closeTournamentModal();
+    }
+    if (typeof hideRematchOffer === 'function') {
+      hideRematchOffer();
+    }
+    if (typeof closePremiumBenefits === 'function') {
+      closePremiumBenefits();
+    }
   }
 });
 

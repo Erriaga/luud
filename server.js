@@ -10,6 +10,11 @@ const db = require('./db');
 const pix = require('./pix');
 const rules = require('./game-rules');
 const league = require('./league');
+const rewards = require('./rewards');
+const season = require('./season');
+const shop = require('./shop');
+const versions = require('./versions');
+const tournaments = require('./tournaments');
 const namePolicy = require('./name-policy');
 
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -65,18 +70,121 @@ setInterval(() => {
 }, 5 * 60 * 1000); // A cada 5 minutos
 
 /* -------------------------------------------------------------
+   PROVA SOCIAL (roadmap #25)
+   Contadores públicos (partidas jogadas, contas criadas, jogadores
+   online agora) e depoimentos exibidos na tela inicial.
+
+   ATENÇÃO: os depoimentos abaixo são textos de exemplo. Troque-os
+   pelos depoimentos reais dos jogadores (ou esvazie a lista para
+   esconder o bloco de depoimentos na tela inicial).
+------------------------------------------------------------- */
+const SOCIAL_TESTIMONIALS = [
+  {
+    quote: 'Jogo uma partida no intervalo do trabalho. É rápido e dá vontade de jogar mais uma.',
+    author: 'Jogadora de DUPLA'
+  },
+  {
+    quote: 'O link de convite salvou a gente: só mandei no WhatsApp e meu amigo entrou direto na sala.',
+    author: 'Jogador de TORNEIO'
+  },
+  {
+    quote: 'A cada partida eu subo de tier na Liga. Já conquerri a table com meus amigos.',
+    author: 'Jogador de LIGA'
+  }
+];
+
+// Jogadores conectados agora (contas únicas + visitantes sem conta)
+function countOnlinePlayers() {
+  const users = new Set();
+  let anonymous = 0;
+  for (const conn of connections.values()) {
+    if (conn && conn.userId) users.add(conn.userId);
+    else anonymous += 1;
+  }
+  return users.size + anonymous;
+}
+
+// API pública da prova social (não exige login)
+async function handleSocialStats(request, response) {
+  let matches = 0;
+  let players = 0;
+  try {
+    matches = await db.countMatchRecords();
+  } catch (error) {
+    console.error('[prova social] erro ao contar as partidas:', error && error.message);
+  }
+  try {
+    players = await db.countRegisteredPlayers();
+  } catch (error) {
+    console.error('[prova social] erro ao contar os jogadores:', error && error.message);
+  }
+
+  sendJson(response, 200, {
+    matches,
+    players,
+    online: countOnlinePlayers(),
+    testimonials: SOCIAL_TESTIMONIALS
+  });
+}
+
+/* -------------------------------------------------------------
    CONTA PREMIUM (pagamento único via Pix, acesso vitalício)
 ------------------------------------------------------------- */
 const PREMIUM_PLAN_NAME = process.env.PREMIUM_PLAN_NAME || 'Conta Premium';
 const PREMIUM_PRICE_BRL = Number(process.env.PREMIUM_PRICE_BRL || 19.90);
 const PREMIUM_CURRENCY = 'BRL';
 const PREMIUM_TRIAL_NOTE = 'Acesso vitalício e sem mensalidades';
-const PREMIUM_BENEFITS = [
-  'Cor terciária desbloqueada (3 cores no perfil)',
-  'Nickname editável a qualquer momento',
-  'Selo Premium no perfil e no placar',
-  'Acesso ao modo LIGA - jogue partidas classificatórias'
+
+/* -------------------------------------------------------------
+   BENEFÍCIOS CONCRETOS DO PREMIUM (roadmap #20)
+   A lista precisa falar a língua do jogador: o que muda na
+   prática quando ele assina. Cada item existe de verdade no
+   jogo — nada de promessa que o produto não entregue.
+   ------------------------------------------------------------- */
+const PREMIUM_BENEFIT_GROUPS = [
+  {
+    icon: '⭐',
+    title: 'EVOLUIR MAIS RÁPIDO',
+    items: [
+      'Dobro de XP no Passe de Temporada',
+      'Trilha PREMIUM do Passe: 30 níveis com moedas e boosters',
+      'Baú diário com mais XP em toda partida'
+    ]
+  },
+  {
+    icon: '🏆',
+    title: 'COMPETIR DE VERDADE',
+    items: [
+      'Liga completa: partidas classificativas, tier e ranking',
+      'Torneios com horário marcado com premiação em dobro',
+      'Selo PREMIUM no perfil, no placar e na Liga'
+    ]
+  },
+  {
+    icon: '🎨',
+    title: 'SEU JEITO DE JOGAR',
+    items: [
+      'Cores exclusivas: 3 cores no perfil + cores personalizadas',
+      'Nickname editável a qualquer momento',
+      'Histórico completo: todas as suas partidas, sem prazo'
+    ]
+  },
+  {
+    icon: '💳',
+    title: 'SEM DOR DE CABEÇA',
+    items: [
+      'Sem anúncios: jogue sem interrupções',
+      'Pagamento único via Pix: acesso vitalício',
+      'Sem mensalidade e sem cobrança recorrente'
+    ]
+  }
 ];
+
+// Lista plana (usada nos resumos curtos do perfil e do checkout)
+const PREMIUM_BENEFITS = PREMIUM_BENEFIT_GROUPS.reduce(
+  (all, group) => all.concat(group.items),
+  []
+);
 
 /* Desconto temporário do plano Premium (até o fim do ano).
    O preço normal continua sendo exibido (riscado) ao lado do preço
@@ -156,6 +264,8 @@ const TURN_GRACE_MS = 5 * 1000;
 // Janela para o jogador autenticado reconectar e retomar a partida
 // (take-over) antes de ser declarado como abandono definitivo
 const TAKEOVER_WINDOW_MS = 60 * 1000;
+// Tempo que o bot "pensa" antes de jogar o turno dele (roadmap #12)
+const BOT_THINK_MS = 1200;
 // Mensagens que o cliente NÃO pode mais enviar: o dado, o movimento e a
 // passagem de turno são decididos pelo servidor.
 const FORBIDDEN_CLIENT_MESSAGES = new Set(['dice_roll', 'token_move', 'pass_turn']);
@@ -239,6 +349,63 @@ function broadcastRoom(roomCode, message, excludeWs = null) {
 
 function otherPlayerIndex(idx) {
   return idx === 0 ? 1 : 0;
+}
+
+/* -------------------------------------------------------------
+   BOT SUBSTITUI QUEM ABANDONA (roadmap #12)
+   Em partidas com mais de 2 jogadores (arena e dupla), quem sai
+   não encerra a partida: um bot controlado pelo servidor assume
+   o slot e joga normalmente, para que os demais não fiquem
+   parados esperando.
+------------------------------------------------------------- */
+
+// Modos em que o abandono vira bot (partidas com 3 ou 4 jogadores)
+function modeSupportsBotTakeover(room) {
+  if (!room) return false;
+  return room.mode === 'arena' || room.mode === 'dupla';
+}
+
+// O slot está sendo jogado por um bot?
+function isBotSlot(room, slot) {
+  if (!room || !Array.isArray(room.botSlots)) return false;
+  return room.botSlots.includes(Number(slot));
+}
+
+// Instala um bot no slot abandonado e avisa a sala
+function installBotForSlot(room, playerIdx, leftName) {
+  if (!room || !room.game) return false;
+  const slot = Number(playerIdx);
+  if (!Number.isInteger(slot)) return false;
+  if (isBotSlot(room, slot)) return false;
+  if (!Array.isArray(room.botSlots)) room.botSlots = [];
+
+  const state = room.game;
+  const color = rules.colorOfSlot(state, slot);
+  room.botSlots.push(slot);
+
+  // Nome do bot no placar: mantém o nome do jogador que saiu para
+  // o placar não ficar com um espaço vazio
+  const baseName = leftName || (room.botSourceNames || [])[slot] || '';
+  const botName = baseName ? `CPU (${baseName})` : 'CPU';
+  if (!Array.isArray(room.botNames)) room.botNames = [];
+  room.botNames[slot] = botName;
+
+  console.log(`[bot] sala ${room.code || ''} slot=${slot} assumiu a partida (${botName})`);
+
+  broadcastRoomGame(room, {
+    type: 'bot_takeover',
+    slot,
+    color,
+    name: botName,
+    leftName: baseName || null,
+    mode: room.mode
+  });
+
+  // Se a vez é do bot agora, o servidor joga por ele
+  if (Number(state.turn) === slot) {
+    startRoomTurnTimer(room);
+  }
+  return true;
 }
 
 // Remove a conexão da fila do Jogo Rápido (true se realmente estava lá)
@@ -347,57 +514,70 @@ function detachFromRoom(ws, notifyOpponent = true) {
 
     // Mantém o userId no slot para que o take-over possa reanexar o jogador
     room.players[playerIdx] = null;
+    // Guarda o nome de quem saiu: se um bot assumir o slot, o placar
+    // mostra "CPU (nome)" em vez de um espaço vazio
+    if (!Array.isArray(room.botSourceNames)) room.botSourceNames = [];
+    room.botSourceNames[playerIdx] = room.names[playerIdx] || conn.name || null;
     room.names[playerIdx] = null;
     room.ready[playerIdx] = false;
     // room.userIds[playerIdx] continua = userId (slot reservado)
 
-    // Aplica abandono imediato para modos que não suportam take-over
-    if (room.mode === 'solo') {
-      // Partida contra a CPU: não há take-over, encerra normalmente
-      room.userIds[playerIdx] = null;
-      userRoom.delete(userId);
-      if (notifyOpponent) {
-        room.players.forEach(other => {
-          if (other && other !== ws && other.readyState === 1) {
-            sendTo(other, { type: 'opponent_disconnected' });
-          }
-        });
-      }
-      if (!room.players.some(player => player)) {
-        clearRoomTurnTimer(room);
-        rooms.delete(roomCode);
-      }
-      return;
-    }
-
-    if (room.mode === 'liga') {
-      applyLeagueAbandonResult(room, playerIdx);
-    }
-    if (room.mode === 'arena') {
-      applyArenaAbandonResult(room, playerIdx);
-    }
-
-    // Registra o jogador como ausente para take-over (espera até TAKEOVER_WINDOW_MS)
+    // O abandono (W.O. na Liga/Arena, desistência no 1x1) só é aplicado
+    // DEPOIS da janela de reconexão: enquanto o jogador pode voltar, a
+    // vaga continua reservada e a partida não é encerrada.
     const abandonAt = Date.now() + TAKEOVER_WINDOW_MS;
     const timer = setTimeout(() => {
       absentPlayers.delete(absenceKey);
       userRoom.delete(userId);
-      // Aplica o abandono definitivo após o tempo de espera
-      if (room.mode === 'liga' && !room.game.over) {
-        applyLeagueAbandonResult(room, playerIdx);
-      }
-      if (room.mode === 'arena' && !room.game.over) {
-        applyArenaAbandonResult(room, playerIdx);
-      }
-      room.userIds[playerIdx] = null;
-      room.players.forEach(other => {
-        if (other && other.readyState === 1) {
-          sendTo(other, { type: 'opponent_left', playerIdx, reason: 'abandon' });
+
+      // A janela de reconexão acabou: agora o abandono é definitivo
+      let botTookOver = false;
+      if (room.game && room.game.started && !room.game.over) {
+        if (modeSupportsBotTakeover(room)) {
+          // Arena/dupla: um bot assume o slot e a partida continua
+          installBotForSlot(room, playerIdx);
+          botTookOver = true;
+        } else if (room.mode === 'liga') {
+          applyLeagueAbandonResult(room, playerIdx);
+        } else if (room.mode === 'tournament') {
+          // Torneio: quem ficou vence por desistência e avança na chave
+          applyTournamentAbandonResult(room, playerIdx);
+        } else if (room.mode === 'solo' || room.mode === 'quick') {
+          // 1x1: quem ficou vence por desistência
+          room.game.over = true;
+          room.game.winner = otherPlayerIndex(playerIdx);
+          clearRoomTurnTimer(room);
         }
-      });
-      if (!room.players.some(player => player)) {
+      }
+
+      room.userIds[playerIdx] = null;
+      if (!botTookOver) {
+        room.players.forEach(other => {
+          if (other && other.readyState === 1) {
+            sendTo(other, { type: 'opponent_left', playerIdx, reason: 'abandon' });
+          }
+        });
+      }
+
+      // Avisa a sala de que a partida acabou por abandono (1x1 e Liga)
+      if (room.game && room.game.over) {
+        broadcastRoomGame(room, {
+          type: 'match_finished',
+          over: true,
+          winner: room.game.winner,
+          scores: room.game.scores,
+          reason: 'abandon',
+          playerIdx
+        });
+      }
+
+      if (!room.players.some(player => player) && !botTookOver) {
         clearRoomTurnTimer(room);
         rooms.delete(roomCode);
+      } else if (room.game && room.game.started && !room.game.over) {
+        // A partida continua (dupla 2x2 ou bot no lugar do ausente):
+        // o relógio do turno volta a correr
+        startRoomTurnTimer(room);
       }
     }, TAKEOVER_WINDOW_MS);
 
@@ -466,16 +646,160 @@ function broadcastRoomGame(room, message) {
 // Cria (ou recria) o estado autoritativo da sala
 function setupRoomGame(room, options = {}) {
   const slots = options.slots || [];
+  // Guarda a configuração de slots: a revanche remonta a MESMA mesa
+  // (mesmas cores e times) sem recalcular nada no cliente.
+  room.slotConfig = slots.map(entry => ({ ...entry }));
   room.game = rules.createGameState({
     slots,
     mode: options.mode || room.mode || 'solo',
     target: options.target || (options.mode === 'dupla' ? 8 : 4)
   });
   room.slotColors = slots.map(entry => entry.color);
+  // Contador de capturas por slot (usado pelas missões do jogador)
+  room.captures = slots.map(() => 0);
   // O relógio do turno só começa a contar quando os clientes avisam que a
   // partida começou (ver handleGameStart).
   room.game.started = false;
   return room.game;
+}
+
+/* -------------------------------------------------------------
+   RECONEXÃO TRANSPARENTE (take-over)
+   O estado da partida mora no servidor. Quando a conexão cai, o
+   slot do jogador fica reservado por TAKEOVER_WINDOW_MS: ao voltar
+   (mesma aba, outro dispositivo ou recarregando a página), o cliente
+   recebe um snapshot completo e continua de onde parou.
+------------------------------------------------------------- */
+
+// Snapshot do estado da sala enviado ao jogador que reconectou
+function buildRoomSnapshot(room, playerIdx) {
+  const state = room.game;
+  const legal = (state && state.dice !== null && Number(state.turn) === Number(playerIdx))
+    ? rules.validTokenIndices(state, playerIdx, state.dice)
+    : [];
+
+  const teamColors = room.teamColors || {};
+  const players = (room.names || []).map((name, idx) => {
+    const team = (room.teams || [])[idx];
+    const teamInfo = teamColors[team] || null;
+    const bot = isBotSlot(room, idx);
+    const botName = (room.botNames || [])[idx] || 'CPU';
+    return {
+      id: idx,
+      uid: (room.userIds || [])[idx] || null,
+      name: bot ? botName : (name || null),
+      playerName: bot ? botName : (name || null),
+      team,
+      teamName: teamInfo ? teamInfo.teamName : null,
+      teamColor: teamInfo ? teamInfo.hex : null,
+      teamColorName: teamInfo ? teamInfo.name : null,
+      color: (room.slotColorInfo || [])[idx] || null,
+      isBot: bot
+    };
+  });
+
+  return {
+    type: 'game_state',
+    room: room.code,
+    player: playerIdx,
+    mode: room.mode,
+    slotColors: Array.isArray(room.slotColors) ? room.slotColors.slice() : [],
+    players,
+    turn: state.turn,
+    dice: state.dice,
+    sixes: state.sixes,
+    tokens: state.tokens,
+    scores: state.scores,
+    over: state.over,
+    winner: state.winner,
+    target: state.target,
+    legal,
+    started: state.started,
+    botSlots: Array.isArray(room.botSlots) ? room.botSlots.slice() : [],
+    // Capturas acumuladas por slot (missões do jogador): o contador é do
+    // servidor, então não se perde quando o jogador reconecta
+    captures: Array.isArray(room.captures) ? room.captures.slice() : []
+  };
+}
+
+// Reanexa o jogador à sala (take-over) e devolve o estado atual da partida
+function attachPlayerToRoom(ws, conn, room, playerIdx, userId) {
+  // Reentrada no próprio slot cancela a contagem de abandono
+  const absenceKey = `${room.code}:${playerIdx}`;
+  const absence = absentPlayers.get(absenceKey);
+  if (absence) {
+    clearTimeout(absence.timer);
+    absentPlayers.delete(absenceKey);
+  }
+
+  room.players[playerIdx] = ws;
+  room.ready[playerIdx] = true;
+  if (!room.names[playerIdx]) room.names[playerIdx] = conn.name || `Jogador ${playerIdx + 1}`;
+  conn.roomCode = room.code;
+  conn.playerIdx = playerIdx;
+  if (userId) {
+    conn.userId = userId;
+    room.userIds[playerIdx] = userId;
+    userRoom.set(userId, room.code);
+  }
+
+  // O relógio do turno volta a correr para quem voltou
+  if (room.game && room.game.started && !room.game.over) {
+    startRoomTurnTimer(room);
+  }
+
+  // Avisa o oponente que o jogador voltou
+  broadcastRoom(room.code, { type: 'opponent_reconnected', playerIdx }, ws);
+
+  // Estado completo para o cliente que reconectou
+  sendTo(ws, buildRoomSnapshot(room, playerIdx));
+  return true;
+}
+
+// Tenta retomar a partida em que o usuário estava antes da queda
+function tryResumeRoomForUser(ws, conn, userId) {
+  if (!userId || !conn) return false;
+  if (conn.roomCode) return false; // já está numa sala
+
+  const roomCode = userRoom.get(userId);
+  if (!roomCode) return false;
+
+  const room = rooms.get(roomCode);
+  if (!room || !room.game) {
+    userRoom.delete(userId);
+    return false;
+  }
+
+  const playerIdx = (room.userIds || []).indexOf(userId);
+  if (playerIdx === -1) {
+    userRoom.delete(userId);
+    return false;
+  }
+
+  if (room.game.over) {
+    sendTo(ws, { type: 'game_unavailable', reason: 'finished', room: roomCode });
+    return false;
+  }
+
+  // Outro dispositivo/aba do MESMO jogador ainda ocupa o slot: não rouba
+  // a vaga (duas abas jogando o mesmo turno causa jogadas conflitantes).
+  const current = room.players[playerIdx];
+  if (current && current !== ws && current.readyState === 1) {
+    // A conexão antiga pode estar apenas fechando (recarga da página):
+    // espera alguns instantes e tenta de novo antes de desistir.
+    setTimeout(() => {
+      if (!ws || ws.readyState !== 1) return;
+      const holder = room.players[playerIdx];
+      if (holder && holder !== ws && holder.readyState === 1) {
+        sendTo(ws, { type: 'game_unavailable', reason: 'active_elsewhere', room: roomCode });
+        return;
+      }
+      tryResumeRoomForUser(ws, conn, userId);
+    }, 2500);
+    return false;
+  }
+
+  return attachPlayerToRoom(ws, conn, room, playerIdx, userId);
 }
 
 // Relógio do turno: se o jogador não agir a tempo, o servidor passa a vez
@@ -488,8 +812,16 @@ function clearRoomTurnTimer(room) {
 
 function startRoomTurnTimer(room) {
   clearRoomTurnTimer(room);
+  clearBotTurnTimer(room);
   if (!room || !room.game || room.game.over) return;
   if (!room.game.started) return;
+
+  // Vez do bot: o servidor joga por ele (sem relógio de turno humano)
+  const turnSlot = Number(room.game.turn);
+  if (isBotSlot(room, turnSlot)) {
+    scheduleBotTurn(room, turnSlot);
+    return;
+  }
 
   // Cada fase do turno (sortear o dado, escolher a peça) começa com a
   // janela de graça disponível
@@ -520,6 +852,84 @@ function startRoomTurnTimer(room) {
   }, turnTimeout);
 }
 
+/* -------------------------------------------------------------
+   TURNO DO BOT (roadmap #12)
+   O bot joga com as mesmas regras do servidor: sorteia o dado,
+   escolhe a melhor peça e a jogada é aplicada e transmitida
+   exatamente como a de um jogador humano.
+------------------------------------------------------------- */
+
+function clearBotTurnTimer(room) {
+  if (room && room.botTimer) {
+    clearTimeout(room.botTimer);
+    room.botTimer = null;
+  }
+}
+
+// Agenda a jogada do bot (ele "pensa" por um instante antes de rolar)
+function scheduleBotTurn(room, slot) {
+  clearBotTurnTimer(room);
+  room.botTimer = setTimeout(() => {
+    room.botTimer = null;
+    runBotTurn(room, slot);
+  }, BOT_THINK_MS);
+}
+
+// O bot joga o turno dele
+function runBotTurn(room, slot) {
+  const state = room.game;
+  if (!state || state.over || !state.started) return;
+  if (Number(state.turn) !== Number(slot) || !isBotSlot(room, slot)) return;
+  if (state.dice !== null) return; // o dado já foi sorteado neste turno
+
+  const result = rules.rollForTurn(state, slot);
+  if (!result) return;
+
+  broadcastRoomGame(room, {
+    type: 'dice_rolled',
+    slot,
+    value: result.value,
+    sixes: result.sixes,
+    turn: slot,
+    legal: result.legal,
+    bot: true
+  });
+
+  if (result.turnPassed) {
+    // 3 seis seguidos ou nenhum movimento possível: a vez passa
+    broadcastRoomGame(room, {
+      type: 'turn_passed',
+      slot,
+      reason: result.reason,
+      turn: result.turn,
+      scores: state.scores,
+      bot: true
+    });
+    if (!state.over) startRoomTurnTimer(room);
+    return;
+  }
+
+  const tokenIdx = rules.chooseBotTokenIndex(state, slot, result.value);
+  if (!Number.isInteger(tokenIdx) || tokenIdx < 0) {
+    // Sem jogada possível (não deveria acontecer): passa a vez
+    state.dice = null;
+    state.sixes = 0;
+    state.turn = rules.nextSlot(state, slot);
+    broadcastRoomGame(room, {
+      type: 'turn_passed',
+      slot,
+      reason: 'no_move',
+      turn: state.turn,
+      scores: state.scores,
+      bot: true
+    });
+    if (!state.over) startRoomTurnTimer(room);
+    return;
+  }
+
+  applyRoomMove(room, slot, tokenIdx, { bot: true });
+}
+
 // Passa a vez do jogador que deixou o tempo acabar (chamado depois da
 // janela de graça, quando nenhuma jogada chegou)
 function passTurnAfterTimeout(room, slot) {
@@ -542,6 +952,9 @@ function passTurnAfterTimeout(room, slot) {
   });
   startRoomTurnTimer(room);
 }
+
+// Passa a vez do jogador que deixou o tempo acabar (chamado depois da
+// janela de graça, quando nenhuma jogada chegou)
 
 // Registro das mensagens rejeitadas (tentativas de manipulação)
 function logRejectedMessage(conn, type, reason) {
@@ -698,12 +1111,39 @@ async function updateLeaguePlayer(userId, playerScore, opponentScore) {
   const standing = await getLeagueStandingFor(userId);
   if (!standing) return null;
 
-  const next = league.applyMatchResult(standing, playerScore, opponentScore);
+  let next = league.applyMatchResult(standing, playerScore, opponentScore);
+  let protectionUsed = false;
+
+  // Proteção de tier comprada na loja (PRO-007): o jogador não perde
+  // pontos de tier nas próximas 3 derrotas (cada uso gasta 1 proteção).
+  const lost = Number(playerScore) < Number(opponentScore);
+  const lostPoints = Math.max(0, Number(standing.points || 0) - Number(next.points || 0));
+  if (lost && lostPoints > 0) {
+    const progress = await db.getPlayerProgress(userId);
+    const state = shop.ensureShopState(progress.shopState);
+    if (state.tierProtection > 0) {
+      await db.updatePlayerProgress(userId, (current) => {
+        const currentState = shop.ensureShopState(current.shopState);
+        if (currentState.tierProtection <= 0) return { ok: false, progress: current };
+        return {
+          ok: true,
+          progress: {
+            ...current,
+            shopState: { ...currentState, tierProtection: currentState.tierProtection - 1 }
+          }
+        };
+      });
+      next = { ...next, points: standing.points };
+      protectionUsed = true;
+    }
+  }
+
   let saved = await db.saveLeagueStanding(userId, next);
 
   // Tier S -> SS: além dos 100 pontos é preciso estar entre os 100
   // melhores jogadores do tier S (o ranking é do próprio tier).
   saved = await refreshLeaguePromotion(userId, saved);
+  if (saved && protectionUsed) saved.protectionUsed = true;
 
   return saved;
 }
@@ -731,6 +1171,7 @@ async function applyLeagueMatchResult(room, state) {
     const payloadA = standingA ? league.describeStanding(standingA) : null;
     const payloadB = standingB ? league.describeStanding(standingB) : null;
     if (payloadA) {
+      payloadA.protectionUsed = Boolean(standingA.protectionUsed);
       sendToUser(uidA, {
         type: 'league_update',
         standing: payloadA,
@@ -738,6 +1179,7 @@ async function applyLeagueMatchResult(room, state) {
       });
     }
     if (payloadB) {
+      payloadB.protectionUsed = Boolean(standingB.protectionUsed);
       sendToUser(uidB, {
         type: 'league_update',
         standing: payloadB,
@@ -814,6 +1256,63 @@ function applyArenaAbandonResult(room, leaverIdx) {
 }
 
 /**
+ * Aplica uma jogada na sala e avisa os clientes. Usado tanto pelos
+ * jogadores humanos quanto pelo bot que assume um slot abandonado.
+ */
+function applyRoomMove(room, slot, tokenIdx, options = {}) {
+  const state = room.game;
+  if (!state) return null;
+
+  const result = rules.applyMove(state, slot, tokenIdx);
+  if (!result) return null;
+
+  // Quem tirou 6 no dado, ou salvou uma peça, ou capturou uma peça adversária, joga novamente
+  const extraTurn = state.dice === 6 || Boolean(result.points) || result.captured.length > 0;
+  state.dice = null;
+  if (!extraTurn) {
+    state.turn = rules.nextSlot(state, slot);
+  }
+
+  const winner = rules.checkWinner(state, room.mode === 'arena');
+  if (winner) {
+    state.over = true;
+    state.winner = winner;
+    clearRoomTurnTimer(room);
+    // Partida da Liga: o servidor aplica os pontos e a progressão de tier
+    applyLeagueMatchResult(room, state);
+    // Partida de torneio: o vencedor avança na chave
+    applyTournamentMatchResult(room, state);
+  }
+
+  // Contador de capturas do slot (missões do jogador)
+  if (!Array.isArray(room.captures)) room.captures = [];
+  room.captures[slot] = (Number(room.captures[slot]) || 0) + result.captured.length;
+
+  broadcastRoomGame(room, {
+    type: 'token_moved',
+    slot,
+    color: result.color,
+    tokenIdx: result.tokenIdx,
+    from: result.from,
+    to: result.to,
+    roll: result.roll,
+    captured: result.captured,
+    points: result.points,
+    scores: state.scores,
+    turn: state.turn,
+    extraTurn,
+    over: state.over,
+    winner: state.winner,
+    // Total de capturas do slot até agora (fonte da verdade das missões)
+    totalCaptures: room.captures[slot],
+    bot: Boolean(options.bot)
+  });
+
+  if (!state.over) startRoomTurnTimer(room);
+  return result;
+}
+
+/**
  * Pedido de movimento. O cliente informa apenas a peça escolhida:
  * o servidor recalcula a jogada com o dado que ele mesmo sorteou.
  */
@@ -839,46 +1338,11 @@ function handleMoveRequest(ws, conn, room, data) {
   }
 
   const tokenIdx = Number(data.tokenIdx);
-  const result = rules.applyMove(state, slot, tokenIdx);
+  const result = applyRoomMove(room, slot, tokenIdx);
   if (!result) {
     rejectClientMessage(ws, conn, 'move_request', 'Jogada ilegal para o dado sorteado.', room);
     return;
   }
-
-  // Quem tirou 6 no dado, ou salvou uma peça, ou capturou uma peça adversária, joga novamente
-  const extraTurn = state.dice === 6 || Boolean(result.points) || result.captured.length > 0;
-  state.dice = null;
-  if (!extraTurn) {
-    state.turn = rules.nextSlot(state, slot);
-  }
-
-  const winner = rules.checkWinner(state, room.mode === 'arena');
-  if (winner) {
-    state.over = true;
-    state.winner = winner;
-    clearRoomTurnTimer(room);
-    // Partida da Liga: o servidor aplica os pontos e a progressão de tier
-    applyLeagueMatchResult(room, state);
-  }
-
-  broadcastRoomGame(room, {
-    type: 'token_moved',
-    slot,
-    color: result.color,
-    tokenIdx: result.tokenIdx,
-    from: result.from,
-    to: result.to,
-    roll: result.roll,
-    captured: result.captured,
-    points: result.points,
-    scores: state.scores,
-    turn: state.turn,
-    extraTurn,
-    over: state.over,
-    winner: state.winner
-  });
-
-  if (!state.over) startRoomTurnTimer(room);
 }
 
 // Pareia dois jogadores de contas diferentes da MESMA fila (Jogo Rápido ou
@@ -958,7 +1422,7 @@ async function isPremiumPlayer(uid) {
   return false;
 }
 
-async function startQuickMatchRoom(a, b, forcedMode) {
+async function startQuickMatchRoom(a, b, forcedMode, options = {}) {
   let code;
   do {
     code = generateRoomCode();
@@ -974,7 +1438,11 @@ async function startQuickMatchRoom(a, b, forcedMode) {
     userIds: [a.uid || null, b.uid || null],
     ready: [true, true],
     teams: [0, 1],
-    mode
+    mode,
+    tournament: options.tournament || null,
+    // BLITZ: partida rápida (velocidade das animações). Só vale quando os
+    // dois jogadores escolheram BLITZ no lobby.
+    blitz: options.blitz === true
   };
   rooms.set(code, room);
 
@@ -992,6 +1460,10 @@ async function startQuickMatchRoom(a, b, forcedMode) {
   const connB = connections.get(b.ws);
   if (connA) { connA.roomCode = code; connA.playerIdx = 0; }
   if (connB) { connB.roomCode = code; connB.playerIdx = 1; }
+  // Sala de cada jogador autenticado: permite retomar a partida se a
+  // conexão cair (reconexão transparente)
+  if (room.userIds[0]) userRoom.set(room.userIds[0], code);
+  if (room.userIds[1]) userRoom.set(room.userIds[1], code);
 
   // Perfis completos (id do Google, e-mail e foto) para que os clientes
   // possam exibir o oponente e enviar solicitações de amizade.
@@ -1012,13 +1484,18 @@ async function startQuickMatchRoom(a, b, forcedMode) {
   // SOLO 1 vs 1: quem começa usa a cor primária do perfil e o oponente
   // só usa a primária se ela não tiver o mesmo nome da cor do iniciante.
   const soloColors = await resolveSoloMatchColors([room.userIds[0], room.userIds[1]]);
+  // Guarda as cores da mesa: a revanche joga na mesma mesa (roadmap #13)
+  room.soloColors = soloColors;
   players[0].color = soloColors.starterColor;
   players[1].color = soloColors.opponentColor;
 
-  sendTo(a.ws, { type: 'room_created', room: code, player: 0, name: room.names[0], quick: true, mode, slotColors: room.slotColors, turn: room.game.turn, opponentProfile: { ...profileB, color: soloColors.opponentColor } });
-  sendTo(b.ws, { type: 'room_created', room: code, player: 1, name: room.names[1], quick: true, mode, slotColors: room.slotColors, turn: room.game.turn, opponentProfile: { ...profileA, color: soloColors.starterColor } });
+  const tournamentInfo = room.tournament || null;
+  sendTo(a.ws, { type: 'room_created', room: code, player: 0, name: room.names[0], quick: true, mode, slotColors: room.slotColors, turn: room.game.turn, opponentProfile: { ...profileB, color: soloColors.opponentColor }, tournament: tournamentInfo, blitz: room.blitz });
+  sendTo(b.ws, { type: 'room_created', room: code, player: 1, name: room.names[1], quick: true, mode, slotColors: room.slotColors, turn: room.game.turn, opponentProfile: { ...profileA, color: soloColors.starterColor }, tournament: tournamentInfo, blitz: room.blitz });
   sendTo(a.ws, { type: 'room_ready', players, slotColors: room.slotColors, turn: room.game.turn });
   sendTo(b.ws, { type: 'room_ready', players, slotColors: room.slotColors, turn: room.game.turn });
+
+  return room;
 }
 
 /* -------------------------------------------------------------
@@ -1322,6 +1799,8 @@ async function startDuplaMatch(entryA, entryB) {
       conn.roomCode = code;
       conn.playerIdx = seat.slot;
     }
+    // Sala do jogador: reconexão transparente
+    if (seat.player.id) userRoom.set(seat.player.id, code);
   });
 
   rooms.set(code, room);
@@ -1366,6 +1845,18 @@ async function startDuplaMatch(entryA, entryB) {
     roster[1].teamColor = soloColors.opponentColor.hex;
     roster[1].teamColorName = soloColors.opponentColor.name;
   }
+
+  // Cores dos times guardadas na sala: quem reconecta recebe essa
+  // informação no snapshot e o tabuleiro continua igual
+  room.teamColors = soloMatch
+    ? {
+      0: { hex: roster[0].teamColor, name: roster[0].teamColorName },
+      1: { hex: roster[1].teamColor, name: roster[1].teamColorName }
+    }
+    : {
+      0: { hex: entryA.teamColor, name: entryA.teamColorName, teamName: entryA.teamName },
+      1: { hex: entryB.teamColor, name: entryB.teamColorName, teamName: entryB.teamName }
+    };
 
   seats.forEach(seat => {
     const matchMessage = {
@@ -1609,6 +2100,7 @@ async function tryLobbyMatchmaking(kind) {
         name: entry.name,
         picture: entry.picture || '',
         ws: entry.ws,
+        blitz: entry.blitz === true,
         slot: seats.length
       });
       usedIndexes.push(i);
@@ -1618,8 +2110,10 @@ async function tryLobbyMatchmaking(kind) {
     // Tira da fila os jogadores que entraram na partida
     usedIndexes.reverse().forEach(index => queue.splice(index, 1));
     if (kind === 'normal') {
-      // Partida normal: 1 vs 1 com as cores resolvidas pelo perfil
-      await startQuickMatchRoom(seats[0], seats[1], 'quick');
+      // Partida normal: 1 vs 1 com as cores resolvidas pelo perfil.
+      // BLITZ só vale quando os dois jogadores escolheram BLITZ.
+      const blitz = seats.every(seat => seat.blitz === true);
+      await startQuickMatchRoom(seats[0], seats[1], 'quick', { blitz });
     } else {
       await startArenaMatch(seats);
     }
@@ -1655,6 +2149,8 @@ async function startArenaMatch(seats) {
       conn.roomCode = code;
       conn.playerIdx = seat.slot;
     }
+    // Sala do jogador: reconexão transparente
+    if (seat.uid) userRoom.set(seat.uid, code);
   });
 
   rooms.set(code, room);
@@ -1955,6 +2451,58 @@ async function handleLogout(request, response) {
   sendJson(response, 200, { ok: true }, { 'Set-Cookie': createClearSessionCookie() });
 }
 
+/* -------------------------------------------------------------
+   LOGIN DE DESENVOLVIMENTO (conta RH de teste)
+   Neste ambiente o botão do Google Identity Services responde 403,
+   então existe uma rota de desenvolvimento que entra direto na
+   conta de testes (a mesma lista PAID_TEST_EMAILS do db.js, que
+   já é Premium).
+   A rota só existe fora da produção: em produção responde 404.
+------------------------------------------------------------- */
+async function handleDevLogin(request, response, requestUrl) {
+  if (NODE_ENV === 'production') {
+    sendJson(response, 404, { error: 'Rota não disponível.' });
+    return;
+  }
+
+  const requested = String(requestUrl.searchParams.get('email') || '').trim().toLowerCase();
+  const email = requested || String(db.PAID_TEST_EMAILS[0] || '').trim().toLowerCase();
+  if (!email || !db.PAID_TEST_EMAILS.includes(email)) {
+    sendJson(response, 403, { error: 'Conta de teste não autorizada.' });
+    return;
+  }
+
+  try {
+    // Payload no mesmo formato do Google, para o usuário ser criado
+    // (ou atualizado) exatamente como no login normal.
+    const user = await db.createOrUpdateUserFromGoogle({
+      sub: `dev:${email}`,
+      email,
+      email_verified: 'true',
+      name: 'RH',
+      picture: ''
+    });
+    const token = await db.createSession(user.id);
+    const headers = { 'Set-Cookie': createSessionCookie(token) };
+
+    // Navegação (abriu a rota no navegador): volta para o jogo.
+    if (String(request.headers.accept || '').includes('text/html')) {
+      response.writeHead(302, { ...headers, Location: '/' });
+      response.end();
+      return;
+    }
+
+    sendJson(response, 200, { user }, headers);
+  } catch (error) {
+    if (error && error.dbError) {
+      console.error('[dev-login] erro de banco de dados:', error.message);
+      sendJson(response, 503, { error: 'Não foi possível acessar o banco de dados. Tente novamente em instantes.' });
+      return;
+    }
+    sendJson(response, 400, { error: error.message });
+  }
+}
+
 async function handleSession(request, response) {
   const user = await getSessionUser(request);
   if (!user) {
@@ -2028,6 +2576,7 @@ function premiumPublicInfo() {
     currency: PREMIUM_CURRENCY,
     note: PREMIUM_TRIAL_NOTE,
     benefits: PREMIUM_BENEFITS,
+    groups: PREMIUM_BENEFIT_GROUPS,
     gateway: PIX_GATEWAY,
     // No modo 'pixkey' o servidor não recebe aviso do pagamento:
     // a liberação do Premium é feita manualmente pelo administrador.
@@ -2148,9 +2697,15 @@ async function handlePremiumCheckout(request, response) {
       copyPaste = created.copyPaste || '';
       gatewayRef = created.id || '';
     } else {
-      // BR Code estático: chave Pix do próprio projeto (modo 'pixkey') ou
-      // chave fictícia do modo de teste ('stub')
-      const key = PIX_KEY || 'luud.premium@pix.test';
+      // BR Code estático. No modo 'pixkey' é a chave Pix real do projeto
+      // (o pagamento é conferido no extrato e liberado manualmente). No
+      // modo 'stub' (teste) a chave é SEMPRE fictícia: usar a chave real
+      // aqui tornaria falso o aviso de "nenhuma cobrança real" - um
+      // teste em ambiente de desenvolvimento poderia cobrar alguém.
+      const isTestMode = PIX_GATEWAY === 'stub';
+      const key = isTestMode
+        ? 'luud.premium@pix.test'
+        : (PIX_KEY || 'luud.premium@pix.test');
       copyPaste = pix.buildPixPayload({
         key,
         name: PIX_MERCHANT_NAME,
@@ -2170,7 +2725,11 @@ async function handlePremiumCheckout(request, response) {
       gatewayRef,
       copyPaste,
       qrCode,
-      expiresAt
+      expiresAt,
+      // Produto do Premium: distingue das cobranças de Cristais da loja
+      productType: 'premium',
+      productId: 'premium',
+      productAmount: 1
     });
 
     sendJson(response, 200, {
@@ -2209,9 +2768,13 @@ async function handlePremiumStatus(request, response) {
     let payment = null;
     try {
       payment = paymentId ? await db.getPayment(paymentId) : null;
+      if (payment && !isPremiumPayment(payment)) payment = null;
       if (!payment && !paymentId) {
         const payments = await db.listPaymentsForUser(user.id);
-        payment = payments.find(item => item.status === 'pending') || payments[0] || null;
+        // Só as cobranças do Premium interessam aqui: as de Cristais
+        // (produto 'crystals') pertencem ao fluxo da loja.
+        const premiumPayments = payments.filter(isPremiumPayment);
+        payment = premiumPayments.find(item => item.status === 'pending') || premiumPayments[0] || null;
       }
     } catch (paymentError) {
       console.error('[premium] não foi possível consultar as cobranças:', paymentError.message);
@@ -2249,6 +2812,24 @@ async function handlePremiumStatus(request, response) {
   }
 }
 
+/* -------------------------------------------------------------
+   PRODUTOS DE PAGAMENTO
+   Uma cobrança é do Premium ou da loja (Cristais). Os handlers
+   nunca podem misturar os dois: comprar Cristais NÃO pode
+   ativar o Premium e pagar o Premium NÃO pode entregar Cristais.
+------------------------------------------------------------------ */
+function paymentProductType(payment) {
+  return String((payment && payment.productType) || 'premium').toLowerCase();
+}
+
+function isPremiumPayment(payment) {
+  return Boolean(payment) && paymentProductType(payment) === 'premium';
+}
+
+function isCrystalPayment(payment) {
+  return Boolean(payment) && paymentProductType(payment) === 'crystals';
+}
+
 // Confirmação manual de pagamento (somente em desenvolvimento/testes)
 async function handlePremiumDevConfirm(request, response) {
   if (NODE_ENV === 'production' || PIX_GATEWAY !== 'stub') {
@@ -2268,6 +2849,12 @@ async function handlePremiumDevConfirm(request, response) {
     const payment = paymentId ? await db.getPayment(paymentId) : null;
     if (!payment || payment.userId !== user.id) {
       sendJson(response, 404, { error: 'Cobrança não encontrada.' });
+      return;
+    }
+    // Uma cobrança de Cristais não ativa o Premium (ela é confirmada
+    // no fluxo da loja, em /api/shop/dev/confirm).
+    if (!isPremiumPayment(payment)) {
+      sendJson(response, 409, { error: 'Esta cobrança não é do Premium.' });
       return;
     }
 
@@ -2344,9 +2931,13 @@ async function handlePremiumAdminPayments(request, response) {
         amount: payment.amount,
         status: payment.status,
         gateway: payment.gateway,
+        productType: paymentProductType(payment),
+        productId: payment.productId || '',
+        productAmount: Number(payment.productAmount) || 0,
         createdAt: payment.createdAt,
         expiresAt: payment.expiresAt,
-        paidAt: payment.paidAt
+        paidAt: payment.paidAt,
+        deliveredAt: payment.deliveredAt || null
       }))
     });
   } catch (error) {
@@ -2393,6 +2984,29 @@ async function handlePremiumAdminConfirm(request, response) {
         sendJson(response, 404, { error: 'Esta conta não tem nenhuma cobrança registrada.' });
         return;
       }
+    }
+
+    // Cobrança da loja (Cristais): a confirmação manual entrega o
+    // pacote de Cristais — e NÃO ativa o Premium.
+    if (isCrystalPayment(payment)) {
+      const delivery = await deliverCrystalPackage(payment);
+      const progress = await db.getPlayerProgress(user.id);
+      console.log(`[loja] confirmação manual: ${user.email} | cobrança ${payment.id} | ${payment.productAmount} Cristais`);
+      sendJson(response, 200, {
+        ok: true,
+        productType: 'crystals',
+        delivered: Boolean(delivery.delivered),
+        duplicate: Boolean(delivery.duplicate),
+        crystals: Math.max(0, Number(progress.crystals) || 0),
+        payment: { id: payment.id, amount: payment.amount, status: 'paid' },
+        user
+      });
+      return;
+    }
+
+    if (!isPremiumPayment(payment)) {
+      sendJson(response, 409, { error: 'Produto de pagamento desconhecido.' });
+      return;
     }
 
     const updatedUser = await grantPremium(user.id, payment.id);
@@ -2473,7 +3087,9 @@ async function handlePremiumWebhook(request, response) {
 
     if (approved) {
       const payment = await db.findPaymentByGatewayRef(String(gatewayPaymentId));
-      if (payment) {
+      // Só a cobrança do Premium libera o Premium: as cobranças de
+      // Cristais (produto 'crystals') são entregues pelo webhook da loja.
+      if (payment && isPremiumPayment(payment)) {
         await grantPremium(payment.userId, payment.id);
       }
     }
@@ -2608,11 +3224,18 @@ async function handleProfileUpdate(request, response) {
     if (body.displayName !== undefined) {
       fields.displayName = cleanText(body.displayName, 60) || user.displayName;
     }
-    // O nickname (playerName) só pode ser alterado por contas Premium.
+    // O nickname (playerName) só pode ser alterado por contas Premium
+    // ou por quem tem uma renomeação comprada na loja (item PRO-008).
+    let useRenameToken = false;
     if (body.playerName !== undefined) {
       if (!user.isPaid) {
-        sendJson(response, 400, { error: 'A alteração do nickname está disponível apenas para contas Premium.' });
-        return;
+        const progress = await db.getPlayerProgress(user.id);
+        const state = shop.ensureShopState(progress.shopState);
+        useRenameToken = state.renameTokens > 0;
+        if (!useRenameToken) {
+          sendJson(response, 400, { error: 'A alteração do nickname está disponível para contas Premium ou com uma renomeação da loja.' });
+          return;
+        }
       }
       const playerName = cleanText(body.playerName, 24);
       if (!playerName) {
@@ -2677,7 +3300,50 @@ async function handleProfileUpdate(request, response) {
     // A partir de agora as cores salvas são as preferências do jogador
     if (hasColorChange) fields.colorsCustomized = true;
 
-    const updatedUser = await db.updateUserProfile(user.id, fields);
+    // A renomeação comprada na loja (item PRO-008) é gasta ANTES de
+    // salvar o perfil: o débito é atômico (lock do progresso) e o
+    // token volta se a gravação do perfil falhar.
+    if (useRenameToken) {
+      const debit = await db.updatePlayerProgress(user.id, (progress) => {
+        const state = shop.ensureShopState(progress.shopState);
+        if (state.renameTokens <= 0) return { ok: false, progress };
+        return {
+          ok: true,
+          progress: {
+            ...progress,
+            shopState: { ...state, renameTokens: state.renameTokens - 1 }
+          }
+        };
+      });
+      if (!debit.ok) {
+        sendJson(response, 409, { error: 'Você não tem renomeações disponíveis na loja.' });
+        return;
+      }
+    }
+
+    let updatedUser;
+    try {
+      updatedUser = await db.updateUserProfile(user.id, fields);
+    } catch (profileError) {
+      // Devolve a renomeação: o nickname não foi salvo.
+      if (useRenameToken) {
+        try {
+          await db.updatePlayerProgress(user.id, (progress) => {
+            const state = shop.ensureShopState(progress.shopState);
+            return {
+              ok: true,
+              progress: {
+                ...progress,
+                shopState: { ...state, renameTokens: state.renameTokens + 1 }
+              }
+            };
+          });
+        } catch (refundError) {
+          console.error('[perfil] erro ao devolver a renomeação:', refundError && refundError.message);
+        }
+      }
+      throw profileError;
+    }
 
     sendJson(response, 200, { user: updatedUser });
   } catch (error) {
@@ -2696,7 +3362,7 @@ async function handleAuthConfig(request, response) {
    HISTÓRICO DE PARTIDAS
 ------------------------------------------------------------- */
 const MATCH_RECORD_LIMIT = 100;
-const MATCH_MODES = new Set(['quick', 'invite', 'local', 'multiplayer', 'dupla', 'arena', 'liga']);
+const MATCH_MODES = new Set(['quick', 'invite', 'local', 'multiplayer', 'dupla', 'arena', 'liga', 'tournament']);
 
 function sanitizeMatchRecord(body, userId) {
   const mode = MATCH_MODES.has(body.mode) ? body.mode : 'local';
@@ -2760,7 +3426,1403 @@ async function listMatchRecords(request, response) {
   }
 
   const data = await db.listMatchRecords(user.id);
-  sendJson(response, 200, { matches: data.matches });
+
+  // Histórico padrão: 15 dias. Com o item CON-002 (90 dias) o jogador
+  // enxerga o histórico completo.
+  let days = 15;
+  try {
+    const progress = await db.getPlayerProgress(user.id);
+    if (shop.hasExtendedHistory(progress.shopState, new Date())) days = 90;
+  } catch (error) {
+    console.error('[histórico] erro ao verificar o histórico estendido:', error && error.message);
+  }
+
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+  const matches = (data.matches || []).filter(item => {
+    const stamp = new Date(item.finishedAt || item.createdAt || 0).getTime();
+    return !Number.isFinite(stamp) || stamp >= cutoff;
+  });
+
+  sendJson(response, 200, { matches, days, extended: days > 15 });
+}
+
+/* -------------------------------------------------------------
+   RECOMPENSAS — baú diário e missões (roadmap #6/#7)
+   As regras (valores, metas e ciclos) ficam em rewards.js; aqui
+   só autenticamos, sanitizamos e persistimos.
+------------------------------------------------------------- */
+
+const PROGRESS_MODES = new Set(['quick', 'invite', 'local', 'multiplayer', 'dupla', 'arena', 'liga', 'tournament']);
+
+function clampProgressCount(value, max) {
+  const number = Math.floor(Number(value));
+  if (!Number.isFinite(number) || number <= 0) return 0;
+  return Math.min(max, number);
+}
+
+async function handleProgressOverview(request, response) {
+  const user = await getSessionUser(request);
+  if (!user) {
+    sendJson(response, 401, { error: 'Faça login com o Google para ver as suas recompensas.' });
+    return;
+  }
+
+  try {
+    const progress = await db.getPlayerProgress(user.id);
+    sendJson(response, 200, rewards.describeProgress(progress, new Date()));
+  } catch (error) {
+    console.error('[recompensas] erro ao carregar o progresso:', error && error.message);
+    sendJson(response, 500, { error: 'Não foi possível carregar as recompensas. Tente novamente.' });
+  }
+}
+
+async function handleDailyRewardClaim(request, response) {
+  const user = await getSessionUser(request);
+  if (!user) {
+    sendJson(response, 401, { error: 'Faça login com o Google para resgatar o baú diário.' });
+    return;
+  }
+
+  try {
+    // Sem body: resgata o baú de hoje. Com { date }: compensa um dia
+    // que já passou (gasta 1 compensador do passe).
+    const body = await readJsonBody(request);
+    const date = String((body && body.date) || '').trim();
+
+    // Conta Premium ganha o dobro de XP no passe (roadmap #20)
+    const premium = Boolean(user.isPaid) || user.plan === 'premium';
+    const outcome = await db.updatePlayerProgress(user.id, (progress) => {
+      const chestOutcome = date
+        ? rewards.claimMissedDailyReward(progress, date, new Date())
+        : rewards.claimDailyReward(progress, new Date());
+      // O XP do baú também alimenta o passe de temporada (#9)
+      if (chestOutcome.ok) {
+        season.applySeasonXp(chestOutcome.progress, chestOutcome.reward.xp, new Date(), { isPremium: premium });
+      }
+      return chestOutcome;
+    });
+    const view = rewards.describeProgress(outcome.progress, new Date());
+
+    if (!outcome.ok) {
+      sendJson(response, 409, { error: outcome.error, progress: view });
+      return;
+    }
+    sendJson(response, 200, { ok: true, reward: outcome.reward, progress: view });
+  } catch (error) {
+    console.error('[recompensas] erro ao resgatar o baú diário:', error && error.message);
+    sendJson(response, 500, { error: 'Não foi possível resgatar o baú diário. Tente novamente.' });
+  }
+}
+
+async function handleMatchProgress(request, response) {
+  const user = await getSessionUser(request);
+  if (!user) {
+    sendJson(response, 401, { error: 'Faça login com o Google para guardar o seu progresso.' });
+    return;
+  }
+
+  try {
+    const body = await readJsonBody(request);
+    const mode = PROGRESS_MODES.has(body.mode) ? body.mode : 'local';
+    // Resultado: vitória, empate ou derrota (o empate paga menos que a
+    // vitória e mais que a derrota — roadmap "Economia").
+    const result = body.result === 'win' ? 'win' : body.result === 'draw' ? 'draw' : 'loss';
+    const captures = clampProgressCount(body.captures, 40);
+    const pieces = clampProgressCount(body.pieces, 8);
+    const matchId = String(body.matchId || '').trim().slice(0, 64) || null;
+
+    const outcome = await db.updatePlayerProgress(user.id, (progress) => {
+      const matchOutcome = rewards.applyMatchProgress(progress, { id: matchId, mode, result, captures, pieces }, new Date());
+      // O XP da partida também alimenta o passe de temporada (#9)
+      if (matchOutcome.ok && matchOutcome.gains) {
+        // Conta Premium ganha o dobro de XP no passe (roadmap #20)
+        const premium = Boolean(user.isPaid) || user.plan === 'premium';
+        season.applySeasonXp(matchOutcome.progress, matchOutcome.gains.xp, new Date(), { isPremium: premium });
+      }
+      return matchOutcome;
+    });
+    const view = rewards.describeProgress(outcome.progress, new Date());
+
+    if (!outcome.ok && outcome.duplicate) {
+      // A mesma partida não pode ser contabilizada duas vezes
+      sendJson(response, 200, { ok: true, duplicate: true, progress: view });
+      return;
+    }
+    sendJson(response, 200, { ok: true, duplicate: false, progress: view });
+  } catch (error) {
+    console.error('[recompensas] erro ao registrar a partida:', error && error.message);
+    sendJson(response, 400, { error: 'Não foi possível registrar o progresso da partida.' });
+  }
+}
+
+async function handleMissionClaim(request, response) {
+  const user = await getSessionUser(request);
+  if (!user) {
+    sendJson(response, 401, { error: 'Faça login com o Google para resgatar as missões.' });
+    return;
+  }
+
+  try {
+    const body = await readJsonBody(request);
+    const missionId = String(body.missionId || '').trim().slice(0, 64);
+
+    const outcome = await db.updatePlayerProgress(user.id, (progress) => {
+      const missionOutcome = rewards.claimMissionReward(progress, missionId, new Date());
+      // O XP da missão também alimenta o passe de temporada (#9)
+      if (missionOutcome.ok) {
+        // Conta Premium ganha o dobro de XP no passe (roadmap #20)
+        const premium = Boolean(user.isPaid) || user.plan === 'premium';
+        season.applySeasonXp(missionOutcome.progress, missionOutcome.reward.xp, new Date(), { isPremium: premium });
+      }
+      return missionOutcome;
+    });
+    const view = rewards.describeProgress(outcome.progress, new Date());
+
+    if (!outcome.ok) {
+      sendJson(response, 409, { error: outcome.error, progress: view });
+      return;
+    }
+    sendJson(response, 200, { ok: true, reward: outcome.reward, progress: view });
+  } catch (error) {
+    console.error('[recompensas] erro ao resgatar a missão:', error && error.message);
+    sendJson(response, 500, { error: 'Não foi possível resgatar a missão. Tente novamente.' });
+  }
+}
+
+/* -------------------------------------------------------------
+   PASSE DE BATALHA — 50 dias (roadmap #9)
+   O XP conquistado no jogo libera os níveis do passe. A trilha
+   Premium exige conta Premium; a FREE é para todo mundo.
+------------------------------------------------------------- */
+
+async function handleSeasonOverview(request, response) {
+  const user = await getSessionUser(request);
+  if (!user) {
+    sendJson(response, 401, { error: 'Faça login com o Google para ver o seu passe de temporada.' });
+    return;
+  }
+
+  try {
+    const progress = await db.getPlayerProgress(user.id);
+    const premium = await isPremiumPlayer(user.id);
+    // A trilha premium do passe também pode vir da loja (item PRO-001)
+    const hasPremiumPass = shop.hasPremiumPass(progress.shopState, season.currentSeason(new Date()).id);
+    const view = season.describeSeason(progress, new Date(), { isPremium: premium, hasPremiumPass });
+    sendJson(response, 200, view);
+  } catch (error) {
+    console.error('[passe] erro ao carregar a temporada:', error && error.message);
+    sendJson(response, 500, { error: 'Não foi possível carregar o passe de temporada.' });
+  }
+}
+
+async function handleSeasonClaim(request, response) {
+  const user = await getSessionUser(request);
+  if (!user) {
+    sendJson(response, 401, { error: 'Faça login com o Google para resgatar as recompensas do passe.' });
+    return;
+  }
+
+  try {
+    const body = await readJsonBody(request);
+    const level = Number(body.level);
+    // track: 'all' resgata a trilha gratuita e a premium de uma vez
+    // (é o que o botão único do passe usa).
+    const track = body.track === 'premium' ? 'premium'
+      : body.track === 'free' ? 'free'
+        : 'all';
+    const premium = await isPremiumPlayer(user.id);
+
+    const outcome = await db.updatePlayerProgress(user.id, (progress) => {
+      const hasPremiumPass = shop.hasPremiumPass(progress.shopState, season.currentSeason(new Date()).id);
+      const options = { now: new Date(), isPremium: premium, hasPremiumPass };
+      return track === 'all'
+        ? season.claimLevelRewards(progress, level, options)
+        : season.claimLevelReward(progress, level, track, options);
+    });
+    const view = season.describeSeason(outcome.progress, new Date(), { isPremium: premium });
+
+    if (!outcome.ok) {
+      sendJson(response, 409, { error: outcome.error, season: view });
+      return;
+    }
+    sendJson(response, 200, {
+      ok: true,
+      reward: outcome.reward,
+      rewards: outcome.rewards || (outcome.reward ? [outcome.reward] : []),
+      season: view
+    });
+  } catch (error) {
+    console.error('[passe] erro ao resgatar o nível:', error && error.message);
+    sendJson(response, 500, { error: 'Não foi possível resgatar a recompensa do nível.' });
+  }
+}
+
+/* -------------------------------------------------------------
+   LOJA — catálogo, compras, baús e pacotes de Cristais
+   As regras (preço, moeda, efeito) ficam em shop.js; aqui só
+   autenticamos, sanitizamos e persistimos.
+
+   Duas moedas:
+   - LUDAS   (coins): gratuita, conquistada jogando.
+   - CRISTAIS (crystals): premium, comprada via Pix.
+   Ludas nunca compram Cristais e Cristais nunca viram Ludas.
+   ------------------------------------------------------------- */
+
+async function handleShopOverview(request, response) {
+  const user = await getSessionUser(request);
+  if (!user) {
+    sendJson(response, 401, { error: 'Faça login com o Google para abrir a loja.' });
+    return;
+  }
+
+  try {
+    const progress = await db.getPlayerProgress(user.id);
+    const current = season.currentSeason(new Date());
+    const view = shop.describeShop(progress, new Date(), { seasonId: current.id });
+    sendJson(response, 200, view);
+  } catch (error) {
+    console.error('[loja] erro ao carregar a loja:', error && error.message);
+    sendJson(response, 500, { error: 'Não foi possível carregar a loja. Tente novamente.' });
+  }
+}
+
+async function handleShopBuy(request, response) {
+  const user = await getSessionUser(request);
+  if (!user) {
+    sendJson(response, 401, { error: 'Faça login com o Google para comprar na loja.' });
+    return;
+  }
+
+  try {
+    const body = await readJsonBody(request);
+    const itemId = String(body.itemId || '').trim().slice(0, 32);
+    const current = season.currentSeason(new Date());
+
+    const outcome = await db.updatePlayerProgress(user.id, (progress) => (
+      shop.purchaseItem(progress, itemId, { now: new Date(), seasonId: current.id })
+    ));
+    const view = shop.describeShop(outcome.progress, new Date(), { seasonId: current.id });
+    const progress = rewards.describeProgress(outcome.progress, new Date());
+
+    if (!outcome.ok) {
+      sendJson(response, 409, { error: outcome.error, shop: view });
+      return;
+    }
+    sendJson(response, 200, {
+      ok: true,
+      item: outcome.item,
+      spent: outcome.spent,
+      shop: view,
+      progress
+    });
+  } catch (error) {
+    console.error('[loja] erro ao comprar o item:', error && error.message);
+    sendJson(response, 400, { error: error.message || 'Não foi possível concluir a compra.' });
+  }
+}
+
+async function handleShopEquip(request, response) {
+  const user = await getSessionUser(request);
+  if (!user) {
+    sendJson(response, 401, { error: 'Faça login com o Google para equipar itens.' });
+    return;
+  }
+
+  try {
+    const body = await readJsonBody(request);
+    const itemId = String(body.itemId || '').trim().slice(0, 32);
+    const current = season.currentSeason(new Date());
+
+    const outcome = await db.updatePlayerProgress(user.id, (progress) => {
+      if (!itemId) {
+        // Sem item: desequipa o slot informado
+        const slot = String(body.slot || '').trim().slice(0, 16);
+        const state = shop.ensureShopState(progress.shopState);
+        if (!state.equipped[slot]) {
+          return { ok: false, error: 'Nada equipado neste slot.', progress };
+        }
+        const fallback = shop.ITEMS.find(item => item.slot === slot && item.currency === 'free');
+        const equipped = { ...state.equipped };
+        equipped[slot] = fallback ? fallback.id : null;
+        return {
+          ok: true,
+          error: null,
+          item: fallback ? shop.describeItem(fallback, { ...state, equipped }, {
+            ludas: Number(progress.coins) || 0,
+            crystals: Number(progress.crystals) || 0
+          }) : null,
+          progress: { ...progress, shopState: { ...state, equipped } }
+        };
+      }
+      return shop.equipItem(progress, itemId);
+    });
+
+    const view = shop.describeShop(outcome.progress, new Date(), { seasonId: current.id });
+    if (!outcome.ok) {
+      sendJson(response, 409, { error: outcome.error, shop: view });
+      return;
+    }
+    sendJson(response, 200, { ok: true, item: outcome.item || null, shop: view });
+  } catch (error) {
+    console.error('[loja] erro ao equipar o item:', error && error.message);
+    sendJson(response, 400, { error: error.message || 'Não foi possível equipar o item.' });
+  }
+}
+
+async function handleShopChest(request, response) {
+  const user = await getSessionUser(request);
+  if (!user) {
+    sendJson(response, 401, { error: 'Faça login com o Google para abrir baús.' });
+    return;
+  }
+
+  try {
+    const body = await readJsonBody(request);
+    const chestId = String(body.chest || '').trim().slice(0, 16);
+    const current = season.currentSeason(new Date());
+
+    const outcome = await db.updatePlayerProgress(user.id, (progress) => (
+      shop.openChest(progress, chestId, { now: new Date() })
+    ));
+    const view = shop.describeShop(outcome.progress, new Date(), { seasonId: current.id });
+    const progress = rewards.describeProgress(outcome.progress, new Date());
+
+    if (!outcome.ok) {
+      sendJson(response, 409, { error: outcome.error, shop: view });
+      return;
+    }
+    sendJson(response, 200, { ok: true, reward: outcome.reward, shop: view, progress });
+  } catch (error) {
+    console.error('[loja] erro ao abrir o baú:', error && error.message);
+    sendJson(response, 400, { error: error.message || 'Não foi possível abrir o baú.' });
+  }
+}
+
+/* -------------------------------------------------------------
+   PACOTES DE CRISTAIS (Pix)
+   O pacote é resolvido no servidor: o cliente manda só o id.
+------------------------------------------------------------- */
+
+function shopGatewayReady() {
+  if (!PIX_GATEWAY) return false;
+  if (PIX_GATEWAY === 'mercadopago' && !PIX_API_TOKEN) return false;
+  if (PIX_GATEWAY === 'pixkey' && !PIX_KEY) return false;
+  if (PIX_GATEWAY === 'stub' && NODE_ENV === 'production') return false;
+  return true;
+}
+
+// Gera a cobrança Pix de um produto da loja (pacote de Cristais)
+async function createShopCharge(user, pkg) {
+  const paymentId = generatePaymentId();
+  const expiresAt = new Date(Date.now() + PAYMENT_EXPIRY_MINUTES * 60 * 1000).toISOString();
+  const amount = pkg.priceBrl;
+
+  let qrCode = '';
+  let copyPaste = '';
+  let gatewayRef = '';
+
+  if (PIX_GATEWAY === 'mercadopago') {
+    const notificationUrl = PUBLIC_URL ? `${PUBLIC_URL}/api/shop/webhook` : undefined;
+    const created = await pix.createMercadoPagoPayment({
+      token: PIX_API_TOKEN,
+      amount,
+      description: `${pkg.total} Cristais LUUD - ${pkg.name}`,
+      email: user.email,
+      externalReference: paymentId,
+      notificationUrl,
+      metadata: { user_id: user.id, payment_id: paymentId, product_id: pkg.id, product_amount: pkg.total }
+    });
+    qrCode = created.qrCode || '';
+    copyPaste = created.copyPaste || '';
+    gatewayRef = created.id || '';
+  } else {
+    const isTestMode = PIX_GATEWAY === 'stub';
+    const key = isTestMode ? 'luud.cristais@pix.test' : (PIX_KEY || 'luud.cristais@pix.test');
+    copyPaste = pix.buildPixPayload({
+      key,
+      name: PIX_MERCHANT_NAME,
+      city: PIX_MERCHANT_CITY,
+      amount,
+      txid: paymentId
+    });
+    gatewayRef = paymentId;
+  }
+
+  return db.createPayment({
+    id: paymentId,
+    userId: user.id,
+    gateway: PIX_GATEWAY,
+    amount,
+    status: 'pending',
+    gatewayRef,
+    copyPaste,
+    qrCode,
+    expiresAt,
+    productType: 'crystals',
+    productId: pkg.id,
+    productAmount: pkg.total
+  });
+}
+
+async function handleShopCheckout(request, response) {
+  const user = await getSessionUser(request);
+  if (!user) {
+    sendJson(response, 401, { error: 'Faça login com o Google para comprar Cristais.' });
+    return;
+  }
+
+  const body = await readJsonBody(request);
+  const packageId = String(body.packageId || '').trim().slice(0, 32);
+  const pkg = shop.CRYSTAL_PACKAGES.find(item => item.id === packageId);
+  if (!pkg) {
+    sendJson(response, 400, { error: 'Pacote de Cristais desconhecido.' });
+    return;
+  }
+
+  if (!shopGatewayReady()) {
+    sendJson(response, 503, { error: 'O pagamento via Pix ainda não está disponível.' });
+    return;
+  }
+
+  try {
+    const payment = await createShopCharge(user, pkg);
+    sendJson(response, 200, {
+      payment: {
+        id: payment.id,
+        amount: payment.amount,
+        currency: 'BRL',
+        status: payment.status,
+        qrCode: payment.qrCode,
+        copyPaste: payment.copyPaste,
+        expiresAt: payment.expiresAt,
+        gateway: payment.gateway,
+        testMode: PIX_GATEWAY === 'stub'
+      },
+      package: {
+        id: pkg.id,
+        name: pkg.name,
+        total: pkg.total,
+        priceBrl: pkg.priceBrl
+      }
+    });
+  } catch (error) {
+    sendJson(response, 400, { error: error.message || 'Não foi possível gerar a cobrança Pix.' });
+  }
+}
+
+/* Entrega os Cristais de uma cobrança paga.
+   A entrega acontece dentro de updatePlayerProgress (transação com
+   lock), e o id da cobrança fica guardado no estado: mesmo que o
+   webhook e a verificação cheguem juntos, os Cristais entram uma vez. */
+async function deliverCrystalPackage(payment) {
+  if (!payment) return { delivered: false, payment };
+  const pkg = shop.CRYSTAL_PACKAGES.find(item => item.id === payment.productId);
+  if (!pkg) return { delivered: false, payment };
+
+  const amount = Math.max(0, Math.floor(Number(payment.productAmount) || 0)) || pkg.total;
+
+  const outcome = await db.updatePlayerProgress(payment.userId, (progress) => {
+    const state = shop.ensureShopState(progress.shopState);
+    const delivered = Array.isArray(state.deliveredOrders) ? state.deliveredOrders : [];
+    if (delivered.includes(payment.id)) {
+      return { ok: false, duplicate: true, progress, deliveredOrders: delivered };
+    }
+    const next = {
+      ...progress,
+      crystals: (Number(progress.crystals) || 0) + amount,
+      shopState: {
+        ...state,
+        // A lista de pedidos entregues é a trava de idempotência:
+        // guarda os últimos 200 pedidos (o webhook e a verificação
+        // podem chegar ao mesmo tempo).
+        deliveredOrders: delivered.concat(payment.id).slice(-200)
+      }
+    };
+    return { ok: true, duplicate: false, progress: next };
+  });
+
+  if (!outcome.ok) {
+    return { delivered: true, duplicate: true, payment };
+  }
+
+  await db.updatePayment(payment.id, {
+    status: 'paid',
+    paidAt: payment.paidAt || new Date().toISOString(),
+    deliveredAt: new Date().toISOString()
+  });
+  return { delivered: true, duplicate: false, payment: await db.getPayment(payment.id) };
+}
+
+// Consulta o gateway de uma cobrança de Cristais
+async function refreshShopPaymentStatus(payment) {
+  if (!payment || payment.status === 'paid') return payment;
+
+  if (payment.gateway === 'mercadopago' && PIX_API_TOKEN && payment.gatewayRef) {
+    const data = await pix.getMercadoPagoPayment({ token: PIX_API_TOKEN, paymentId: payment.gatewayRef });
+    if (data && data.status === 'approved') {
+      await deliverCrystalPackage(payment);
+      return db.getPayment(payment.id);
+    }
+    if (data && data.status && data.status !== 'pending') {
+      return db.updatePayment(payment.id, { status: data.status });
+    }
+  }
+
+  if (payment.gateway === 'pixkey') return payment;
+
+  if (payment.expiresAt && new Date(payment.expiresAt).getTime() < Date.now() && payment.status === 'pending') {
+    return db.updatePayment(payment.id, { status: 'expired' });
+  }
+
+  return payment;
+}
+
+async function handleShopStatus(request, response) {
+  const user = await getSessionUser(request);
+  if (!user) {
+    sendJson(response, 401, { error: 'Sessão expirada.' });
+    return;
+  }
+
+  const requestUrl = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
+  const paymentId = requestUrl.searchParams.get('id');
+
+  try {
+    let payment = null;
+    try {
+      payment = paymentId ? await db.getPayment(paymentId) : null;
+      if (payment && !isCrystalPayment(payment)) payment = null;
+      if (!payment && !paymentId) {
+        const payments = await db.listPaymentsForUser(user.id);
+        const crystalPayments = payments.filter(isCrystalPayment);
+        payment = crystalPayments.find(item => item.status === 'pending')
+          || crystalPayments[0]
+          || null;
+      }
+    } catch (paymentError) {
+      console.error('[loja] não foi possível consultar as cobranças:', paymentError.message);
+      payment = null;
+    }
+
+    if (payment && payment.userId !== user.id) {
+      sendJson(response, 403, { error: 'Cobrança não encontrada.' });
+      return;
+    }
+
+    if (payment) payment = await refreshShopPaymentStatus(payment);
+
+    const progress = await db.getPlayerProgress(user.id);
+    const current = season.currentSeason(new Date());
+
+    sendJson(response, 200, {
+      status: payment ? payment.status : 'none',
+      paid: Boolean(payment && payment.status === 'paid'),
+      crystals: Math.max(0, Number(progress.crystals) || 0),
+      payment: payment ? {
+        id: payment.id,
+        amount: payment.amount,
+        status: payment.status,
+        expiresAt: payment.expiresAt,
+        qrCode: payment.qrCode,
+        copyPaste: payment.copyPaste,
+        productId: payment.productId,
+        productAmount: payment.productAmount
+      } : null,
+      shop: shop.describeShop(progress, new Date(), { seasonId: current.id })
+    });
+  } catch (error) {
+    sendJson(response, 400, { error: error.message });
+  }
+}
+
+// Confirmação manual (somente em desenvolvimento/testes)
+async function handleShopDevConfirm(request, response) {
+  if (NODE_ENV === 'production' || PIX_GATEWAY !== 'stub') {
+    sendJson(response, 404, { error: 'Rota indisponível.' });
+    return;
+  }
+
+  const user = await getSessionUser(request);
+  if (!user) {
+    sendJson(response, 401, { error: 'Sessão expirada.' });
+    return;
+  }
+
+  try {
+    const body = await readJsonBody(request);
+    const paymentId = String(body.id || '').trim().slice(0, 80);
+    const payment = await db.getPayment(paymentId);
+    if (!payment || payment.userId !== user.id) {
+      sendJson(response, 404, { error: 'Cobrança não encontrada.' });
+      return;
+    }
+    if (!isCrystalPayment(payment)) {
+      sendJson(response, 409, { error: 'Esta cobrança não é de Cristais.' });
+      return;
+    }
+
+    await deliverCrystalPackage(payment);
+    const progress = await db.getPlayerProgress(user.id);
+    const current = season.currentSeason(new Date());
+
+    sendJson(response, 200, {
+      ok: true,
+      crystals: Math.max(0, Number(progress.crystals) || 0),
+      shop: shop.describeShop(progress, new Date(), { seasonId: current.id })
+    });
+  } catch (error) {
+    sendJson(response, 400, { error: error.message });
+  }
+}
+
+// Webhook do gateway: entrega o pacote quando o pagamento é aprovado
+async function handleShopWebhook(request, response) {
+  try {
+    const body = await readJsonBody(request);
+    const requestUrl = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
+    const payload = body && body.data && body.data.id ? body.data : body;
+    const gatewayRef = String(
+      requestUrl.searchParams.get('data.id')
+      || requestUrl.searchParams.get('id')
+      || payload.id
+      || ''
+    ).trim();
+    if (!gatewayRef) {
+      sendJson(response, 400, { error: 'Pagamento não identificado.' });
+      return;
+    }
+
+    const payment = await db.findPaymentByGatewayRef(gatewayRef);
+    if (!payment || !isCrystalPayment(payment)) {
+      sendJson(response, 404, { error: 'Cobrança não encontrada.' });
+      return;
+    }
+
+    // Assinatura do Mercado Pago: mesma conferência do webhook Premium
+    const signature = request.headers['x-signature'];
+    const requestId = request.headers['x-request-id'];
+    if (!pix.verifyMercadoPagoSignature({
+      secret: PIX_WEBHOOK_SECRET,
+      signatureHeader: signature,
+      requestId,
+      paymentId: gatewayRef
+    })) {
+      sendJson(response, 401, { error: 'Assinatura inválida.' });
+      return;
+    }
+
+    if (PIX_GATEWAY === 'mercadopago' && PIX_API_TOKEN) {
+      const data = await pix.getMercadoPagoPayment({ token: PIX_API_TOKEN, paymentId: gatewayRef });
+      if (!data || data.status !== 'approved') {
+        sendJson(response, 202, { ok: true, delivered: false });
+        return;
+      }
+    } else if (PIX_GATEWAY === 'pixkey') {
+      // No modo 'pixkey' não existe gateway para confirmar o pagamento:
+      // a entrega é feita pela confirmação manual do administrador
+      // (POST /api/premium/admin/confirm). Nunca entrega sem conferir.
+      sendJson(response, 202, { ok: true, delivered: false, manualConfirmation: true });
+      return;
+    }
+
+    await deliverCrystalPackage(payment);
+    sendJson(response, 200, { ok: true, delivered: true });
+  } catch (error) {
+    sendJson(response, 400, { error: error.message });
+  }
+}
+
+/* -------------------------------------------------------------
+   TORNEIOS COM HORÁRIO MARCADO (roadmap #10)
+   Torneios eliminatórios (8 ou 16 jogadores) em horário fixo.
+   O servidor é responsável por: receber as inscrições, agendar o
+   início da edição, criar as salas 1x1 do chaveamento, avançar o
+   vencedor e pagar a premiação em moedas.
+------------------------------------------------------------- */
+
+const TOURNAMENT_TICK_MS = 30000;
+let tournamentSchedulerBusy = false;
+let tournamentKickTimer = null;
+
+// Carrega (ou cria) a edição de um torneio a partir do id informado
+async function ensureTournamentEdition(editionId) {
+  const resolved = tournaments.resolveEditionId(editionId);
+  if (!resolved) return null;
+  let edition = await db.getTournamentEdition(resolved.id);
+  const expectedStart = new Date(resolved.startsAt).getTime();
+
+  if (edition) {
+    // Edição salva com outro horário (dado antigo): recria no horário
+    // oficial da definição, preservando as inscrições apenas se a
+    // edição ainda nem começou.
+    const storedStart = new Date(edition.startsAt).getTime();
+    if (edition.status === 'scheduled' && storedStart !== expectedStart) {
+      const fresh = tournaments.createEdition(resolved.definition, resolved.startsAt, resolved.dayKey);
+      fresh.entrants = Array.isArray(edition.entrants) ? edition.entrants : [];
+      edition = fresh;
+      await db.saveTournamentEdition(edition);
+    }
+    return { edition, definition: resolved.definition };
+  }
+
+  edition = tournaments.createEdition(resolved.definition, resolved.startsAt, resolved.dayKey);
+  await db.saveTournamentEdition(edition);
+  return { edition, definition: resolved.definition };
+}
+
+function tournamentPlayerName(user) {
+  if (!user) return 'Jogador';
+  return String(user.playerName || user.name || user.email || 'Jogador').slice(0, 24);
+}
+
+// Avisa os participantes do torneio sobre o estado da edição
+function notifyTournamentPlayers(edition, definition, payload, userIds) {
+  const view = tournaments.describeEdition(edition, definition, new Date(), {});
+  const targets = userIds || (edition.entrants || []).map(item => item.userId);
+  targets.forEach(userId => {
+    sendToUser(userId, { ...payload, tournament: view });
+  });
+}
+
+async function handleTournamentList(request, response) {
+  const user = await getSessionUser(request);
+  const now = new Date();
+
+  try {
+    const editions = [];
+    const upcoming = tournaments.upcomingEditions(now, 2);
+    for (const item of upcoming) {
+      const ensured = await ensureTournamentEdition(item.id);
+      if (!ensured) continue;
+      editions.push(tournaments.describeEdition(ensured.edition, ensured.definition, now, {
+        userId: user ? user.id : null
+      }));
+    }
+
+    // Edições em andamento (a partida do jogador pode estar esperando)
+    const stored = await db.listTournamentEditions();
+    stored.forEach(edition => {
+      if (edition.status !== 'running') return;
+      const definition = tournaments.definitionById(edition.tournamentId);
+      if (!definition) return;
+      const already = editions.some(item => item.id === edition.id);
+      if (already) return;
+      editions.push(tournaments.describeEdition(edition, definition, now, {
+        userId: user ? user.id : null
+      }));
+    });
+
+    sendJson(response, 200, { editions, serverTime: now.toISOString() });
+  } catch (error) {
+    console.error('[torneios] erro ao listar os torneios:', error && error.message);
+    sendJson(response, 500, { error: 'Não foi possível carregar os torneios. Tente novamente.' });
+  }
+}
+
+async function handleTournamentRegister(request, response) {
+  const user = await getSessionUser(request);
+  if (!user) {
+    sendJson(response, 401, { error: 'Faça login com o Google para se inscrever nos torneios.' });
+    return;
+  }
+
+  try {
+    const body = await readJsonBody(request);
+    const editionId = String(body.editionId || '').trim().slice(0, 64);
+    const ensured = await ensureTournamentEdition(editionId);
+    if (!ensured) {
+      sendJson(response, 400, { error: 'Torneio inválido.' });
+      return;
+    }
+
+    const outcome = tournaments.registerFor(
+      ensured.edition,
+      ensured.definition,
+      user.id,
+      tournamentPlayerName(user),
+      new Date()
+    );
+    if (!outcome.ok) {
+      sendJson(response, 409, {
+        error: outcome.error,
+        edition: tournaments.describeEdition(ensured.edition, ensured.definition, new Date(), { userId: user.id })
+      });
+      return;
+    }
+
+    // Entrada do torneio: 1 entrada grátis por tipo e dia. Quando a
+    // grátis já foi usada, é preciso uma entrada comprada na loja.
+    const entryType = ensured.definition.id === 'domingo' ? 'weekly' : 'daily';
+    const entryOutcome = await db.updatePlayerProgress(user.id, (progress) => {
+      const prepared = shop.prepareTournamentEntry(progress.shopState, entryType, new Date());
+      if (!prepared.ok) return { ok: false, error: prepared.error, progress };
+      return { ok: true, free: prepared.free, kind: prepared.kind, progress: { ...progress, shopState: prepared.state } };
+    });
+    if (!entryOutcome.ok) {
+      sendJson(response, 409, {
+        error: entryOutcome.error,
+        edition: tournaments.describeEdition(ensured.edition, ensured.definition, new Date(), { userId: user.id })
+      });
+      return;
+    }
+
+    // Guarda qual entrada foi usada: se o jogador cancelar a
+    // inscrição antes do torneio, a entrada volta para ele.
+    const entrant = (ensured.edition.entrants || []).find(item => item.userId === user.id);
+    if (entrant) {
+      entrant.entry = {
+        source: entryOutcome.free ? 'free' : 'paid',
+        kind: entryOutcome.kind || 'free',
+        tournamentType: entryType
+      };
+    }
+
+    await db.saveTournamentEdition(ensured.edition);
+    const view = tournaments.describeEdition(ensured.edition, ensured.definition, new Date(), { userId: user.id });
+    sendJson(response, 200, { ok: true, edition: view, usedFreeEntry: Boolean(entryOutcome.free) });
+  } catch (error) {
+    console.error('[torneios] erro ao inscrever o jogador:', error && error.message);
+    sendJson(response, 500, { error: 'Não foi possível concluir a inscrição. Tente novamente.' });
+  }
+}
+
+async function handleTournamentUnregister(request, response) {
+  const user = await getSessionUser(request);
+  if (!user) {
+    sendJson(response, 401, { error: 'Faça login com o Google para cancelar a inscrição.' });
+    return;
+  }
+
+  try {
+    const body = await readJsonBody(request);
+    const editionId = String(body.editionId || '').trim().slice(0, 64);
+    const ensured = await ensureTournamentEdition(editionId);
+    if (!ensured) {
+      sendJson(response, 400, { error: 'Torneio inválido.' });
+      return;
+    }
+
+    // Entrada usada na inscrição (para devolver se o jogador cancelar)
+    const entrant = (ensured.edition.entrants || []).find(item => item.userId === user.id);
+
+    const outcome = tournaments.unregisterFrom(ensured.edition, user.id, new Date());
+    if (!outcome.ok) {
+      sendJson(response, 409, {
+        error: outcome.error,
+        edition: tournaments.describeEdition(ensured.edition, ensured.definition, new Date(), { userId: user.id })
+      });
+      return;
+    }
+
+    await db.saveTournamentEdition(ensured.edition);
+
+    // Devolve a entrada (grátis do dia ou comprada na loja)
+    let refunded = false;
+    if (entrant && entrant.entry) {
+      try {
+        await db.updatePlayerProgress(user.id, (progress) => {
+          const refund = shop.refundTournamentEntry(progress.shopState, entrant.entry, new Date());
+          if (!refund.ok) return { ok: false, progress };
+          return { ok: true, progress: { ...progress, shopState: refund.state } };
+        });
+        refunded = true;
+      } catch (refundError) {
+        console.error('[torneios] erro ao devolver a entrada:', refundError && refundError.message);
+      }
+    }
+
+    const view = tournaments.describeEdition(ensured.edition, ensured.definition, new Date(), { userId: user.id });
+    sendJson(response, 200, { ok: true, edition: view, entryRefunded: refunded });
+  } catch (error) {
+    console.error('[torneios] erro ao cancelar a inscrição:', error && error.message);
+    sendJson(response, 500, { error: 'Não foi possível cancelar a inscrição. Tente novamente.' });
+  }
+}
+
+/* --- Agendador: inicia as edições na hora e monta as partidas ------ */
+
+async function startTournamentEdition(edition, now) {
+  const definition = tournaments.definitionById(edition.tournamentId);
+  if (!definition) return;
+
+  const entrants = Array.isArray(edition.entrants) ? edition.entrants : [];
+  if (entrants.length < 2) {
+    edition.status = 'cancelled';
+    edition.cancelReason = 'Poucos jogadores inscritos.';
+    edition.finishedAt = now.toISOString();
+    await db.saveTournamentEdition(edition);
+    notifyTournamentPlayers(edition, definition, { type: 'tournament_cancelled' });
+    return;
+  }
+
+  tournaments.buildBracket(edition);
+  edition.status = 'running';
+  edition.startedAt = now.toISOString();
+  tournaments.resolveByes(edition);
+  await db.saveTournamentEdition(edition);
+
+  notifyTournamentPlayers(edition, definition, { type: 'tournament_started' });
+  await tryStartTournamentMatches(edition);
+}
+
+// Cria as salas 1x1 dos confrontos prontos (ambos os jogadores online)
+async function tryStartTournamentMatches(edition) {
+  const definition = tournaments.definitionById(edition.tournamentId);
+  if (!definition || edition.status !== 'running') return;
+
+  const rounds = Array.isArray(edition.rounds) ? edition.rounds : [];
+  let changed = false;
+
+  for (let roundIndex = 0; roundIndex < rounds.length; roundIndex += 1) {
+    for (const match of rounds[roundIndex]) {
+      if (!match) continue;
+
+      // Recuperação: a sala do confronto sumiu (os dois saíram) antes do
+      // resultado — o confronto volta para a fila para ser recriado.
+      if (match.status === 'playing' && match.roomCode && !rooms.has(match.roomCode)) {
+        match.status = 'pending';
+        match.roomCode = null;
+        changed = true;
+      }
+
+      if (match.status !== 'pending' || !match.a || !match.b) continue;
+
+      const wsA = findUserSocket(match.a.userId);
+      const wsB = findUserSocket(match.b.userId);
+      if (!wsA || !wsB) {
+        // Oponente ainda não conectou: avisa quem está online que a
+        // partida do torneio está esperando o adversário.
+        sendToUser(match.a.userId, { type: 'tournament_match_waiting' });
+        sendToUser(match.b.userId, { type: 'tournament_match_waiting' });
+        continue;
+      }
+
+      // Sai de qualquer sala anterior antes de criar a sala do torneio
+      detachFromRoom(wsA);
+      detachFromRoom(wsB);
+
+      const room = await startQuickMatchRoom(
+        { ws: wsA, uid: match.a.userId, name: match.a.name },
+        { ws: wsB, uid: match.b.userId, name: match.b.name },
+        'tournament',
+        { tournament: { editionId: edition.id, roundIndex, matchIndex: match.index } }
+      );
+      if (!room) continue;
+
+      match.status = 'playing';
+      match.roomCode = room.code;
+      changed = true;
+
+      sendToUser(match.a.userId, { type: 'tournament_match_ready', round: roundIndex });
+      sendToUser(match.b.userId, { type: 'tournament_match_ready', round: roundIndex });
+    }
+  }
+
+  if (changed) await db.saveTournamentEdition(edition);
+}
+
+// Índice do vencedor da sala (1x1 do torneio)
+function tournamentWinnerIndex(room, state) {
+  const winner = state ? state.winner : null;
+  if (typeof winner === 'number' && (winner === 0 || winner === 1)) return winner;
+  if (winner && typeof winner.team === 'number') return winner.team;
+  const colors = Array.isArray(room.slotColors) ? room.slotColors : [];
+  const scoreA = Number(state && state.scores && state.scores[colors[0]]) || 0;
+  const scoreB = Number(state && state.scores && state.scores[colors[1]]) || 0;
+  if (scoreA === scoreB) return null;
+  return scoreA > scoreB ? 0 : 1;
+}
+
+// Resultado da partida do torneio: avança o vencedor na chave
+async function applyTournamentMatchResult(room, state) {
+  if (!room || room.mode !== 'tournament' || !room.tournament || !state) return;
+
+  const { editionId, roundIndex, matchIndex } = room.tournament;
+  const uids = Array.isArray(room.userIds) ? room.userIds : [];
+  if (uids.length < 2) return;
+
+  const winnerIdx = tournamentWinnerIndex(room, state);
+  if (winnerIdx === null) return;
+  const winnerId = uids[winnerIdx];
+  const loserId = uids[winnerIdx === 0 ? 1 : 0];
+  if (!winnerId || !loserId) return;
+
+  try {
+    const edition = await db.getTournamentEdition(editionId);
+    if (!edition) return;
+    const definition = tournaments.definitionById(edition.tournamentId);
+    if (!definition) return;
+
+    const round = Array.isArray(edition.rounds) ? edition.rounds[roundIndex] : null;
+    const match = round ? round[matchIndex] : null;
+    if (!match || match.status === 'finished' || match.status === 'empty') return;
+
+    // Colocação de quem foi eliminado nesta rodada
+    const range = tournaments.placementRange(edition.size, roundIndex);
+    edition.placements = edition.placements && typeof edition.placements === 'object' ? edition.placements : {};
+    edition.placements[loserId] = { from: range.from, to: range.to, round: roundIndex };
+
+    const winner = tournaments.playerById(edition, winnerId) || match.a || match.b;
+    tournaments.advanceFromMatch(edition, roundIndex, matchIndex, winner);
+    tournaments.resolveByes(edition);
+    await db.saveTournamentEdition(edition);
+
+    const view = tournaments.describeEdition(edition, definition, new Date(), {});
+    sendToUser(winnerId, { type: 'tournament_match_result', won: true, tournament: view });
+    sendToUser(loserId, {
+      type: 'tournament_match_result',
+      won: false,
+      placement: range,
+      tournament: view
+    });
+
+    if (edition.status === 'finished') {
+      await awardTournamentPrizes(edition, definition);
+    } else {
+      await tryStartTournamentMatches(edition);
+    }
+  } catch (error) {
+    console.error('[torneios] erro ao aplicar o resultado da partida:', error && error.message);
+  }
+}
+
+// Desistência em partida de torneio: quem ficou vence por 4-0
+function applyTournamentAbandonResult(room, leaverIdx) {
+  if (!room || room.mode !== 'tournament') return;
+  if (leaverIdx !== 0 && leaverIdx !== 1) return;
+
+  const state = room.game;
+  if (!state || !state.started || state.over) return;
+
+  const winnerIdx = leaverIdx === 0 ? 1 : 0;
+  state.over = true;
+  state.winner = winnerIdx;
+
+  const colors = Array.isArray(room.slotColors) ? room.slotColors : [];
+  if (colors[0] && colors[1]) {
+    state.scores[colors[winnerIdx]] = 4;
+    state.scores[colors[leaverIdx]] = 0;
+  }
+
+  applyTournamentMatchResult(room, state).catch(error => {
+    console.error('[torneios] erro ao aplicar o abandono:', error && error.message);
+  });
+}
+
+// Paga a premiação em moedas de cada participante
+async function awardTournamentPrizes(edition, definition) {
+  const prizes = {};
+  const placements = edition.placements && typeof edition.placements === 'object' ? edition.placements : {};
+
+  for (const entrant of (edition.entrants || [])) {
+    let place = null;
+    if (entrant.userId === edition.winnerId) place = 1;
+    else if (placements[entrant.userId]) place = placements[entrant.userId].from;
+    if (!place) continue;
+
+    const coins = tournaments.prizeForPlace(definition, place);
+    if (!coins) continue;
+    // Conta Premium recebe a premiação em dobro (roadmap #20)
+    let premium = false;
+    try {
+      premium = await isPremiumPlayer(entrant.userId);
+    } catch (error) {
+      premium = false;
+    }
+    const prizeCoins = premium ? coins * 2 : coins;
+    prizes[entrant.userId] = prizeCoins;
+
+    try {
+      await db.updatePlayerProgress(entrant.userId, (progress) => {
+        progress.coins = (Number(progress.coins) || 0) + prizeCoins;
+        return { ok: true, progress };
+      });
+    } catch (error) {
+      console.error('[torneios] erro ao pagar a premiação:', error && error.message);
+    }
+  }
+
+  edition.prizesPaid = prizes;
+  await db.saveTournamentEdition(edition);
+
+  const view = tournaments.describeEdition(edition, definition, new Date(), {});
+  (edition.entrants || []).forEach(entrant => {
+    sendToUser(entrant.userId, {
+      type: 'tournament_finished',
+      prize: prizes[entrant.userId] || 0,
+      winner: entrant.userId === edition.winnerId,
+      tournament: view
+    });
+  });
+}
+
+// Verifica as edições a cada intervalo: inicia as que já chegaram no horário
+async function runTournamentScheduler() {
+  if (tournamentSchedulerBusy) return;
+  tournamentSchedulerBusy = true;
+  try {
+    const now = new Date();
+    const editions = await db.listTournamentEditions();
+
+    for (const edition of editions) {
+      if (edition.status !== 'scheduled') continue;
+      const startsAt = new Date(edition.startsAt).getTime();
+      if (!Number.isFinite(startsAt) || startsAt > now.getTime()) continue;
+      await startTournamentEdition(edition, now);
+    }
+
+    for (const edition of editions) {
+      if (edition.status !== 'running') continue;
+      await tryStartTournamentMatches(edition);
+    }
+  } catch (error) {
+    console.error('[torneios] erro no agendador:', error && error.message);
+  } finally {
+    tournamentSchedulerBusy = false;
+  }
+}
+
+// Dispara o agendador (com atraso) quando um jogador entra no jogo:
+// assim a partida pendente dele começa assim que o adversário aparecer
+function kickTournamentScheduler() {
+  if (tournamentKickTimer) return;
+  tournamentKickTimer = setTimeout(() => {
+    tournamentKickTimer = null;
+    runTournamentScheduler();
+  }, 1500);
+}
+
+/* -------------------------------------------------------------
+   MENSAGENS RÁPIDAS / EMOTES (roadmap #14)
+   O cliente só pode enviar frases da lista abaixo: o servidor
+   valida e repassa para a sala, então ninguém digita texto livre
+   durante a partida.
+------------------------------------------------------------- */
+
+const QUICK_CHAT_MESSAGES = new Set([
+  'Boa! 🎉',
+  'Puts! 😤',
+  'Vamos! 🔥',
+  'Quase! 😮',
+  'GG! 👏',
+  'Lindo! 😎',
+  'Valeu! 🙏',
+  '👍',
+  // Pacotes de emotes da loja (COS-026, COS-027 e COS-028)
+  'Socorro! 🆘', 'Reverte! 🔄', 'Ladrão! 🤫', 'Eu sabia! 😏', 'Azar! 🍀',
+  'Mão de Deus! 🙏', 'Calma! 😌', 'Foco! 🎯',
+  'Gol! ⚽', 'Gols! 🥅', 'Festa! 🎉', 'Chopp! 🍺', 'Samba! 💃', 'Roxo! 💜',
+  'Tricolor! 💚', 'Alô? 📞', 'Craque! ⭐', 'Penta! 🖐️',
+  'Lendário! 🐉', 'Coroa! 👑', 'Diamante! 💎', 'Trovão! ⚡', 'Fênix! 🔥',
+  'Meteoro! ☄️', 'Dragão! 🐲', 'Estrela! 🌟', 'Tempestade! 🌪️', 'Eclipse! 🌑',
+  'Infinito! ♾️', 'Poder! 💪'
+]);
+
+// Intervalo mínimo entre duas mensagens do mesmo jogador (anti-spam)
+const QUICK_CHAT_MIN_INTERVAL_MS = 900;
+
+function handleQuickChat(ws, conn, room, data) {
+  const text = String((data && data.text) || '').trim().slice(0, 24);
+  // Fora da lista: ignorado em silêncio (não interfere no dado/jogada)
+  if (!QUICK_CHAT_MESSAGES.has(text)) return;
+
+  const now = Date.now();
+  if (now - (conn.lastQuickChatAt || 0) < QUICK_CHAT_MIN_INTERVAL_MS) return;
+  conn.lastQuickChatAt = now;
+
+  const slot = Number(conn.playerIdx);
+  broadcastRoom(room.code, {
+    type: 'quick_chat',
+    slot,
+    text,
+    name: room.names[slot] || 'Jogador'
+  });
+}
+
+/* -------------------------------------------------------------
+   REVANCHE EM UM CLIQUE (roadmap #13)
+   Ao fim de uma partida online 1x1, o jogador propõe revanche:
+   o servidor valida o pedido, avisa o oponente e, com o aceite,
+   remonta a MESMA mesa (mesma sala, mesmos jogadores e cores).
+------------------------------------------------------------- */
+
+const REMATCH_TIMEOUT_MS = 30000;
+
+// Só o 1x1 comum aceita revanche: a Liga e o Torneio têm progressão
+// própria (pontos, tier e chaveamento) e não podem ser repetidos.
+function modeSupportsRematch(room) {
+  if (!room) return false;
+  return room.mode === 'solo' || room.mode === 'quick';
+}
+
+function rematchPlayersOnline(room) {
+  if (!room || !Array.isArray(room.players)) return false;
+  return Boolean(room.players[0] && room.players[1]
+    && room.players[0].readyState === 1 && room.players[1].readyState === 1);
+}
+
+function clearRematchState(room) {
+  if (!room || !room.rematch) return;
+  if (room.rematch.timer) clearTimeout(room.rematch.timer);
+  room.rematch = null;
+}
+
+// Monta a lista de jogadores no mesmo formato do 'room_ready'
+async function buildRematchPlayers(room) {
+  const profile0 = await db.getUserProfile(room.userIds[0]) || {
+    id: room.userIds[0] || null, uid: room.userIds[0] || null,
+    name: room.names[0], email: '', picture: '', playerName: room.names[0]
+  };
+  const profile1 = await db.getUserProfile(room.userIds[1]) || {
+    id: room.userIds[1] || null, uid: room.userIds[1] || null,
+    name: room.names[1], email: '', picture: '', playerName: room.names[1]
+  };
+  const soloColors = room.soloColors || await resolveSoloMatchColors([room.userIds[0], room.userIds[1]]);
+  return [
+    {
+      id: 0, uid: profile0.uid, name: profile0.name, email: profile0.email,
+      picture: profile0.picture, playerName: profile0.playerName, color: soloColors.starterColor
+    },
+    {
+      id: 1, uid: profile1.uid, name: profile1.name, email: profile1.email,
+      picture: profile1.picture, playerName: profile1.playerName, color: soloColors.opponentColor
+    }
+  ];
+}
+
+/* -------------------------------------------------------------
+   REVANCHE (roadmap #13 / item CON-001 da loja)
+   Por padrão, cada conta pode pedir 3 revanches por dia. Quem
+   compra "Revanche Ilimitada 7 dias" (CON-001) fica sem limite
+   durante o período do item. O contador é do servidor: o cliente
+   não pode burlar o limite.
+------------------------------------------------------------------ */
+const REMATCH_DAILY_LIMIT = 3;
+const REMATCH_USAGE = new Map(); // userId -> { date, count }
+
+function brazilDayKey(now) {
+  const stamp = (now instanceof Date) ? now.getTime() : new Date(now || Date.now()).getTime();
+  // Fuso do Brasil (UTC-3): o dia do jogo começa às 00h de Brasília
+  const shifted = new Date(stamp - 180 * 60 * 1000);
+  return shifted.toISOString().slice(0, 10);
+}
+
+function rematchUsageFor(userId, now) {
+  const key = String(userId || '');
+  if (!key) return { date: '', count: 0 };
+  const today = brazilDayKey(now);
+  const current = REMATCH_USAGE.get(key);
+  if (!current || current.date !== today) return { date: today, count: 0 };
+  return current;
+}
+
+function registerRematchUsage(userId, now) {
+  const key = String(userId || '');
+  if (!key) return;
+  const today = brazilDayKey(now);
+  const current = rematchUsageFor(key, now);
+  REMATCH_USAGE.set(key, { date: today, count: current.count + 1 });
+}
+
+// Pedido de revanche: quem pede propõe, o oponente decide
+async function handleRematchRequest(ws, conn, room) {
+  const playerIdx = Number(conn.playerIdx);
+  if (!modeSupportsRematch(room) || (playerIdx !== 0 && playerIdx !== 1)) {
+    sendTo(ws, { type: 'rematch_error', error: 'Revanche indisponível nesta partida.' });
+    return;
+  }
+  if (!room.game || !room.game.over) {
+    sendTo(ws, { type: 'rematch_error', error: 'A revanche só pode ser pedida depois que a partida termina.' });
+    return;
+  }
+  if (!rematchPlayersOnline(room)) {
+    sendTo(ws, { type: 'rematch_error', error: 'O oponente não está mais conectado.' });
+    return;
+  }
+
+  // Limite diário de revanches (liberado pelo item CON-001 da loja)
+  const userId = conn.userId || null;
+  if (userId) {
+    let unlimited = false;
+    try {
+      const progress = await db.getPlayerProgress(userId);
+      unlimited = shop.hasUnlimitedRematch(progress.shopState, new Date());
+    } catch (error) {
+      console.error('[revanche] erro ao consultar o limite diário:', error && error.message);
+    }
+    if (!unlimited) {
+      const usage = rematchUsageFor(userId, new Date());
+      if (usage.count >= REMATCH_DAILY_LIMIT) {
+        sendTo(ws, {
+          type: 'rematch_error',
+          error: `Você usou suas ${REMATCH_DAILY_LIMIT} revanches de hoje. Na LOJA, "Revanche Ilimitada 7 dias" remove o limite.`
+        });
+        return;
+      }
+      registerRematchUsage(userId, new Date());
+    }
+  }
+
+  const opponentIdx = otherPlayerIndex(playerIdx);
+  clearRematchState(room);
+
+  const timer = setTimeout(() => {
+    if (!room.rematch) return;
+    room.rematch = null;
+    broadcastRoom(room.code, { type: 'rematch_expired' });
+  }, REMATCH_TIMEOUT_MS);
+  if (typeof timer.unref === 'function') timer.unref();
+
+  room.rematch = { from: playerIdx, to: opponentIdx, timer };
+
+  sendTo(ws, { type: 'rematch_pending' });
+  sendTo(room.players[opponentIdx], {
+    type: 'rematch_offer',
+    from: playerIdx,
+    name: room.names[playerIdx] || 'Oponente'
+  });
+}
+
+// Resposta do oponente: aceitar remonta a mesma mesa
+async function handleRematchResponse(ws, conn, room, data) {
+  const playerIdx = Number(conn.playerIdx);
+  const pending = room.rematch;
+  if (!pending || pending.to !== playerIdx) {
+    sendTo(ws, { type: 'rematch_error', error: 'Não há pedido de revanche pendente.' });
+    return;
+  }
+  clearRematchState(room);
+
+  const accept = Boolean(data && data.accept === true);
+  if (!accept) {
+    sendTo(ws, { type: 'rematch_declined' });
+    sendTo(room.players[pending.from], { type: 'rematch_declined' });
+    return;
+  }
+
+  if (!modeSupportsRematch(room) || !rematchPlayersOnline(room)) {
+    broadcastRoom(room.code, { type: 'rematch_error', error: 'Não foi possível iniciar a revanche.' });
+    return;
+  }
+
+  // Remonta a partida na MESMA sala: novo estado autoritativo, mesma mesa
+  const slots = Array.isArray(room.slotConfig) && room.slotConfig.length
+    ? room.slotConfig
+    : [
+      { slot: 0, color: SOLO_SLOT_COLORS[0], team: 0 },
+      { slot: 1, color: SOLO_SLOT_COLORS[1], team: 1 }
+    ];
+  setupRoomGame(room, { slots, mode: room.mode, target: 4 });
+
+  const players = await buildRematchPlayers(room);
+  broadcastRoom(room.code, {
+    type: 'rematch_started',
+    players,
+    slotColors: room.slotColors,
+    turn: room.game.turn,
+    // A revanche joga na mesma mesa: mantém a velocidade (BLITZ/NORMAL)
+    blitz: room.blitz === true
+  });
 }
 
 /* -------------------------------------------------------------
@@ -2790,10 +4852,38 @@ async function listFriends(request, response) {
         console.error('[amigos] erro ao carregar a classificação:', error && error.message);
       }
     }
+
+    // Feed de amigos: última partida do amigo. Quem comprou o item
+    // SOC-016 ("Destaque de vitória") recebe a animação especial
+    // quando a última partida foi uma vitória.
+    let lastMatch = null;
+    try {
+      const records = await db.listMatchRecordsForUser(f.id);
+      const record = (records && records.matches && records.matches[0]) || null;
+      if (record) {
+        let highlight = false;
+        try {
+          const friendProgress = await db.getPlayerProgress(f.id);
+          highlight = shop.hasItem(friendProgress.shopState, 'SOC-016');
+        } catch (error) {
+          console.error('[amigos] erro ao verificar o destaque de vitória:', error && error.message);
+        }
+        lastMatch = {
+          result: record.result,
+          opponentName: record.opponentName || 'Oponente',
+          finishedAt: record.finishedAt || null,
+          highlight: highlight && record.result === 'win'
+        };
+      }
+    } catch (error) {
+      console.error('[amigos] erro ao carregar a última partida:', error && error.message);
+    }
+
     return {
       ...f,
       plan: premium ? 'premium' : 'free',
       standing,
+      lastMatch,
       online: userConnections.has(f.id) && userConnections.get(f.id).size > 0
     };
   }));
@@ -3092,6 +5182,13 @@ async function handleRequest(request, response) {
       return;
     }
 
+    // LOGIN DE DESENVOLVIMENTO (conta RH de teste): só existe fora da
+    // produção. No navegador redireciona para o jogo já logado.
+    if (request.method === 'GET' && (urlPath === '/api/dev/login' || urlPath === '/dev/login')) {
+      await handleDevLogin(request, response, requestUrl);
+      return;
+    }
+
     // Proteção CSRF para rotas mutáveis
     if (!checkCsrf(request)) {
       sendJson(response, 403, { error: 'Requisição bloqueada por política de origem (CSRF).' });
@@ -3104,9 +5201,22 @@ async function handleRequest(request, response) {
       return;
     }
 
+    // PROVA SOCIAL (roadmap #25): contadores públicos da tela inicial
+    if (request.method === 'GET' && urlPath === '/api/stats') {
+      await handleSocialStats(request, response);
+      return;
+    }
+
     // CLASSIFICAÇÃO DA LIGA (tier do jogador)
     if (request.method === 'GET' && urlPath === '/api/league/standing') {
       await handleLeagueStanding(request, response);
+      return;
+    }
+
+    // REGRAS DA LIGA (tela explicativa do sistema de tiers).
+    // Rota pública: o jogador precisa entender o tier antes de assinar.
+    if (request.method === 'GET' && urlPath === '/api/league/guide') {
+      sendJson(response, 200, { guide: league.describeGuide() });
       return;
     }
 
@@ -3153,6 +5263,103 @@ async function handleRequest(request, response) {
 
     if (request.method === 'POST' && urlPath === '/api/matches') {
       await createMatchRecord(request, response);
+      return;
+    }
+
+    // RECOMPENSAS — baú diário e missões (roadmap #6/#7)
+    if (request.method === 'GET' && urlPath === '/api/progress') {
+      await handleProgressOverview(request, response);
+      return;
+    }
+
+    if (request.method === 'POST' && urlPath === '/api/progress/daily-reward') {
+      await handleDailyRewardClaim(request, response);
+      return;
+    }
+
+    if (request.method === 'POST' && urlPath === '/api/progress/match') {
+      await handleMatchProgress(request, response);
+      return;
+    }
+
+    if (request.method === 'POST' && urlPath === '/api/progress/mission') {
+      await handleMissionClaim(request, response);
+      return;
+    }
+
+    // PASSE DE BATALHA — 50 dias, tiedos à versão em curso (roadmap #9)
+    if (request.method === 'GET' && urlPath === '/api/season') {
+      await handleSeasonOverview(request, response);
+      return;
+    }
+
+    if (request.method === 'POST' && urlPath === '/api/season/claim') {
+      await handleSeasonClaim(request, response);
+      return;
+    }
+
+    // LOJA — duas moedas (Ludas e Cristais)
+    if (request.method === 'GET' && urlPath === '/api/shop') {
+      await handleShopOverview(request, response);
+      return;
+    }
+
+    if (request.method === 'POST' && urlPath === '/api/shop/buy') {
+      await handleShopBuy(request, response);
+      return;
+    }
+
+    if (request.method === 'POST' && urlPath === '/api/shop/equip') {
+      await handleShopEquip(request, response);
+      return;
+    }
+
+    if (request.method === 'POST' && urlPath === '/api/shop/chest') {
+      await handleShopChest(request, response);
+      return;
+    }
+
+    if (request.method === 'POST' && urlPath === '/api/shop/checkout') {
+      await handleShopCheckout(request, response);
+      return;
+    }
+
+    if (request.method === 'GET' && urlPath === '/api/shop/status') {
+      await handleShopStatus(request, response);
+      return;
+    }
+
+    if (request.method === 'POST' && urlPath === '/api/shop/dev/confirm') {
+      await handleShopDevConfirm(request, response);
+      return;
+    }
+
+    if (request.method === 'POST' && urlPath === '/api/shop/webhook') {
+      await handleShopWebhook(request, response);
+      return;
+    }
+
+    // CALENDÁRIO DE VERSÕES (Servidor de Testes)
+    // O cliente usa esta rota para saber qual versão está NO AR e
+    // marcar as outras como PROGRAMADA/ENCERRADA.
+    if (request.method === 'GET' && urlPath === '/api/version') {
+      sendJson(response, 200, versions.describeVersions(new Date()));
+      return;
+    }
+
+    // TORNEIOS COM HORÁRIO MARCADO (roadmap #10)
+    if (request.method === 'GET' && urlPath === '/api/tournaments') {
+      await handleTournamentList(request, response);
+      return;
+    }
+
+    if (request.method === 'POST' && urlPath === '/api/tournaments/register') {
+      await handleTournamentRegister(request, response);
+      return;
+    }
+
+    if (request.method === 'POST' && urlPath === '/api/tournaments/unregister') {
+      await handleTournamentUnregister(request, response);
       return;
     }
 
@@ -3281,7 +5488,12 @@ async function main() {
       userId: null,
       name: null,
       rateWindow: { startedAt: Date.now(), count: 0 },
-      authenticated: false
+      authenticated: false,
+      // Promessa da validação da sessão do handshake: as mensagens do
+      // cliente esperam ela antes de serem atendidas (sem isso, um
+      // 'join_room' que chega logo após o connect pode entrar sem uid
+      // e o jogador perde a reconexão transparente).
+      authReady: Promise.resolve(null)
     };
     connections.set(ws, conn);
 
@@ -3289,16 +5501,23 @@ async function main() {
     const cookies = parseCookies(request);
     const token = cookies[COOKIE_NAME];
     if (token) {
-      db.getSessionUser(token).then(sessionUser => {
+      conn.authReady = db.getSessionUser(token).then(sessionUser => {
         if (sessionUser) {
           conn.userId = sessionUser.id;
           conn.user = sessionUser;
           conn.authenticated = true;
           trackUserConnection(ws, sessionUser.id);
           broadcastUserStatus(sessionUser.id, true);
+          // Torneio: tenta iniciar a partida pendente deste jogador
+          kickTournamentScheduler();
+          // RECONEXÃO TRANSPARENTE: se o jogador caiu no meio de uma
+          // partida, ele volta para a mesma sala e recebe o estado atual
+          tryResumeRoomForUser(ws, conn, sessionUser.id);
         }
+        return sessionUser;
       }).catch(error => {
         console.error('[ws] erro ao autenticar sessão:', error && error.message);
+        return null;
       });
     }
 
@@ -3308,6 +5527,18 @@ async function main() {
         data = JSON.parse(raw.toString('utf8'));
       } catch (error) {
         return;
+      }
+
+      // Espera a validação da sessão do handshake: mensagens como
+      // 'join_room' precisam do uid do usuário (sem isso o jogador
+      // entraria na sala sem identidade e não poderia retomar a
+      // partida depois de uma queda de conexão).
+      if (conn.authReady) {
+        try {
+          await conn.authReady;
+        } catch (error) {
+          // falha na validação: segue sem sessão autenticada
+        }
       }
 
       // Limite de mensagens por conexão (anti-spam)
@@ -3335,6 +5566,9 @@ async function main() {
           if (prevConn) prevConn.userId = uid;
           conn.userId = uid;
           broadcastUserStatus(uid, true);
+          // Torneio: se houver uma partida pendente deste jogador, ela
+          // começa assim que o adversário estiver online.
+          kickTournamentScheduler();
           // O dono do lobby voltou: não encerra mais o lobby
           clearDuplaLobbyCleanup(uid);
           Object.keys(LOBBY_KINDS).forEach(kind => clearLobbyCleanup(kind, uid));
@@ -3356,6 +5590,9 @@ async function main() {
             await broadcastLobby(lobby);
           }
           await sendLobbyToUser(uid);
+          // RECONEXÃO TRANSPARENTE: se o jogador caiu no meio de uma
+          // partida, ele volta para a mesma sala e recebe o estado atual
+          tryResumeRoomForUser(ws, conn, uid);
         }
         sendTo(ws, { type: 'ack', original: 'identify' });
         return;
@@ -3451,6 +5688,9 @@ async function main() {
           conn.roomCode = code;
           conn.playerIdx = 0;
           conn.userId = uid || null;
+          // Guarda a sala do usuário: permite retomar a partida se a
+          // conexão cair (reconexão transparente)
+          if (uid) userRoom.set(uid, code);
           sendTo(ws, {
             type: 'room_created',
             room: code,
@@ -3496,6 +5736,7 @@ async function main() {
         room.names[playerIdx] = cleanName || `Jogador ${playerIdx + 1}`;
         room.userIds[playerIdx] = uid || null;
         room.ready[playerIdx] = true;
+        if (uid) userRoom.set(uid, code);
 
         // Reentrada no próprio slot cancela a contagem de abandono
         // (take-over): sem isso o timer dispararia depois e aplicaria o
@@ -3506,6 +5747,9 @@ async function main() {
           clearTimeout(rejoinAbsence.timer);
           absentPlayers.delete(rejoinAbsenceKey);
         }
+
+        // Reentrada no próprio slot cancela a contagem de abandono
+        // (take-over): sem isso o timer dispararia depois e aplicaria o
 
         conn.roomCode = code;
         conn.playerIdx = playerIdx;
@@ -3534,6 +5778,8 @@ async function main() {
           // SOLO 1 vs 1: cores resolvidas pelo servidor (quem começa usa a
           // cor primária; o oponente só usa a primária se o nome diferir)
           const soloColors = await resolveSoloMatchColors([room.userIds[0], room.userIds[1]]);
+          // Guarda as cores da mesa: a revanche joga na mesma mesa (roadmap #13)
+          room.soloColors = soloColors;
 
           // Estado autoritativo da partida (dado, turno e peças no servidor)
           setupRoomGame(room, {
@@ -4086,13 +6332,17 @@ async function main() {
 
         // Cada jogador do lobby entra na fila por si
         const queue = lobbyQueues[kind];
+        // BLITZ (partida rápida): só o lobby SOLO usa. A partida é blitz
+        // quando os dois jogadores escolheram BLITZ.
+        const blitz = kind === 'normal' && data.blitz === true;
         removeLobbyQueueForUser(kind, uid);
         players.forEach(player => {
           queue.push({
             ws: player.ws,
             uid: player.id,
             name: player.name,
-            picture: player.picture || ''
+            picture: player.picture || '',
+            blitz
           });
         });
 
@@ -4141,6 +6391,65 @@ async function main() {
       if (!room) return;
 
       /* --- PARTIDA AUTORITATIVA: pedidas do cliente ------------------- */
+      if (data.type === 'leave_match') {
+        // Desistência deliberada: diferente de uma queda de conexão,
+        // o jogador está saindo de propósito — a vaga é liberada na
+        // hora (sem janela de reconexão) e o abandono é definitivo.
+        const playerIdx = Number(conn.playerIdx);
+        const roomCode = conn.roomCode;
+        const leftName = room.names[playerIdx] || conn.name || null;
+        let botTookOver = false;
+
+        if (room.game && room.game.started && !room.game.over) {
+          if (modeSupportsBotTakeover(room)) {
+            // Arena/dupla: um bot assume o slot e a partida continua
+            installBotForSlot(room, playerIdx, leftName);
+            botTookOver = true;
+          } else if (room.mode === 'liga') {
+            applyLeagueAbandonResult(room, playerIdx);
+          } else if (room.mode === 'tournament') {
+            applyTournamentAbandonResult(room, playerIdx);
+          } else if (room.mode === 'solo' || room.mode === 'quick') {
+            room.game.over = true;
+            room.game.winner = otherPlayerIndex(playerIdx);
+            clearRoomTurnTimer(room);
+            broadcastRoomGame(room, {
+              type: 'match_finished',
+              over: true,
+              winner: room.game.winner,
+              scores: room.game.scores,
+              reason: 'abandon',
+              playerIdx
+            });
+          }
+        }
+
+        // Libera o slot imediatamente
+        const absenceKey = `${roomCode}:${playerIdx}`;
+        const absence = absentPlayers.get(absenceKey);
+        if (absence) {
+          clearTimeout(absence.timer);
+          absentPlayers.delete(absenceKey);
+        }
+        room.userIds[playerIdx] = null;
+        room.players[playerIdx] = null;
+        if (!Array.isArray(room.botSourceNames)) room.botSourceNames = [];
+        room.botSourceNames[playerIdx] = leftName;
+        room.names[playerIdx] = null;
+        room.ready[playerIdx] = false;
+        if (conn.userId) userRoom.delete(conn.userId);
+        conn.roomCode = null;
+        conn.playerIdx = null;
+
+        // Avisa os que ficaram na sala
+        if (!botTookOver) {
+          broadcastRoom(roomCode, { type: 'opponent_left', playerIdx, reason: 'abandon' }, ws);
+        } else {
+          startRoomTurnTimer(room);
+        }
+        return;
+      }
+
       if (data.type === 'game_start') {
         handleGameStart(ws, conn, room);
         return;
@@ -4153,6 +6462,23 @@ async function main() {
 
       if (data.type === 'move_request') {
         handleMoveRequest(ws, conn, room, data);
+        return;
+      }
+
+      // REVANCHE (roadmap #13): pedir e responder a revanche
+      if (data.type === 'rematch_request') {
+        await handleRematchRequest(ws, conn, room);
+        return;
+      }
+
+      if (data.type === 'rematch_response') {
+        await handleRematchResponse(ws, conn, room, data);
+        return;
+      }
+
+      // MENSAGENS RÁPIDAS (roadmap #14)
+      if (data.type === 'quick_chat') {
+        handleQuickChat(ws, conn, room, data);
         return;
       }
 
@@ -4177,6 +6503,21 @@ async function main() {
         type: data.type,
         from: conn.playerIdx
       };
+
+      // Guarda a cor escolhida pelo jogador na sala: quem reconectar
+      // recebe essa cor no snapshot e o tabuleiro continua igual
+      if (data.type === 'color_info' && Number.isInteger(Number(conn.playerIdx))) {
+        const rawColor = data.color || {};
+        const hex = typeof rawColor.hex === 'string' && /^#[0-9a-f]{6}$/i.test(rawColor.hex.trim())
+          ? rawColor.hex.trim().toLowerCase()
+          : null;
+        if (!Array.isArray(room.slotColorInfo)) room.slotColorInfo = [];
+        room.slotColorInfo[conn.playerIdx] = {
+          hex,
+          name: String(rawColor.name || '').slice(0, 24),
+          custom: Boolean(rawColor.custom)
+        };
+      }
 
       const payload = JSON.stringify(forward);
       room.players.forEach(other => {
@@ -4259,6 +6600,14 @@ async function main() {
 
     ws.on('error', () => {});
   });
+
+  // TORNEIOS (roadmap #10): o agendador inicia as edições no horário
+  // marcado e cria as salas do chaveamento quando os dois jogadores
+  // da partida estão online.
+  setInterval(() => {
+    runTournamentScheduler();
+  }, TOURNAMENT_TICK_MS);
+  runTournamentScheduler();
 
   server.listen(PORT, HOST, () => {
     if (NODE_ENV === 'production' && !process.env.DATABASE_URL) {
